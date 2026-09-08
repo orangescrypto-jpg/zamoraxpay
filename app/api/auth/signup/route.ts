@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       // Roll back the Supabase auth user so a failed D1 write doesn't
       // leave an orphaned account blocking this email from ever
       // signing up successfully.
-      await supabase.auth.admin.deleteUser(uid).catch((cleanupErr) =>
+      await supabase.auth.admin.deleteUser(uid).catch((cleanupErr: unknown) =>
         console.error("[signup] Failed to roll back orphaned auth user:", cleanupErr),
       )
 
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     // the signup response. This is separate from Supabase's own
     // confirmation email (if that project setting is on); this one is
     // just a friendly product welcome note.
-    sendWelcomeEmail(email, fullName).catch((err) => console.error("[signup] Welcome email failed:", err))
+    sendWelcomeEmail(email, fullName).catch((err: unknown) => console.error("[signup] Welcome email failed:", err))
 
     return NextResponse.json({
       user: {

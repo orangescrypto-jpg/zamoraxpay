@@ -60,7 +60,7 @@ export async function getRelatedPosts(post: BlogPost, limit: number, nativeDB?: 
         [post.category, post.id, limit],
         nativeDB,
       )
-    : { results: [] }
+    : { results: [] as any[] }
 
   const sameCategoryPosts = (sameCategory.results ?? []).map(mapRow)
 
@@ -69,7 +69,7 @@ export async function getRelatedPosts(post: BlogPost, limit: number, nativeDB?: 
   }
 
   const remaining = limit - sameCategoryPosts.length
-  const excludeIds = [post.id, ...sameCategoryPosts.map((p) => p.id)]
+  const excludeIds = [post.id, ...sameCategoryPosts.map((p: BlogPost) => p.id)]
   const placeholders = excludeIds.map(() => "?").join(",")
 
   const others = await d1Query(

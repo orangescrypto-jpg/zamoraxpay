@@ -12,6 +12,8 @@ export interface User {
   status: "active" | "suspended" | "frozen"
   referralCode: string | null
   createdAt: string
+  /** Null if this account has no admin_users row (i.e. an ordinary customer). */
+  adminRole: "moderator" | "admin" | "super_admin" | null
 }
 
 export interface RegisterData {

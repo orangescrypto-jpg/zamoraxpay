@@ -7,6 +7,7 @@ import type { SiteSetting } from "@/src/services/siteSettings"
 
 const GROUPS: { title: string; keys: string[] }[] = [
   { title: "Homepage & Blog", keys: ["homepage_post_count", "related_post_count"] },
+  { title: "Reseller", keys: ["reseller_upgrade_fee_kobo"] },
   {
     title: "Cashback",
     keys: [

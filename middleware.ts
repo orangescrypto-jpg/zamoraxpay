@@ -28,11 +28,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
+  // Logged-in visitors hitting the marketing homepage should land on
+  // their dashboard instead of seeing the logged-out hero/CTA again.
+  if (pathname === "/" && user) {
+    return NextResponse.redirect(new URL("/dashboard", request.url))
+  }
+
   return supabaseResponse
 }
 
 export const config = {
   matcher: [
+    "/",
     "/dashboard/:path*",
     "/wallet/:path*",
     "/services/:path*",

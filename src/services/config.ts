@@ -143,8 +143,19 @@ export async function updateVtuProviderConfig(
     params.push(updates.priority)
   }
   if (updates.credentials !== undefined) {
+    // Merge with whatever is already saved instead of replacing the
+    // whole blob — otherwise editing just one key (e.g. rotating
+    // apiKey) silently wipes every other saved key (secretKey,
+    // baseUrl, testMode, ...) for that provider. An empty-string
+    // value explicitly clears that one key; keys the admin didn't
+    // touch are left untouched.
+    const existing = await getVtuProviderCredentials(providerKey, nativeDB)
+    const merged = { ...existing, ...updates.credentials }
+    for (const key of Object.keys(merged)) {
+      if (merged[key] === "") delete merged[key]
+    }
     sets.push("credentials_json = ?")
-    params.push(JSON.stringify(updates.credentials))
+    params.push(JSON.stringify(merged))
   }
   sets.push("updated_by = ?", "updated_at = datetime('now')")
   params.push(adminUserId, providerKey)

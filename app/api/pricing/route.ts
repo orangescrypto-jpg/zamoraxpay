@@ -1,50 +1,65 @@
-// app/api/pricing/route.ts
-// Public, customer-facing pricing lookup. Unlike /api/admin/pricing
-// (admin-only, returns every column including wholesale cost), this
-// route:
-//   - requires only a logged-in customer session, not admin
-//   - returns retail-tier price (or wholesale, if the caller is a
-//     reseller) — never both, and never the raw pricing_rules row
-//   - only returns active rules, so customers never see or select
-//     a plan an admin has disabled
-//
-// Every service page (data, cable, ...) should fetch from here
-// instead of hardcoding plan lists or prices.
-
+// app/api/admin/pricing/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { requireAuth } from "@/lib/auth-server"
-import { d1Query } from "@/lib/d1"
+import { requireAdmin } from "@/lib/auth-server"
+import { listPricingRules, upsertPricingRule, deletePricingRule } from "@/src/services/pricing"
 import type { VtuServiceType } from "@/src/types"
 
 export async function GET(req: NextRequest) {
-  const auth = await requireAuth(req)
+  const auth = await requireAdmin(req)
   if (!auth.ok) return auth.error
 
   const serviceType = req.nextUrl.searchParams.get("serviceType") as VtuServiceType | null
-  const networkOrBiller = req.nextUrl.searchParams.get("networkOrBiller")
+  const rules = await listPricingRules(serviceType ?? undefined)
+  return NextResponse.json({ rules })
+}
 
-  if (!serviceType || !networkOrBiller) {
-    return NextResponse.json({ error: "serviceType and networkOrBiller are required" }, { status: 400 })
-  }
+export async function POST(req: NextRequest) {
+  const auth = await requireAdmin(req)
+  if (!auth.ok) return auth.error
 
-  const userResult = await d1Query("SELECT tier FROM users WHERE id = ? LIMIT 1", [auth.uid])
-  const tier: "retail" | "reseller" = (userResult.results?.[0] as any)?.tier === "reseller" ? "reseller" : "retail"
+  try {
+    const body = await req.json()
+    const { id, serviceType, networkOrBiller, planCode, retailPriceKobo, wholesalePriceKobo, convenienceFeeKobo } = body
 
-  const rulesResult = await d1Query(
-    `SELECT plan_code, retail_price_kobo, wholesale_price_kobo, convenience_fee_kobo
-     FROM pricing_rules
-     WHERE service_type = ? AND network_or_biller = ? AND is_active = 1
-     ORDER BY retail_price_kobo ASC`,
-    [serviceType, networkOrBiller],
-  )
-
-  const plans = (rulesResult.results ?? []).map((rule: any) => {
-    const baseKobo = tier === "reseller" ? rule.wholesale_price_kobo : rule.retail_price_kobo
-    return {
-      planCode: rule.plan_code as string | null,
-      priceKobo: baseKobo + rule.convenience_fee_kobo,
+    if (!serviceType || !networkOrBiller || retailPriceKobo == null || wholesalePriceKobo == null) {
+      return NextResponse.json(
+        { error: "serviceType, networkOrBiller, retailPriceKobo, and wholesalePriceKobo are required" },
+        { status: 400 },
+      )
     }
-  })
 
-  return NextResponse.json({ plans, tier })
+    await upsertPricingRule(
+      {
+        id,
+        serviceType,
+        networkOrBiller,
+        planCode: planCode ?? null,
+        retailPriceKobo,
+        wholesalePriceKobo,
+        convenienceFeeKobo: convenienceFeeKobo ?? 0,
+      },
+      auth.uid,
+    )
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Update failed" }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAdmin(req)
+  if (!auth.ok) return auth.error
+
+  try {
+    const id = req.nextUrl.searchParams.get("id")
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 })
+    }
+
+    await deletePricingRule(id)
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Delete failed" }, { status: 500 })
+  }
 }

@@ -11,7 +11,7 @@ function getClient(): Resend {
   return new Resend(apiKey)
 }
 
-const FROM = process.env.RESEND_FROM_EMAIL || "ZamoraxPay <mail@zamoraxpay.com.ng>"
+const FROM = process.env.RESEND_FROM_EMAIL || "ZamoraxPay <mail@mail.zamoraxpay.com.ng>"
 
 export async function sendWelcomeEmail(to: string, fullName: string): Promise<void> {
   const resend = getClient()

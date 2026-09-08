@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
           amountKobo,
           email,
           reference,
-          callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/wallet?funding=complete`,
+          callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/wallet?funding=complete&reference=${reference}`,
           metadata: {
             userId: auth.uid,
             // Since Korapay/Paystack are shared with Zamorax Marketplace

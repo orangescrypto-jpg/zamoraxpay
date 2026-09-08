@@ -1,11 +1,12 @@
 // src/services/providers/vtu/cheapdatahub.ts
 // CheapDataHub VTU adapter — implements IVtuProviderAdapter.
 //
-// Per the original Zamorax Digital Ecosystem PRD, this is configured
-// as the primary route for airtime/data volume. Endpoint shapes below
-// follow the PRD's sample structure; adjust field names once you're
-// testing against a real CheapDataHub account, since exact payload
-// keys are best confirmed against their live docs.
+// Verified against live docs: https://www.cheapdatahub.ng/api_documentation/
+// Live base: https://www.cheapdatahub.ng/api/v1/resellers
+// Auth: Authorization: Bearer <API key>
+// Responses use status: "true" (string) on success, not "success".
+// Note: exam_pin and betting are not in CheapDataHub's public docs —
+// left mapped defensively but may 404/fail until confirmed live.
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import type {
@@ -17,12 +18,55 @@ import type {
 } from "@/src/services/providers/vtu/types"
 
 const SERVICE_ENDPOINT: Record<string, string> = {
-  airtime: "/airtime",
-  data: "/data",
-  cable: "/tv",
-  electricity: "/electricity",
-  exam_pin: "/exam-pin",
-  betting: "/betting",
+  airtime: "/airtime/purchase/",
+  data: "/data/purchase/",
+  cable: "/cable/purchase/",
+  electricity: "/electricity/purchase/",
+  exam_pin: "/exam-pin/purchase/",
+  betting: "/betting/purchase/",
+}
+
+function buildBody(req: VtuPurchaseRequest) {
+  switch (req.serviceType) {
+    case "airtime":
+      return {
+        provider_id: req.networkOrBiller,
+        phone_number: req.recipient,
+        amount: req.amountKobo / 100,
+      }
+    case "data":
+      return {
+        bundle_id: req.planCode,
+        phone_number: req.recipient,
+      }
+    case "electricity":
+      return {
+        disco_id: req.networkOrBiller,
+        meter_number: req.recipient,
+        amount: req.amountKobo / 100,
+        meter_type: "prepaid", // VtuPurchaseRequest has no meterType field yet; hardcoded until it's added
+        phone: req.recipient,
+      }
+    case "cable":
+      return {
+        plan_id: req.planCode,
+        cardnumber: req.recipient,
+        phone: req.recipient,
+      }
+    case "exam_pin":
+      return {
+        product_id: req.planCode,
+        quantity: 1,
+      }
+    default:
+      return {
+        network_id: req.networkOrBiller,
+        phone: req.recipient,
+        amount: req.amountKobo / 100,
+        plan_code: req.planCode,
+        reference: req.internalReference,
+      }
+  }
 }
 
 export const cheapdatahubAdapter: IVtuProviderAdapter = {
@@ -31,7 +75,8 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
   supportsServices: ["airtime", "data", "cable", "electricity", "exam_pin", "betting"],
 
   async purchase(req: VtuPurchaseRequest, credentials: VtuProviderCredentials): Promise<VtuPurchaseResult> {
-    const baseUrl = credentials.baseUrl || process.env.CHEAPDATAHUB_BASE_URL || "https://api.cheapdatahub.ng/v1"
+    const baseUrl =
+      credentials.baseUrl || process.env.CHEAPDATAHUB_BASE_URL || "https://www.cheapdatahub.ng/api/v1/resellers"
     const apiKey = credentials.apiKey || process.env.CHEAPDATAHUB_API_KEY
 
     if (!apiKey) {
@@ -52,24 +97,19 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
             "Content-Type": "application/json",
             Authorization: `Bearer ${apiKey}`,
           },
-          body: JSON.stringify({
-            network_id: req.networkOrBiller,
-            phone: req.recipient,
-            amount: req.amountKobo / 100,
-            plan_code: req.planCode,
-            reference: req.internalReference,
-          }),
+          body: JSON.stringify(buildBody(req)),
         },
         { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
       )
 
       const json = (await res.json()) as any
+      const ok = res.ok && (json?.status === true || json?.status === "true" || json?.status === "success")
 
-      if (res.ok && json?.status === "success") {
+      if (ok) {
         return {
           success: true,
-          providerReference: json.transaction_id ?? json.reference,
-          message: "Purchase successful via CheapDataHub",
+          providerReference: json.transaction_id ?? json.reference ?? json.data?.reference,
+          message: json?.message ?? "Purchase successful via CheapDataHub",
           raw: json,
         }
       }
@@ -88,7 +128,8 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
   },
 
   async checkStatus(providerReference: string, credentials: VtuProviderCredentials): Promise<VtuStatusResult> {
-    const baseUrl = credentials.baseUrl || process.env.CHEAPDATAHUB_BASE_URL || "https://api.cheapdatahub.ng/v1"
+    const baseUrl =
+      credentials.baseUrl || process.env.CHEAPDATAHUB_BASE_URL || "https://www.cheapdatahub.ng/api/v1/resellers"
     const apiKey = credentials.apiKey || process.env.CHEAPDATAHUB_API_KEY
 
     if (!apiKey) {
@@ -97,12 +138,17 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
 
     try {
       const res = await fetchWithRetry(
-        `${baseUrl}/status/${providerReference}`,
+        `${baseUrl}/transactions/${providerReference}/`,
         { method: "GET", headers: { Authorization: `Bearer ${apiKey}` } },
         { retries: 2, timeoutMs: 10_000 },
       )
       const json = (await res.json()) as any
-      const status = json?.status === "success" ? "success" : json?.status === "pending" ? "pending" : "failed"
+      const raw = json?.data?.status ?? json?.status
+      const status = raw === true || raw === "true" || raw === "successful" || raw === "success"
+        ? "success"
+        : raw === "pending" || raw === "processing" || raw === "initiated"
+          ? "pending"
+          : "failed"
       return { status, message: json?.message ?? "", raw: json }
     } catch (err) {
       return { status: "failed", message: err instanceof Error ? err.message : "Status check failed" }

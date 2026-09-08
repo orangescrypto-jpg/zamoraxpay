@@ -1,3 +1,4 @@
+
 // app/layout.tsx
 import type { Metadata } from "next"
 import { Inter, Space_Grotesk } from "next/font/google"
@@ -7,6 +8,7 @@ import { Footer } from "@/components/layout/Footer"
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner"
 import PWARegistrar from "@/components/shared/PWARegistrar"
 import PWAInstallBanner from "@/components/shared/PWAInstallBanner"
+import WhatsAppSupportButton from "@/components/shared/WhatsAppSupportButton"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" })
@@ -53,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="min-h-screen">{children}</main>
         <Footer />
         <CookieConsentBanner />
+        <WhatsAppSupportButton />
       </body>
     </html>
   )

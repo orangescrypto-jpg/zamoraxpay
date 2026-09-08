@@ -35,6 +35,7 @@ export interface VtuRouterAttemptLog {
   success: boolean
   message: string
   attemptedAt: string
+  raw?: unknown
 }
 
 export interface VtuRouterResult {
@@ -138,6 +139,7 @@ export async function executeVtuPurchase(
       success: result.success,
       message: result.message,
       attemptedAt: new Date().toISOString(),
+      raw: result.raw,
     })
 
     if (result.success) {

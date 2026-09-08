@@ -27,6 +27,9 @@ export interface IAuthService {
 
   resetPassword(email: string): Promise<void>
 
+  /** Re-sends the signup confirmation link, for a user who didn't receive or lost it. */
+  resendConfirmationEmail(email: string): Promise<void>
+
   setTransactionPin(pin: string): Promise<void>
 
   verifyTransactionPin(pin: string): Promise<boolean>

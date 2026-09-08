@@ -52,7 +52,10 @@ export async function POST(req: NextRequest) {
       // the frontend can show "check your email" instead of a generic
       // wrong-password message.
       if (error?.message?.toLowerCase().includes("email not confirmed")) {
-        return NextResponse.json({ error: "Please confirm your email before logging in." }, { status: 403 })
+        return NextResponse.json(
+          { error: "Please confirm your email before logging in.", requiresConfirmation: true, email },
+          { status: 403 },
+        )
       }
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }

@@ -1,38 +1,77 @@
 // app/(dashboard)/services/cable/page.tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
+import { formatNaira } from "@/lib/utils"
 
 const BILLERS = ["DSTV", "GOtv", "StarTimes"]
-const PLANS: Record<string, { code: string; label: string }[]> = {
-  DSTV: [
-    { code: "DSTV_PADI", label: "DStv Padi" },
-    { code: "DSTV_COMPACT", label: "DStv Compact" },
-    { code: "DSTV_COMPACT_PLUS", label: "DStv Compact Plus" },
-  ],
-  GOtv: [
-    { code: "GOTV_JOLLI", label: "GOtv Jolli" },
-    { code: "GOTV_MAX", label: "GOtv Max" },
-  ],
-  StarTimes: [
-    { code: "STARTIMES_BASIC", label: "StarTimes Basic" },
-    { code: "STARTIMES_CLASSIC", label: "StarTimes Classic" },
-  ],
+
+interface Plan {
+  planCode: string
+  priceKobo: number
+}
+
+// Plan codes are admin-defined (e.g. "DSTV_COMPACT_PLUS"); turn the
+// biller prefix + underscores into a readable label instead of
+// keeping a second, separate label list that can drift from admin.
+function labelFromPlanCode(code: string, biller: string): string {
+  const prefix = biller.toUpperCase().replace(/\s/g, "")
+  const rest = code.startsWith(prefix + "_") ? code.slice(prefix.length + 1) : code
+  const words = rest.split("_").map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+  return `${biller} ${words.join(" ")}`
 }
 
 export default function CablePage() {
   const [biller, setBiller] = useState(BILLERS[0])
   const [smartcardNumber, setSmartcardNumber] = useState("")
-  const [planCode, setPlanCode] = useState(PLANS[BILLERS[0]][0].code)
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [plansLoading, setPlansLoading] = useState(true)
+  const [plansError, setPlansError] = useState<string | null>(null)
+  const [planCode, setPlanCode] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  function handleBillerChange(b: string) {
-    setBiller(b)
-    setPlanCode(PLANS[b][0].code)
-  }
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPlans() {
+      setPlansLoading(true)
+      setPlansError(null)
+      setPlanCode("")
+
+      try {
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+
+        const res = await fetch(
+          `/api/pricing?serviceType=cable&networkOrBiller=${encodeURIComponent(biller)}`,
+          { headers: { Authorization: `Bearer ${session?.access_token}` } },
+        )
+        const data = await res.json()
+        if (cancelled) return
+
+        if (!res.ok) {
+          setPlansError(data.error ?? "Could not load packages")
+          setPlans([])
+          return
+        }
+
+        setPlans(data.plans ?? [])
+        if (data.plans?.length) setPlanCode(data.plans[0].planCode)
+      } catch {
+        if (!cancelled) setPlansError("Could not load packages")
+      } finally {
+        if (!cancelled) setPlansLoading(false)
+      }
+    }
+
+    loadPlans()
+    return () => { cancelled = true }
+  }, [biller])
+
+  const selectedPlan = plans.find((p) => p.planCode === planCode)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -68,7 +107,7 @@ export default function CablePage() {
           <label className="mb-1 block text-sm font-medium text-secondary">Provider</label>
           <div className="grid grid-cols-3 gap-2">
             {BILLERS.map((b) => (
-              <button type="button" key={b} onClick={() => handleBillerChange(b)}
+              <button type="button" key={b} onClick={() => setBiller(b)}
                 className={`rounded-md border py-2 text-sm font-medium ${biller === b ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"}`}>
                 {b}
               </button>
@@ -84,10 +123,29 @@ export default function CablePage() {
 
         <div>
           <label className="mb-1 block text-sm font-medium text-secondary">Package</label>
-          <select value={planCode} onChange={(e) => setPlanCode(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-sm">
-            {PLANS[biller].map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
-          </select>
+          {plansLoading ? (
+            <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">Loading packages…</div>
+          ) : plansError ? (
+            <div className="w-full rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{plansError}</div>
+          ) : plans.length === 0 ? (
+            <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
+              No packages are configured for {biller} yet.
+            </div>
+          ) : (
+            <select value={planCode} onChange={(e) => setPlanCode(e.target.value)}
+              className="w-full rounded-md border border-border px-3 py-2 text-sm">
+              {plans.map((p) => (
+                <option key={p.planCode} value={p.planCode}>
+                  {labelFromPlanCode(p.planCode, biller)} — {formatNaira(p.priceKobo)}
+                </option>
+              ))}
+            </select>
+          )}
+          {selectedPlan && (
+            <p className="mt-1 text-sm font-medium text-secondary">
+              You'll pay {formatNaira(selectedPlan.priceKobo)}
+            </p>
+          )}
         </div>
 
         <div>
@@ -96,7 +154,7 @@ export default function CablePage() {
             className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest" />
         </div>
 
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || !planCode}
           className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
           {loading ? "Processing..." : "Pay subscription"}
         </button>

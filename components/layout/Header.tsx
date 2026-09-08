@@ -103,7 +103,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white">
       <div className="container flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex items-center gap-2">
           <span className="text-xl font-heading font-bold text-primary">Zamorax</span>
           <span className="text-xl font-heading font-bold text-secondary">Pay</span>
         </Link>

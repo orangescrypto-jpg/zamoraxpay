@@ -2,7 +2,7 @@
 // DELETE clears the server-side Supabase session cookies on logout.
 
 import { NextRequest, NextResponse } from "next/server"
-import { createServerClient } from "@supabase/ssr"
+import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
 export async function DELETE(_req: NextRequest) {
@@ -15,7 +15,7 @@ export async function DELETE(_req: NextRequest) {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
         },
       },

@@ -30,6 +30,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // block the whole profile response.
   }
 
+  // Admin status lives in a separate table — most users won't have a
+  // row here at all, which is the expected (non-admin) case.
+  let adminRole: string | null = null
+  try {
+    const adminResult = await d1Query("SELECT role FROM admin_users WHERE id = ? LIMIT 1", [id])
+    adminRole = adminResult.results?.[0]?.role ?? null
+  } catch {
+    // Same defensive default as emailConfirmed above — a lookup failure
+    // here should never block the whole profile response.
+  }
+
   return NextResponse.json({
     id: row.id,
     phone: row.phone,
@@ -41,6 +52,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     status: row.status,
     referralCode: row.referral_code,
     createdAt: row.created_at,
+    adminRole,
   })
 }
 

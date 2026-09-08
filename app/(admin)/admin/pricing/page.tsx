@@ -21,6 +21,8 @@ export default function AdminPricingPage() {
   const [rules, setRules] = useState<PricingRule[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [draft, setDraft] = useState({
     serviceType: "data",
     networkOrBiller: "",
@@ -48,12 +50,32 @@ export default function AdminPricingPage() {
     load()
   }, [])
 
-  async function handleAdd() {
+  function resetForm() {
+    setShowAdd(false)
+    setEditingId(null)
+    setDraft({ serviceType: "data", networkOrBiller: "", planCode: "", retailPrice: "", wholesalePrice: "", convenienceFee: "" })
+  }
+
+  function startEdit(rule: PricingRule) {
+    setEditingId(rule.id)
+    setShowAdd(true)
+    setDraft({
+      serviceType: rule.service_type,
+      networkOrBiller: rule.network_or_biller,
+      planCode: rule.plan_code ?? "",
+      retailPrice: String(rule.retail_price_kobo / 100),
+      wholesalePrice: String(rule.wholesale_price_kobo / 100),
+      convenienceFee: String(rule.convenience_fee_kobo / 100),
+    })
+  }
+
+  async function handleSave() {
     const headers = await getAuthHeader()
     await fetch("/api/admin/pricing", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({
+        id: editingId ?? undefined,
         serviceType: draft.serviceType,
         networkOrBiller: draft.networkOrBiller,
         planCode: draft.planCode || null,
@@ -62,8 +84,15 @@ export default function AdminPricingPage() {
         convenienceFeeKobo: Math.round((parseFloat(draft.convenienceFee) || 0) * 100),
       }),
     })
-    setShowAdd(false)
-    setDraft({ serviceType: "data", networkOrBiller: "", planCode: "", retailPrice: "", wholesalePrice: "", convenienceFee: "" })
+    resetForm()
+    load()
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id)
+    const headers = await getAuthHeader()
+    await fetch(`/api/admin/pricing?id=${encodeURIComponent(id)}`, { method: "DELETE", headers })
+    setDeletingId(null)
     load()
   }
 
@@ -72,7 +101,7 @@ export default function AdminPricingPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-heading font-bold">Pricing Rules</h1>
         <button
-          onClick={() => setShowAdd(!showAdd)}
+          onClick={() => (showAdd ? resetForm() : setShowAdd(true))}
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
         >
           {showAdd ? "Cancel" : "Add rule"}
@@ -81,6 +110,7 @@ export default function AdminPricingPage() {
 
       {showAdd && (
         <div className="mb-6 max-w-2xl rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold text-secondary">{editingId ? "Edit rule" : "New rule"}</h2>
           <div className="mb-3 grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-secondary">Service type</label>
@@ -141,11 +171,11 @@ export default function AdminPricingPage() {
             </div>
           </div>
           <button
-            onClick={handleAdd}
+            onClick={handleSave}
             disabled={!draft.networkOrBiller || !draft.retailPrice || !draft.wholesalePrice}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
-            Save rule
+            {editingId ? "Save changes" : "Save rule"}
           </button>
         </div>
       )}
@@ -163,6 +193,7 @@ export default function AdminPricingPage() {
                 <th className="px-4 py-3">Retail</th>
                 <th className="px-4 py-3">Wholesale</th>
                 <th className="px-4 py-3">Fee</th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -174,11 +205,45 @@ export default function AdminPricingPage() {
                   <td className="px-4 py-3">{formatNaira(r.retail_price_kobo)}</td>
                   <td className="px-4 py-3">{formatNaira(r.wholesale_price_kobo)}</td>
                   <td className="px-4 py-3">{formatNaira(r.convenience_fee_kobo)}</td>
+                  <td className="px-4 py-3">
+                    {deletingId === r.id ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-destructive">Delete this rule?</span>
+                        <button
+                          onClick={() => handleDelete(r.id)}
+                          className="rounded-md bg-destructive px-2 py-1 text-xs font-medium text-white"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          onClick={() => setDeletingId(null)}
+                          className="rounded-md border border-border px-2 py-1 text-xs font-medium text-secondary"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => startEdit(r)}
+                          className="text-xs font-medium text-primary hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeletingId(r.id)}
+                          className="text-xs font-medium text-destructive hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
               {rules.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                     No pricing rules yet. Flexible-amount services (airtime, electricity, betting) work without a rule.
                   </td>
                 </tr>

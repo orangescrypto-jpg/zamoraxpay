@@ -1,6 +1,8 @@
 // app/(admin)/admin/banners/page.tsx
 "use client"
 
+export const dynamic = "force-dynamic"
+
 import { useEffect, useRef, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { cn } from "@/lib/utils"

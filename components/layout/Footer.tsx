@@ -78,7 +78,8 @@ export function Footer() {
         </div>
 
         <div className="mt-8 border-t border-white/10 pt-6 text-center text-xs text-white/50">
-          © {new Date().getFullYear()} ZamoraxPay. All rights reserved.
+          <p>ZamoraxPay by Zamorax Enterprises Limited. RC9678731</p>
+          <p>© {new Date().getFullYear()} ZamoraxPay. All rights reserved.</p>
         </div>
       </div>
     </footer>

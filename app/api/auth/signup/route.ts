@@ -36,6 +36,13 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceRoleClient()
 
+    // Check phone uniqueness before creating the Supabase auth user, so
+    // we don't end up with an orphaned auth user when this fails.
+    const existingPhone = await d1Query("SELECT id FROM users WHERE phone = ?", [phone])
+    if (existingPhone.results?.length) {
+      return NextResponse.json({ error: "This phone number is already registered. Try logging in instead." }, { status: 409 })
+    }
+
     // email_confirm is left unset (defaults to Supabase's own project
     // setting) so the "Confirm email" toggle in the Supabase dashboard
     // is what actually governs whether this user can log in
@@ -58,19 +65,33 @@ export async function POST(req: NextRequest) {
       referredByUserId = referrer.results?.[0]?.id ?? null
     }
 
-    await d1Query(
-      `INSERT INTO users (id, phone, email, full_name, tier, status, referral_code, referred_by_user_id)
-       VALUES (?, ?, ?, ?, 'retail', 'active', ?, ?)`,
-      [uid, phone, email, fullName, referralCode, referredByUserId],
-    )
-
-    await d1Query("INSERT INTO wallets (id, user_id, balance_kobo) VALUES (?, ?, 0)", [randomUUID(), uid])
-
-    if (referredByUserId) {
+    try {
       await d1Query(
-        "INSERT INTO referrals (id, referrer_user_id, referred_user_id, bonus_awarded, bonus_kobo) VALUES (?, ?, ?, 0, 0)",
-        [randomUUID(), referredByUserId, uid],
+        `INSERT INTO users (id, phone, email, full_name, tier, status, referral_code, referred_by_user_id)
+         VALUES (?, ?, ?, ?, 'retail', 'active', ?, ?)`,
+        [uid, phone, email, fullName, referralCode, referredByUserId],
       )
+
+      await d1Query("INSERT INTO wallets (id, user_id, balance_kobo) VALUES (?, ?, 0)", [randomUUID(), uid])
+
+      if (referredByUserId) {
+        await d1Query(
+          "INSERT INTO referrals (id, referrer_user_id, referred_user_id, bonus_awarded, bonus_kobo) VALUES (?, ?, ?, 0, 0)",
+          [randomUUID(), referredByUserId, uid],
+        )
+      }
+    } catch (dbErr) {
+      // Roll back the Supabase auth user so a failed D1 write doesn't
+      // leave an orphaned account blocking this email from ever
+      // signing up successfully.
+      await supabase.auth.admin.deleteUser(uid).catch((cleanupErr) =>
+        console.error("[signup] Failed to roll back orphaned auth user:", cleanupErr),
+      )
+
+      const message = dbErr instanceof Error && dbErr.message.includes("UNIQUE constraint failed: users.phone")
+        ? "This phone number is already registered. Try logging in instead."
+        : "Signup failed. Please try again."
+      return NextResponse.json({ error: message }, { status: 409 })
     }
 
     // Fire-and-forget — a slow/failed welcome email should never block
@@ -97,9 +118,7 @@ export async function POST(req: NextRequest) {
       requiresEmailConfirmation: !authData.user.email_confirmed_at,
     })
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Signup failed" },
-      { status: 500 },
-    )
+    console.error("[signup] Unexpected error:", err)
+    return NextResponse.json({ error: "Signup failed. Please try again." }, { status: 500 })
   }
 }

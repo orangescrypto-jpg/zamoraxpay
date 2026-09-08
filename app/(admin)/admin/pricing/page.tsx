@@ -17,6 +17,20 @@ interface PricingRule {
 
 const SERVICE_TYPES = ["airtime", "data", "cable", "electricity", "exam_pin", "betting"]
 
+// Must exactly match the network/biller values each buy-flow page sends
+// (see app/(dashboard)/services/*/page.tsx). Pricing lookups are an exact
+// string match, so this list — not free text — is what prevents rules
+// silently never matching (e.g. "GLO" saved in admin vs "Glo" sent by
+// the buy-data page).
+const NETWORKS_OR_BILLERS: Record<string, string[]> = {
+  airtime: ["MTN", "Airtel", "Glo", "9mobile"],
+  data: ["MTN", "Airtel", "Glo", "9mobile"],
+  cable: ["DSTV", "GOtv", "StarTimes"],
+  electricity: ["IKEDC", "EKEDC", "AEDC", "PHEDC", "IBEDC", "KEDCO"],
+  exam_pin: ["WAEC", "NECO", "JAMB", "NABTEB"],
+  betting: ["Bet9ja", "SportyBet", "NairaBet", "BetKing", "1xBet"],
+}
+
 export default function AdminPricingPage() {
   const [rules, setRules] = useState<PricingRule[]>([])
   const [loading, setLoading] = useState(true)
@@ -25,7 +39,7 @@ export default function AdminPricingPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [draft, setDraft] = useState({
     serviceType: "data",
-    networkOrBiller: "",
+    networkOrBiller: NETWORKS_OR_BILLERS["data"][0],
     planCode: "",
     retailPrice: "",
     wholesalePrice: "",
@@ -53,7 +67,12 @@ export default function AdminPricingPage() {
   function resetForm() {
     setShowAdd(false)
     setEditingId(null)
-    setDraft({ serviceType: "data", networkOrBiller: "", planCode: "", retailPrice: "", wholesalePrice: "", convenienceFee: "" })
+    setDraft({ serviceType: "data", networkOrBiller: NETWORKS_OR_BILLERS["data"][0], planCode: "", retailPrice: "", wholesalePrice: "", convenienceFee: "" })
+  }
+
+  function handleServiceTypeChange(serviceType: string) {
+    const options = NETWORKS_OR_BILLERS[serviceType] ?? []
+    setDraft({ ...draft, serviceType, networkOrBiller: options[0] ?? "" })
   }
 
   function startEdit(rule: PricingRule) {
@@ -121,7 +140,7 @@ export default function AdminPricingPage() {
               <label className="mb-1 block text-xs font-medium text-secondary">Service type</label>
               <select
                 value={draft.serviceType}
-                onChange={(e) => setDraft({ ...draft, serviceType: e.target.value })}
+                onChange={(e) => handleServiceTypeChange(e.target.value)}
                 className="w-full rounded-md border border-border px-3 py-2 text-sm"
               >
                 {SERVICE_TYPES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -129,12 +148,18 @@ export default function AdminPricingPage() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-secondary">Network / Biller</label>
-              <input
+              <select
                 value={draft.networkOrBiller}
                 onChange={(e) => setDraft({ ...draft, networkOrBiller: e.target.value })}
-                placeholder="MTN, DSTV, etc."
                 className="w-full rounded-md border border-border px-3 py-2 text-sm"
-              />
+              >
+                {(NETWORKS_OR_BILLERS[draft.serviceType] ?? []).map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+                {draft.networkOrBiller && !(NETWORKS_OR_BILLERS[draft.serviceType] ?? []).includes(draft.networkOrBiller) && (
+                  <option value={draft.networkOrBiller}>{draft.networkOrBiller} (legacy value — pick a valid one above and save)</option>
+                )}
+              </select>
             </div>
           </div>
           <div className="mb-3">

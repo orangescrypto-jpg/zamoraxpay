@@ -1,18 +1,30 @@
 // app/(dashboard)/wallet/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
+import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 
 const QUICK_AMOUNTS = [50000, 100000, 200000, 500000] // kobo
 
 export default function WalletPage() {
+  return (
+    <Suspense fallback={null}>
+      <WalletPageInner />
+    </Suspense>
+  )
+}
+
+function WalletPageInner() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
   const [amount, setAmount] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [verifyStatus, setVerifyStatus] = useState<"idle" | "checking" | "success" | "failed">("idle")
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -29,6 +41,51 @@ export default function WalletPage() {
 
   useEffect(() => {
     loadBalance()
+  }, [])
+
+  // Safety net: if the user is redirected back from Korapay before the
+  // webhook has landed, actively confirm the payment ourselves instead
+  // of leaving them staring at a stale balance. Polls briefly since
+  // Korapay may report "pending" for a moment after redirect.
+  useEffect(() => {
+    const funding = searchParams.get("funding")
+    const reference = searchParams.get("reference")
+    if (funding !== "complete" || !reference) return
+
+    let cancelled = false
+    setVerifyStatus("checking")
+
+    async function poll(attempt: number) {
+      const headers = await getAuthHeader()
+      const res = await fetch(`/api/wallet/fund/verify?reference=${encodeURIComponent(reference!)}`, { headers })
+      const data = await res.json()
+      if (cancelled) return
+
+      if (data.status === "success") {
+        setVerifyStatus("success")
+        setBalanceKobo(data.newBalanceKobo)
+        router.replace("/wallet")
+        return
+      }
+
+      if (data.status === "failed") {
+        setVerifyStatus("failed")
+        return
+      }
+
+      // still pending — retry a few times before giving up
+      if (attempt < 5) {
+        setTimeout(() => poll(attempt + 1), 2000)
+      } else {
+        setVerifyStatus("failed")
+      }
+    }
+
+    poll(0)
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleFund() {
@@ -65,6 +122,23 @@ export default function WalletPage() {
           Withdraw →
         </Link>
       </div>
+
+      {verifyStatus === "checking" && (
+        <p className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-700">
+          Confirming your payment…
+        </p>
+      )}
+      {verifyStatus === "success" && (
+        <p className="mb-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">
+          Payment confirmed — your wallet has been credited.
+        </p>
+      )}
+      {verifyStatus === "failed" && (
+        <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+          We couldn't confirm this payment yet. If you were charged, it should reflect shortly —
+          contact support if your balance doesn't update within a few minutes.
+        </p>
+      )}
 
       <div className="mb-6 rounded-lg bg-secondary p-6 text-white">
         <p className="text-sm text-white/70">Current balance</p>

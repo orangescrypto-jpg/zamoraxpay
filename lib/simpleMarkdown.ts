@@ -5,8 +5,33 @@
 // and paragraphs, which is what the blog and legal pages need.
 // Admin content is trusted (authored by admins only, not end users),
 // so no sanitization pass is applied here.
+//
+// Raw HTML mode: rather than adding a schema column, content authored
+// as raw HTML is prefixed with a hidden marker comment when saved.
+// renderMarkdown() detects the marker and returns the content
+// untouched (skipping every regex pass below) instead of running it
+// through markdown conversion. The editor's mode toggle reads/writes
+// this same marker via isRawHtml()/addHtmlMarker()/stripHtmlMarker().
+
+const HTML_MARKER = "<!--zamoraxpay:raw-html-->"
+
+export function isRawHtml(content: string): boolean {
+  return content.startsWith(HTML_MARKER)
+}
+
+export function addHtmlMarker(content: string): string {
+  return isRawHtml(content) ? content : `${HTML_MARKER}\n${content}`
+}
+
+export function stripHtmlMarker(content: string): string {
+  return isRawHtml(content) ? content.slice(HTML_MARKER.length).replace(/^\n/, "") : content
+}
 
 export function renderMarkdown(markdown: string): string {
+  if (isRawHtml(markdown)) {
+    return stripHtmlMarker(markdown)
+  }
+
   let html = markdown
 
   // Headings (order matters — ### before ## before #)

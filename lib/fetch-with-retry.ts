@@ -100,6 +100,16 @@ export async function fetchWithRetry(
             `Request timed out after ${timeoutMs}ms (${method} ${String(input)})`,
           )
         }
+        // Plain "fetch failed" from Node/undici hides the actual cause
+        // (DNS failure, connection refused, TLS error, etc.) in
+        // err.cause. Surface it so adapter error messages — and the
+        // provider_attempts audit trail — show something actionable
+        // instead of a dead-end string.
+        if (err instanceof Error) {
+          const cause = (err as any).cause
+          const causeMsg = cause instanceof Error ? cause.message : cause ? String(cause) : null
+          throw new Error(causeMsg ? `${err.message}: ${causeMsg}` : err.message)
+        }
         throw err
       }
 

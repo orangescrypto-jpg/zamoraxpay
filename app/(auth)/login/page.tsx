@@ -62,7 +62,7 @@ function LoginForm() {
       {unconfirmedEmail && (
         <div className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
           <p>
-            Check your email — we sent a verification link to <strong>{unconfirmedEmail}</strong>. Click it before
+            Check your email. We sent a verification link to <strong>{unconfirmedEmail}</strong>. Click it before
             logging in.
           </p>
           {resendState === "sent" ? (

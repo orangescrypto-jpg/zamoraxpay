@@ -10,8 +10,7 @@ import { requireAuth } from "@/lib/auth-server"
 import { d1Query } from "@/lib/db"
 import { debitWallet } from "@/src/services/wallet"
 import { isFeatureEnabled } from "@/src/services/config"
-
-const RESELLER_UPGRADE_FEE_KOBO = 300_000 // ₦3,000 default — admin-editable via pricing rules in a later iteration
+import { getSettingNumber } from "@/src/services/siteSettings"
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
@@ -29,9 +28,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Account is already on the reseller tier" }, { status: 400 })
     }
 
+    // Admin-editable via /admin/settings ("Reseller: Upgrade Fee"), falling
+    // back to ₦3,000 only if the setting row is somehow missing.
+    const upgradeFeeKobo = await getSettingNumber("reseller_upgrade_fee_kobo", 300_000)
+
     const debit = await debitWallet({
       userId: auth.uid,
-      amountKobo: RESELLER_UPGRADE_FEE_KOBO,
+      amountKobo: upgradeFeeKobo,
       type: "reseller_upgrade",
       reference: `ZPRSU-${randomUUID()}`,
     })

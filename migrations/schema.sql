@@ -335,6 +335,37 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
 
 CREATE INDEX IF NOT EXISTS idx_pricing_service ON pricing_rules(service_type, network_or_biller);
 
+-- Maps ONE of our own retail plans (a pricing_rules row, identified by
+-- service_type + network_or_biller + plan_code) to the SAME real-world
+-- plan as offered by one or more VTU providers, each with that
+-- provider's own plan_id/variation_id and provider-side cost.
+--
+-- This is what lets the router pick the cheapest provider for a given
+-- plan instead of always trying providers in a fixed priority order:
+-- e.g. our "MTN 200MB / 1 Day" plan might be Pairgate's plan_id "12"
+-- costing ₦92, and CheapDataHub's bundle_id "45" costing ₦100 — the
+-- router asks this table for all provider-side options mapped to our
+-- plan, sorted by provider_cost_kobo ascending, and tries the
+-- cheapest ENABLED provider first, falling through to the next
+-- cheapest on failure (still sequential — never parallel).
+CREATE TABLE IF NOT EXISTS provider_plan_mappings (
+  id                  TEXT PRIMARY KEY,
+  service_type        TEXT NOT NULL,          -- 'data' | 'cable' (any plan-coded service)
+  network_or_biller   TEXT NOT NULL,           -- 'MTN', 'DSTV', ... — matches pricing_rules
+  plan_code           TEXT NOT NULL,           -- OUR plan code — matches pricing_rules.plan_code
+  provider_key        TEXT NOT NULL,           -- 'pairgate' | 'cheapdatahub' | 'vtpass' | 'vtung'
+  provider_plan_id    TEXT NOT NULL,           -- that provider's own plan_id / variation_id / bundle_id
+  provider_cost_kobo  INTEGER NOT NULL,        -- what THIS provider charges us for this plan
+  provider_plan_label TEXT,                    -- optional human-readable label from the provider (for admin display/debugging)
+  is_active           INTEGER NOT NULL DEFAULT 1,
+  updated_by          TEXT,
+  updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(service_type, network_or_biller, plan_code, provider_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_plan_lookup
+  ON provider_plan_mappings(service_type, network_or_biller, plan_code, is_active);
+
 -- Header (auto+manual slider) and footer promotional banners,
 -- including Zamorax Marketplace cross-promotion and any other ads.
 CREATE TABLE IF NOT EXISTS banners (

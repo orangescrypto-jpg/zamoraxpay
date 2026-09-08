@@ -1,6 +1,8 @@
 // src/services/providers/payment/paystack.ts
 // Paystack payment adapter — implements IPaymentProviderAdapter.
-// Fallback gateway for credit/debit card transactions, per the PRD.
+// Supports card, bank transfer, and virtual account funding (all
+// channels enabled on the Paystack dashboard are presented on the
+// hosted checkout page returned via authorization_url).
 
 import crypto from "crypto"
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
@@ -39,6 +41,7 @@ export const paystackAdapter: IPaymentProviderAdapter = {
             reference: req.reference,
             callback_url: req.callbackUrl,
             metadata: req.metadata,
+            channels: ["card", "bank_transfer", "bank"],
           }),
         },
         { retries: 2, timeoutMs: 15_000, retryUnsafe: false },

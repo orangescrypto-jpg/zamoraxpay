@@ -89,9 +89,14 @@ export default function AdminPricingPage() {
   }
 
   async function handleDelete(id: string) {
-    setDeletingId(id)
     const headers = await getAuthHeader()
-    await fetch(`/api/admin/pricing?id=${encodeURIComponent(id)}`, { method: "DELETE", headers })
+    const res = await fetch(`/api/admin/pricing?id=${encodeURIComponent(id)}`, { method: "DELETE", headers })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error ?? `Delete failed (${res.status})`)
+      setDeletingId(null)
+      return
+    }
     setDeletingId(null)
     load()
   }

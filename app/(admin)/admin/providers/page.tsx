@@ -113,7 +113,7 @@ export default function AdminProvidersPage() {
       { key: "baseUrl", label: "Base URL (leave blank for default)" },
     ],
   }
-  const PAYMENT_CRED_FIELDS = [
+  const PAYMENT_CRED_FIELDS: { key: string; label: string; secret?: boolean; placeholder?: string }[] = [
     { key: "secretKey", label: "Secret Key", secret: true },
     { key: "webhookSecret", label: "Webhook Secret", secret: true },
   ]

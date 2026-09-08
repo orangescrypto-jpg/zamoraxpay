@@ -88,3 +88,17 @@ export async function getOrderHistory(userId: string, limit = 50, nativeDB?: any
   )
   return result.results ?? []
 }
+
+// Wallet-level transactions: funding, withdrawals, cashback, referral
+// bonuses, reseller upgrades, refunds, admin adjustments. This is
+// separate from vtu_orders (the purchase itself) — a single purchase
+// creates both a vtu_orders row and a 'purchase' wallet_transactions
+// row, linked via related_order_id.
+export async function getWalletTransactionHistory(userId: string, limit = 50, nativeDB?: any) {
+  const result = await d1Query(
+    "SELECT * FROM wallet_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+    [userId, limit],
+    nativeDB,
+  )
+  return result.results ?? []
+}

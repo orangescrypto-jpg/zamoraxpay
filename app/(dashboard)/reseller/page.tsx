@@ -1,10 +1,11 @@
 // app/(dashboard)/reseller/page.tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/src/services/providers/supabase/client"
+import { formatNaira } from "@/lib/utils"
 
 export default function ResellerPage() {
   const { user } = useAuth()
@@ -14,12 +15,32 @@ export default function ResellerPage() {
   const [bvn, setBvn] = useState("")
   const [bvnLoading, setBvnLoading] = useState(false)
   const [bvnResult, setBvnResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [upgradeFeeKobo, setUpgradeFeeKobo] = useState<number | null>(null)
+  const [feeError, setFeeError] = useState(false)
 
   async function getAuthHeader() {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     return { Authorization: `Bearer ${session?.access_token}` }
   }
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadFee() {
+      try {
+        const headers = await getAuthHeader()
+        const res = await fetch("/api/reseller/fee", { headers })
+        const data = await res.json()
+        if (cancelled) return
+        if (!res.ok) { setFeeError(true); return }
+        setUpgradeFeeKobo(data.upgradeFeeKobo)
+      } catch {
+        if (!cancelled) setFeeError(true)
+      }
+    }
+    loadFee()
+    return () => { cancelled = true }
+  }, [])
 
   async function handleUpgrade() {
     setUpgrading(true)
@@ -64,7 +85,13 @@ export default function ResellerPage() {
       ) : (
         <div className="mb-8 rounded-lg border border-border p-5">
           <p className="mb-3 text-sm text-secondary">
-            A one-time upgrade fee of ₦3,000 will be deducted from your wallet balance.
+            {feeError ? (
+              "Could not load the upgrade fee. Please try again shortly."
+            ) : upgradeFeeKobo === null ? (
+              "Loading upgrade fee…"
+            ) : (
+              <>A one-time upgrade fee of {formatNaira(upgradeFeeKobo)} will be deducted from your wallet balance.</>
+            )}
           </p>
           {upgradeResult && (
             <p className={`mb-3 rounded-md p-3 text-sm ${upgradeResult.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"}`}>
@@ -73,7 +100,7 @@ export default function ResellerPage() {
           )}
           <button
             onClick={handleUpgrade}
-            disabled={upgrading}
+            disabled={upgrading || upgradeFeeKobo === null}
             className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
             {upgrading ? "Upgrading..." : "Upgrade to reseller"}

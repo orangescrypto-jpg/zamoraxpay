@@ -22,9 +22,17 @@ export default function PWAInstallBanner() {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     // Don't show again this "session" (until localStorage is cleared or
     // the flag expires) if the user already dismissed it once.
-    const dismissed = typeof window !== "undefined" && localStorage.getItem(DISMISS_KEY)
+    let dismissed = false
+    try {
+      dismissed = !!localStorage.getItem(DISMISS_KEY)
+    } catch {
+      // localStorage can throw in private browsing / disabled-storage
+      // contexts — treat as "not dismissed" and continue.
+    }
     if (dismissed) return
 
     function handleBeforeInstallPrompt(e: Event) {
@@ -61,6 +69,7 @@ export default function PWAInstallBanner() {
 
   function handleDismiss() {
     setVisible(false)
+    if (typeof window === "undefined") return
     try {
       localStorage.setItem(DISMISS_KEY, "1")
     } catch {

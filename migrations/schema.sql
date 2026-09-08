@@ -486,7 +486,8 @@ INSERT OR IGNORE INTO site_settings (key, label, description, value, value_type)
   ('withdrawal_min_amount_kobo', 'Withdrawal: Minimum Amount', 'Minimum amount a user can request to withdraw, in kobo (e.g. 100000 = ₦1,000)', '100000', 'number'),
   ('withdrawal_fee_kobo', 'Withdrawal: Flat Fee', 'Flat fee deducted from every withdrawal payout, in kobo', '5000', 'number'),
   ('withdrawal_payout_method', 'Withdrawal: Payout Method', 'Either "manual" (admin sends transfer by hand) or "automatic" (admin approval triggers a Korapay/Paystack transfer)', 'manual', 'text'),
-  ('referral_bonus_amount_kobo', 'Referral: Bonus Amount', 'Amount credited to both the referrer and the new user when a referral''s first purchase completes, in kobo', '20000', 'number');
+  ('referral_bonus_amount_kobo', 'Referral: Bonus Amount', 'Amount credited to both the referrer and the new user when a referral''s first purchase completes, in kobo', '20000', 'number'),
+  ('reseller_upgrade_fee_kobo', 'Reseller: Upgrade Fee', 'One-time fee deducted from a user''s wallet when they upgrade from retail to reseller tier, in kobo (e.g. 300000 = ₦3,000)', '300000', 'number');
 
 
 -- =====================================================================

@@ -133,6 +133,9 @@ export function Header() {
               <Link href="/wallet" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
                 Wallet
               </Link>
+              <Link href="/referrals" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+                Refer & Earn
+              </Link>
               <button
                 onClick={() => signOut()}
                 className="hidden rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted sm:block"
@@ -187,6 +190,13 @@ export function Header() {
               className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
             >
               Wallet
+            </Link>
+            <Link
+              href="/referrals"
+              onClick={() => setMenuOpen(false)}
+              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+            >
+              Refer & Earn
             </Link>
             <Link
               href="/blog"

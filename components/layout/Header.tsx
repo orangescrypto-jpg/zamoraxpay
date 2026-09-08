@@ -136,6 +136,9 @@ export function Header() {
               <Link href="/referrals" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
                 Refer & Earn
               </Link>
+              <Link href="/settings" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+                Settings
+              </Link>
               <button
                 onClick={() => signOut()}
                 className="hidden rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted sm:block"
@@ -211,6 +214,13 @@ export function Header() {
               className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
             >
               Become a Reseller
+            </Link>
+            <Link
+              href="/settings"
+              onClick={() => setMenuOpen(false)}
+              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+            >
+              Settings
             </Link>
             {isAdmin && (
               <Link

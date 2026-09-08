@@ -97,8 +97,8 @@ export default function AdminPricingPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="p-4 sm:p-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-heading font-bold">Pricing Rules</h1>
         <button
           onClick={() => (showAdd ? resetForm() : setShowAdd(true))}
@@ -109,9 +109,9 @@ export default function AdminPricingPage() {
       </div>
 
       {showAdd && (
-        <div className="mb-6 max-w-2xl rounded-lg border border-border bg-white p-4">
+        <div className="mb-6 rounded-lg border border-border bg-white p-4 sm:max-w-2xl">
           <h2 className="mb-3 text-sm font-semibold text-secondary">{editingId ? "Edit rule" : "New rule"}</h2>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-secondary">Service type</label>
               <select
@@ -141,7 +141,7 @@ export default function AdminPricingPage() {
               className="w-full rounded-md border border-border px-3 py-2 text-sm"
             />
           </div>
-          <div className="mb-3 grid grid-cols-3 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-secondary">Retail price (₦)</label>
               <input
@@ -173,7 +173,7 @@ export default function AdminPricingPage() {
           <button
             onClick={handleSave}
             disabled={!draft.networkOrBiller || !draft.retailPrice || !draft.wholesalePrice}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 sm:w-auto"
           >
             {editingId ? "Save changes" : "Save rule"}
           </button>
@@ -182,75 +182,139 @@ export default function AdminPricingPage() {
 
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Service</th>
-                <th className="px-4 py-3">Network/Biller</th>
-                <th className="px-4 py-3">Plan</th>
-                <th className="px-4 py-3">Retail</th>
-                <th className="px-4 py-3">Wholesale</th>
-                <th className="px-4 py-3">Fee</th>
-                <th className="px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rules.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-4 py-3 capitalize">{r.service_type.replace("_", " ")}</td>
-                  <td className="px-4 py-3">{r.network_or_biller}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{r.plan_code ?? "—"}</td>
-                  <td className="px-4 py-3">{formatNaira(r.retail_price_kobo)}</td>
-                  <td className="px-4 py-3">{formatNaira(r.wholesale_price_kobo)}</td>
-                  <td className="px-4 py-3">{formatNaira(r.convenience_fee_kobo)}</td>
-                  <td className="px-4 py-3">
-                    {deletingId === r.id ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-destructive">Delete this rule?</span>
-                        <button
-                          onClick={() => handleDelete(r.id)}
-                          className="rounded-md bg-destructive px-2 py-1 text-xs font-medium text-white"
-                        >
-                          Yes
-                        </button>
-                        <button
-                          onClick={() => setDeletingId(null)}
-                          className="rounded-md border border-border px-2 py-1 text-xs font-medium text-secondary"
-                        >
-                          No
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => startEdit(r)}
-                          className="text-xs font-medium text-primary hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setDeletingId(r.id)}
-                          className="text-xs font-medium text-destructive hover:underline"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {rules.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                    No pricing rules yet. Flexible-amount services (airtime, electricity, betting) work without a rule.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      ) : rules.length === 0 ? (
+        <div className="rounded-lg border border-border p-8 text-center text-sm text-muted-foreground">
+          No pricing rules yet. Flexible-amount services (airtime, electricity, betting) work without a rule.
         </div>
+      ) : (
+        <>
+          {/* Mobile: stacked cards. Hidden from sm and up, where the table takes over. */}
+          <div className="space-y-3 sm:hidden">
+            {rules.map((r) => (
+              <div key={r.id} className="rounded-lg border border-border bg-white p-4">
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold capitalize text-secondary">
+                      {r.service_type.replace("_", " ")} · {r.network_or_biller}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{r.plan_code ?? "No plan code"}</p>
+                  </div>
+                </div>
+
+                <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">Retail</p>
+                    <p className="font-medium text-secondary">{formatNaira(r.retail_price_kobo)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Wholesale</p>
+                    <p className="font-medium text-secondary">{formatNaira(r.wholesale_price_kobo)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Fee</p>
+                    <p className="font-medium text-secondary">{formatNaira(r.convenience_fee_kobo)}</p>
+                  </div>
+                </div>
+
+                {deletingId === r.id ? (
+                  <div className="flex items-center gap-2 border-t border-border pt-3">
+                    <span className="text-xs text-destructive">Delete this rule?</span>
+                    <button
+                      onClick={() => handleDelete(r.id)}
+                      className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-white"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setDeletingId(null)}
+                      className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-secondary"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-4 border-t border-border pt-3">
+                    <button
+                      onClick={() => startEdit(r)}
+                      className="text-xs font-medium text-primary hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setDeletingId(r.id)}
+                      className="text-xs font-medium text-destructive hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop / tablet: table. Hidden below sm, where cards take over. */}
+          <div className="hidden overflow-x-auto rounded-lg border border-border sm:block">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Service</th>
+                  <th className="px-4 py-3">Network/Biller</th>
+                  <th className="px-4 py-3">Plan</th>
+                  <th className="px-4 py-3">Retail</th>
+                  <th className="px-4 py-3">Wholesale</th>
+                  <th className="px-4 py-3">Fee</th>
+                  <th className="px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rules.map((r) => (
+                  <tr key={r.id}>
+                    <td className="px-4 py-3 capitalize">{r.service_type.replace("_", " ")}</td>
+                    <td className="px-4 py-3">{r.network_or_biller}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{r.plan_code ?? "—"}</td>
+                    <td className="px-4 py-3">{formatNaira(r.retail_price_kobo)}</td>
+                    <td className="px-4 py-3">{formatNaira(r.wholesale_price_kobo)}</td>
+                    <td className="px-4 py-3">{formatNaira(r.convenience_fee_kobo)}</td>
+                    <td className="px-4 py-3">
+                      {deletingId === r.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-destructive">Delete this rule?</span>
+                          <button
+                            onClick={() => handleDelete(r.id)}
+                            className="rounded-md bg-destructive px-2 py-1 text-xs font-medium text-white"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={() => setDeletingId(null)}
+                            className="rounded-md border border-border px-2 py-1 text-xs font-medium text-secondary"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => startEdit(r)}
+                            className="text-xs font-medium text-primary hover:underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => setDeletingId(r.id)}
+                            className="text-xs font-medium text-destructive hover:underline"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   )

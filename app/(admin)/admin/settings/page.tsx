@@ -1,3 +1,4 @@
+
 // app/(admin)/admin/settings/page.tsx
 "use client"
 
@@ -23,6 +24,7 @@ const GROUPS: { title: string; keys: string[] }[] = [
       "cashback_max_amount_kobo",
     ],
   },
+  { title: "WhatsApp Support", keys: ["whatsapp_support_enabled", "whatsapp_support_number"] },
 ]
 
 export default function AdminSettingsPage() {

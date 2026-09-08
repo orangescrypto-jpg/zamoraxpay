@@ -29,6 +29,7 @@ export default function AdminProvidersPage() {
   const [loading, setLoading] = useState(true)
   const [editingCreds, setEditingCreds] = useState<{ type: "vtu" | "payment"; key: string } | null>(null)
   const [credsInput, setCredsInput] = useState("{}")
+  const [credsLoading, setCredsLoading] = useState(false)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -84,6 +85,39 @@ export default function AdminProvidersPage() {
     load()
   }
 
+  // Default field templates shown when a provider has no saved
+  // credentials yet — each provider's adapter expects different keys,
+  // so a single generic template doesn't fit all four.
+  const VTU_CRED_TEMPLATES: Record<string, string> = {
+    cheapdatahub: '{\n  "apiKey": ""\n}',
+    pairgate: '{\n  "apiKey": "",\n  "testMode": "false"\n}',
+    vtpass: '{\n  "apiKey": "",\n  "secretKey": ""\n}',
+    vtung: '{\n  "username": "",\n  "password": ""\n}',
+  }
+
+  async function openVtuCredsEditor(p: VtuProvider) {
+    setEditingCreds({ type: "vtu", key: p.providerKey })
+    setCredsInput(VTU_CRED_TEMPLATES[p.providerKey] ?? '{\n  "apiKey": ""\n}')
+
+    if (!p.hasCredentials) return // nothing saved yet — blank template is correct
+
+    setCredsLoading(true)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch(`/api/admin/providers/vtu/credentials?providerKey=${p.providerKey}`, { headers })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.credentials && Object.keys(data.credentials).length > 0) {
+          setCredsInput(JSON.stringify(data.credentials, null, 2))
+        }
+      }
+      // On a non-OK response (e.g. not super_admin) we silently keep
+      // the blank template rather than blocking the modal — the save
+      // itself will still enforce the super_admin check.
+    } finally {
+      setCredsLoading(false)
+    }
+  }
   async function saveCredentials() {
     if (!editingCreds) return
     let parsed: Record<string, string>
@@ -142,10 +176,7 @@ export default function AdminProvidersPage() {
                       className="w-16 rounded-md border border-border px-2 py-1 text-center text-sm"
                     />
                     <button
-                      onClick={() => {
-                        setEditingCreds({ type: "vtu", key: p.providerKey })
-                        setCredsInput('{\n  "apiKey": ""\n}')
-                      }}
+                      onClick={() => openVtuCredsEditor(p)}
                       className="text-sm text-primary hover:underline"
                     >
                       Set keys
@@ -217,12 +248,16 @@ export default function AdminProvidersPage() {
         <div className="fixed inset-0 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-lg bg-white p-5">
             <h3 className="mb-3 font-heading font-semibold">Set credentials — {editingCreds.key}</h3>
-            <textarea
-              value={credsInput}
-              onChange={(e) => setCredsInput(e.target.value)}
-              rows={8}
-              className="mb-4 w-full rounded-md border border-border p-3 font-mono text-xs"
-            />
+            {credsLoading ? (
+              <p className="mb-4 text-sm text-muted-foreground">Loading saved credentials…</p>
+            ) : (
+              <textarea
+                value={credsInput}
+                onChange={(e) => setCredsInput(e.target.value)}
+                rows={8}
+                className="mb-4 w-full rounded-md border border-border p-3 font-mono text-xs"
+              />
+            )}
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setEditingCreds(null)}

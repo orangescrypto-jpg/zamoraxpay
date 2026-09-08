@@ -103,6 +103,7 @@ export default function AdminTransactionsPage() {
                   <th className="px-4 py-3">Amount</th>
                   <th className="px-4 py-3">Provider</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Failure reason</th>
                   <th className="px-4 py-3">Date</th>
                 </tr>
               ) : (
@@ -136,6 +137,9 @@ export default function AdminTransactionsPage() {
                         >
                           {o.status}
                         </span>
+                      </td>
+                      <td className="max-w-xs truncate px-4 py-3 text-xs text-destructive" title={o.failure_reason ?? ""}>
+                        {o.failure_reason ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{formatDate(o.created_at)}</td>
                     </tr>

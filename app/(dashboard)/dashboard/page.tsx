@@ -33,6 +33,19 @@ interface Order {
   created_at: string
 }
 
+interface WalletTx {
+  id: string
+  type: string
+  direction: "credit" | "debit"
+  amount_kobo: number
+  created_at: string
+}
+
+type ActivityItem =
+  | { kind: "order"; id: string; created_at: string; data: Order }
+  | { kind: "wallet"; id: string; created_at: string; data: WalletTx }
+
+
 const QUICK_LINKS: { href: string; label: string; icon: LucideIcon; iconClass: string }[] = [
   { href: "/services/airtime", label: "Airtime", icon: Smartphone, iconClass: "bg-blue-50 text-blue-600" },
   { href: "/services/data", label: "Data", icon: Wifi, iconClass: "bg-violet-50 text-violet-600" },
@@ -58,10 +71,19 @@ function statusStyle(status: string) {
   )
 }
 
+const WALLET_LABELS: Record<string, string> = {
+  funding: "Wallet funding",
+  refund: "Refund",
+  cashback: "Cashback",
+  referral_bonus: "Referral bonus",
+  reseller_upgrade: "Reseller upgrade",
+  admin_adjustment: "Wallet adjustment",
+}
+
 export default function DashboardPage() {
   const { user } = useAuth()
   const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
-  const [orders, setOrders] = useState<Order[]>([])
+  const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -83,7 +105,22 @@ export default function DashboardPage() {
         if (cancelled) return
 
         setBalanceKobo(balanceData.balanceKobo ?? 0)
-        setOrders((historyData.orders ?? []).slice(0, 5))
+
+        const orders: Order[] = historyData.orders ?? []
+        const walletTransactions: WalletTx[] = historyData.walletTransactions ?? []
+
+        // Purchases already appear as an order row, so skip the paired
+        // "purchase" wallet_transactions row here to avoid double-listing
+        // the same event — everything else (funding, refunds, cashback,
+        // bonuses, admin adjustments) is wallet-only and shown as-is.
+        const merged: ActivityItem[] = [
+          ...orders.map((o): ActivityItem => ({ kind: "order", id: o.id, created_at: o.created_at, data: o })),
+          ...walletTransactions
+            .filter((w) => w.type !== "purchase")
+            .map((w): ActivityItem => ({ kind: "wallet", id: w.id, created_at: w.created_at, data: w })),
+        ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+        setActivity(merged.slice(0, 5))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -178,34 +215,65 @@ export default function DashboardPage() {
         <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-white shadow-sm">
           {loading ? (
             <p className="p-4 text-sm text-secondary">Loading…</p>
-          ) : orders.length === 0 ? (
+          ) : activity.length === 0 ? (
             <div className="flex flex-col items-center gap-2 p-8 text-center">
               <Clock className="h-8 w-8 text-gray-300" />
               <p className="text-sm text-secondary">No transactions yet.</p>
             </div>
           ) : (
-            orders.map((order) => {
-              const { badge, icon: StatusIcon, iconClass } = statusStyle(order.status)
+            activity.map((item) => {
+              if (item.kind === "order") {
+                const order = item.data
+                const { badge, icon: StatusIcon, iconClass } = statusStyle(order.status)
+                return (
+                  <div key={item.id} className="flex items-center gap-3 p-4">
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}>
+                      <StatusIcon className="h-4.5 w-4.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-primary">
+                        {order.service_type} · {order.network_or_biller}
+                      </p>
+                      <p className="text-xs text-secondary">
+                        {new Date(order.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-medium text-primary">
+                        {formatNaira(order.amount_kobo)}
+                      </p>
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${badge}`}>
+                        {order.status}
+                      </span>
+                    </div>
+                  </div>
+                )
+              }
+
+              const tx = item.data
+              const isCredit = tx.direction === "credit"
               return (
-                <div key={order.id} className="flex items-center gap-3 p-4">
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}>
-                    <StatusIcon className="h-4.5 w-4.5" />
+                <div key={item.id} className="flex items-center gap-3 p-4">
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                      isCredit ? "text-emerald-600 bg-emerald-50" : "text-red-600 bg-red-50"
+                    }`}
+                  >
+                    {isCredit ? <ArrowDownToLine className="h-4.5 w-4.5" /> : <Wallet className="h-4.5 w-4.5" />}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-primary">
-                      {order.service_type} · {order.network_or_biller}
+                      {WALLET_LABELS[tx.type] ?? tx.type}
                     </p>
                     <p className="text-xs text-secondary">
-                      {new Date(order.created_at).toLocaleString()}
+                      {new Date(tx.created_at).toLocaleString()}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-medium text-primary">
-                      {formatNaira(order.amount_kobo)}
+                    <p className={`text-sm font-medium ${isCredit ? "text-emerald-700" : "text-primary"}`}>
+                      {isCredit ? "+" : "-"}
+                      {formatNaira(tx.amount_kobo)}
                     </p>
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${badge}`}>
-                      {order.status}
-                    </span>
                   </div>
                 </div>
               )

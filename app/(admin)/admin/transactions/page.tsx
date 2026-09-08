@@ -16,6 +16,7 @@ interface OrderRow {
   provider_used: string | null
   status: string
   failure_reason: string | null
+  provider_attempts: string | null
   created_at: string
 }
 
@@ -24,6 +25,7 @@ export default function AdminTransactionsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("")
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -105,6 +107,7 @@ export default function AdminTransactionsPage() {
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Failure reason</th>
                   <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Details</th>
                 </tr>
               ) : (
                 <tr>
@@ -120,29 +123,53 @@ export default function AdminTransactionsPage() {
             <tbody className="divide-y divide-border">
               {tab === "orders"
                 ? (rows as OrderRow[]).map((o) => (
-                    <tr key={o.id}>
-                      <td className="px-4 py-3 capitalize">{o.service_type.replace("_", " ")} — {o.network_or_biller}</td>
-                      <td className="px-4 py-3">{o.recipient}</td>
-                      <td className="px-4 py-3">{formatNaira(o.amount_kobo)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{o.provider_used ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-xs font-medium",
-                            o.status === "success" && "bg-accent/10 text-accent",
-                            o.status === "failed" && "bg-destructive/10 text-destructive",
-                            o.status === "pending" && "bg-muted text-muted-foreground",
-                            o.status === "refunded" && "bg-primary/10 text-primary",
+                    <>
+                      <tr key={o.id}>
+                        <td className="px-4 py-3 capitalize">{o.service_type.replace("_", " ")} — {o.network_or_biller}</td>
+                        <td className="px-4 py-3">{o.recipient}</td>
+                        <td className="px-4 py-3">{formatNaira(o.amount_kobo)}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{o.provider_used ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-xs font-medium",
+                              o.status === "success" && "bg-accent/10 text-accent",
+                              o.status === "failed" && "bg-destructive/10 text-destructive",
+                              o.status === "pending" && "bg-muted text-muted-foreground",
+                              o.status === "refunded" && "bg-primary/10 text-primary",
+                            )}
+                          >
+                            {o.status}
+                          </span>
+                        </td>
+                        <td className="max-w-xs truncate px-4 py-3 text-xs text-destructive" title={o.failure_reason ?? ""}>
+                          {o.failure_reason ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{formatDate(o.created_at)}</td>
+                        <td className="px-4 py-3">
+                          {o.provider_attempts && (
+                            <button
+                              onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}
+                              className="text-xs font-medium text-primary hover:underline"
+                            >
+                              {expandedId === o.id ? "Hide" : "View raw"}
+                            </button>
                           )}
-                        >
-                          {o.status}
-                        </span>
-                      </td>
-                      <td className="max-w-xs truncate px-4 py-3 text-xs text-destructive" title={o.failure_reason ?? ""}>
-                        {o.failure_reason ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{formatDate(o.created_at)}</td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {expandedId === o.id && o.provider_attempts && (
+                        <tr key={`${o.id}-detail`}>
+                          <td colSpan={8} className="bg-muted/30 px-4 py-3">
+                            <p className="mb-2 text-xs font-medium text-secondary">
+                              Provider attempts (in order tried) — the raw field is exactly what each provider returned
+                            </p>
+                            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-white p-3 text-xs">
+                              {JSON.stringify(JSON.parse(o.provider_attempts), null, 2)}
+                            </pre>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))
                 : rows.map((t) => (
                     <tr key={t.id}>
@@ -167,7 +194,7 @@ export default function AdminTransactionsPage() {
                   ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={tab === "orders" ? 8 : 6} className="px-4 py-8 text-center text-muted-foreground">
                     No records found.
                   </td>
                 </tr>

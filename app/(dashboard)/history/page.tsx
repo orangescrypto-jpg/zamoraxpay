@@ -15,8 +15,40 @@ interface OrderRow {
   created_at: string
 }
 
+interface WalletTransactionRow {
+  id: string
+  type: string
+  direction: "credit" | "debit"
+  amount_kobo: number
+  status: string
+  created_at: string
+}
+
+// A single row in the unified feed — either a VTU purchase order or a
+// wallet-level transaction (funding, withdrawal, cashback, referral,
+// refund, reseller upgrade, admin adjustment).
+type FeedItem =
+  | { kind: "order"; created_at: string; data: OrderRow }
+  | { kind: "wallet"; created_at: string; data: WalletTransactionRow }
+
+const WALLET_TYPE_LABELS: Record<string, string> = {
+  funding: "Wallet Funding",
+  purchase: "Purchase",
+  refund: "Refund",
+  cashback: "Cashback",
+  referral_bonus: "Referral Bonus",
+  reseller_upgrade: "Reseller Upgrade",
+  admin_adjustment: "Adjustment",
+}
+
+function statusColor(status: string) {
+  if (status === "success" || status === "completed") return "text-accent"
+  if (status === "failed" || status === "reversed") return "text-destructive"
+  return "text-muted-foreground"
+}
+
 export default function HistoryPage() {
-  const [orders, setOrders] = useState<OrderRow[]>([])
+  const [items, setItems] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -30,7 +62,20 @@ export default function HistoryPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        setOrders(data.orders ?? [])
+        const orders: OrderRow[] = data.orders ?? []
+        const walletTransactions: WalletTransactionRow[] = data.walletTransactions ?? []
+
+        // Purchases already appear as vtu_orders rows, so skip the
+        // matching 'purchase' wallet_transactions rows to avoid
+        // showing the same purchase twice in the feed.
+        const merged: FeedItem[] = [
+          ...orders.map((o): FeedItem => ({ kind: "order", created_at: o.created_at, data: o })),
+          ...walletTransactions
+            .filter((w) => w.type !== "purchase")
+            .map((w): FeedItem => ({ kind: "wallet", created_at: w.created_at, data: w })),
+        ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+        setItems(merged)
       }
       setLoading(false)
     }
@@ -43,35 +88,52 @@ export default function HistoryPage() {
 
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
-      ) : orders.length === 0 ? (
+      ) : items.length === 0 ? (
         <p className="text-muted-foreground">No transactions yet.</p>
       ) : (
         <div className="space-y-2">
-          {orders.map((order) => (
-            <div key={order.id} className="flex items-center justify-between rounded-lg border border-border p-4">
-              <div>
-                <p className="text-sm font-medium capitalize text-secondary">
-                  {order.service_type.replace("_", " ")} — {order.network_or_biller}
-                </p>
-                <p className="text-xs text-muted-foreground">{order.recipient}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
+          {items.map((item) => {
+            if (item.kind === "order") {
+              const order = item.data
+              return (
+                <div key={`order-${order.id}`} className="flex items-center justify-between rounded-lg border border-border p-4">
+                  <div>
+                    <p className="text-sm font-medium capitalize text-secondary">
+                      {order.service_type.replace("_", " ")} — {order.network_or_biller}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{order.recipient}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-secondary">{formatNaira(order.amount_kobo)}</p>
+                    <span className={`text-xs font-medium capitalize ${statusColor(order.status)}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                </div>
+              )
+            }
+
+            const tx = item.data
+            const label = WALLET_TYPE_LABELS[tx.type] ?? tx.type.replace("_", " ")
+            const sign = tx.direction === "credit" ? "+" : "-"
+            return (
+              <div key={`wallet-${tx.id}`} className="flex items-center justify-between rounded-lg border border-border p-4">
+                <div>
+                  <p className="text-sm font-medium capitalize text-secondary">{label}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(tx.created_at)}</p>
+                </div>
+                <div className="text-right">
+                  <p className={`text-sm font-semibold ${tx.direction === "credit" ? "text-accent" : "text-secondary"}`}>
+                    {sign}{formatNaira(tx.amount_kobo)}
+                  </p>
+                  <span className={`text-xs font-medium capitalize ${statusColor(tx.status)}`}>
+                    {tx.status}
+                  </span>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-secondary">{formatNaira(order.amount_kobo)}</p>
-                <span
-                  className={`text-xs font-medium capitalize ${
-                    order.status === "success"
-                      ? "text-accent"
-                      : order.status === "failed"
-                        ? "text-destructive"
-                        : "text-muted-foreground"
-                  }`}
-                >
-                  {order.status}
-                </span>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

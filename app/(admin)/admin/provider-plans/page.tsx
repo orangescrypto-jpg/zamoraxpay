@@ -16,9 +16,19 @@ interface PlanMapping {
   isActive: boolean
 }
 
+// Must exactly match app/(admin)/admin/pricing/page.tsx's NETWORKS_OR_BILLERS —
+// that's the canonical list the buy-flow pages and Pricing Rules use, so
+// picking from here guarantees the mapping's network/biller will actually
+// match a pricing rule (and what checkout sends) instead of drifting via
+// free text (e.g. "Glo" vs "GLO").
+const NETWORKS_OR_BILLERS: Record<string, string[]> = {
+  data: ["MTN", "Airtel", "Glo", "9mobile"],
+  cable: ["DSTV", "GOtv", "StarTimes"],
+}
+
 const EMPTY_FORM = {
   serviceType: "data",
-  networkOrBiller: "",
+  networkOrBiller: NETWORKS_OR_BILLERS["data"][0],
   planCode: "",
   providerKey: "pairgate",
   providerPlanId: "",
@@ -63,7 +73,7 @@ export default function ProviderPlanMappingsPage() {
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({
         serviceType: form.serviceType,
-        networkOrBiller: form.networkOrBiller.toUpperCase(),
+        networkOrBiller: form.networkOrBiller,
         planCode: form.planCode,
         providerKey: form.providerKey,
         providerPlanId: form.providerPlanId,
@@ -122,7 +132,11 @@ export default function ProviderPlanMappingsPage() {
             Service type
             <select
               value={form.serviceType}
-              onChange={(e) => setForm({ ...form, serviceType: e.target.value })}
+              onChange={(e) => {
+                const serviceType = e.target.value
+                const options = NETWORKS_OR_BILLERS[serviceType] ?? []
+                setForm({ ...form, serviceType, networkOrBiller: options[0] ?? "" })
+              }}
               className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm"
             >
               <option value="data">Data</option>
@@ -143,13 +157,16 @@ export default function ProviderPlanMappingsPage() {
             </select>
           </label>
           <label className="text-xs text-muted-foreground">
-            Network / Biller (e.g. MTN, DSTV)
-            <input
+            Network / Biller
+            <select
               value={form.networkOrBiller}
               onChange={(e) => setForm({ ...form, networkOrBiller: e.target.value })}
               className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm"
-              placeholder="MTN"
-            />
+            >
+              {(NETWORKS_OR_BILLERS[form.serviceType] ?? []).map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
           </label>
           <label className="text-xs text-muted-foreground">
             OUR plan code (matches Pricing Rules)

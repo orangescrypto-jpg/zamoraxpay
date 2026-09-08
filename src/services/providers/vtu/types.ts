@@ -17,6 +17,8 @@ export interface VtuPurchaseRequest {
   planCode?: string // data bundle code / cable package code
   amountKobo: number // amount to send to the provider (base cost, not the retail price charged to user)
   internalReference: string // our own idempotent reference, passed through so we can reconcile
+  meterType?: "prepaid" | "postpaid" // electricity only; defaults to "prepaid" in adapters if omitted
+  recipientName?: string // optional display name some providers accept for cable/electricity/betting
 }
 
 export interface VtuPurchaseResult {

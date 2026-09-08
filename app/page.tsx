@@ -36,10 +36,10 @@ export default async function HomePage() {
         }} />
         <div className="container relative py-20 text-center sm:py-28">
           <span className="mb-4 inline-block rounded-full bg-primary/20 px-4 py-1 text-xs font-medium text-primary">
-            Reliable by design — 4 providers, automatic fallback
+            Reliable by design: 4 providers, automatic fallback
           </span>
           <h1 className="mx-auto max-w-3xl text-4xl font-heading font-bold text-white sm:text-5xl lg:text-6xl">
-            Airtime, data, and bills — all from one fast, reliable wallet
+            Airtime, data, and bills, all from one fast, reliable wallet
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/70">
             Every purchase routes through multiple providers automatically, so your transaction goes through even

@@ -90,10 +90,19 @@ export async function upsertPricingRule(
   if (params.id) {
     await d1Query(
       `UPDATE pricing_rules SET
+        network_or_biller = ?, plan_code = ?,
         retail_price_kobo = ?, wholesale_price_kobo = ?, convenience_fee_kobo = ?,
         updated_by = ?, updated_at = datetime('now')
        WHERE id = ?`,
-      [params.retailPriceKobo, params.wholesalePriceKobo, params.convenienceFeeKobo, adminUserId, params.id],
+      [
+        params.networkOrBiller,
+        params.planCode,
+        params.retailPriceKobo,
+        params.wholesalePriceKobo,
+        params.convenienceFeeKobo,
+        adminUserId,
+        params.id,
+      ],
       nativeDB,
     )
   } else {
@@ -114,4 +123,8 @@ export async function upsertPricingRule(
       nativeDB,
     )
   }
+}
+
+export async function deletePricingRule(id: string, nativeDB?: any): Promise<void> {
+  await d1Query("DELETE FROM pricing_rules WHERE id = ?", [id], nativeDB)
 }

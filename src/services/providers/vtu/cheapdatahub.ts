@@ -5,8 +5,10 @@
 // Live base: https://www.cheapdatahub.ng/api/v1/resellers
 // Auth: Authorization: Bearer <API key>
 // Responses use status: "true" (string) on success, not "success".
-// Note: exam_pin and betting are not in CheapDataHub's public docs —
-// left mapped defensively but may 404/fail until confirmed live.
+// Exam PIN quantity must be 1, 2, or 5 (enforced upstream — this
+// adapter always sends 1 until a quantity field exists on the shared
+// request type). meter_type is now read from req.meterType (defaults
+// to "prepaid" if unset) instead of being hardcoded.
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import type {
@@ -23,7 +25,6 @@ const SERVICE_ENDPOINT: Record<string, string> = {
   cable: "/cable/purchase/",
   electricity: "/electricity/purchase/",
   exam_pin: "/exam-pin/purchase/",
-  betting: "/betting/purchase/",
 }
 
 function buildBody(req: VtuPurchaseRequest) {
@@ -44,7 +45,7 @@ function buildBody(req: VtuPurchaseRequest) {
         disco_id: req.networkOrBiller,
         meter_number: req.recipient,
         amount: req.amountKobo / 100,
-        meter_type: "prepaid", // VtuPurchaseRequest has no meterType field yet; hardcoded until it's added
+        meter_type: req.meterType === "postpaid" ? "postpaid" : "prepaid",
         phone: req.recipient,
       }
     case "cable":
@@ -54,6 +55,9 @@ function buildBody(req: VtuPurchaseRequest) {
         phone: req.recipient,
       }
     case "exam_pin":
+      // CheapDataHub only accepts quantity 1, 2, or 5. VtuPurchaseRequest
+      // has no dedicated quantity field yet, so this always requests 1
+      // pin — safe default until a quantity field is added upstream.
       return {
         product_id: req.planCode,
         quantity: 1,
@@ -72,7 +76,7 @@ function buildBody(req: VtuPurchaseRequest) {
 export const cheapdatahubAdapter: IVtuProviderAdapter = {
   key: "cheapdatahub",
   label: "CheapDataHub",
-  supportsServices: ["airtime", "data", "cable", "electricity", "exam_pin", "betting"],
+  supportsServices: ["airtime", "data", "cable", "electricity", "exam_pin"],
 
   async purchase(req: VtuPurchaseRequest, credentials: VtuProviderCredentials): Promise<VtuPurchaseResult> {
     const baseUrl =

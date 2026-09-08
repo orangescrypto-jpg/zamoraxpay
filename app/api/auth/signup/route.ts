@@ -36,6 +36,14 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceRoleClient()
 
+    // Check email uniqueness before creating the Supabase auth user, for
+    // the same reason as the phone check below — avoids depending on
+    // Supabase's own duplicate-email error shape/wording downstream.
+    const existingEmail = await d1Query("SELECT id FROM users WHERE email = ?", [email])
+    if (existingEmail.results?.length) {
+      return NextResponse.json({ error: "This email is already registered. Try logging in instead." }, { status: 409 })
+    }
+
     // Check phone uniqueness before creating the Supabase auth user, so
     // we don't end up with an orphaned auth user when this fails.
     const existingPhone = await d1Query("SELECT id FROM users WHERE phone = ?", [phone])
@@ -53,7 +61,16 @@ export async function POST(req: NextRequest) {
     })
 
     if (authError || !authData.user) {
-      return NextResponse.json({ error: authError?.message ?? "Signup failed" }, { status: 400 })
+      const isDuplicateEmail =
+        authError?.message?.toLowerCase().includes("already registered") ||
+        authError?.message?.toLowerCase().includes("already exists") ||
+        authError?.status === 422
+
+      const message = isDuplicateEmail
+        ? "This email is already registered. Try logging in instead."
+        : authError?.message ?? "Signup failed"
+
+      return NextResponse.json({ error: message }, { status: isDuplicateEmail ? 409 : 400 })
     }
 
     const uid = authData.user.id

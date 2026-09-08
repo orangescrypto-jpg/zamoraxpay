@@ -62,15 +62,15 @@ export default function AdminPagesPage() {
   }
 
   return (
-    <div className="flex h-full">
-      <aside className="w-56 shrink-0 border-r border-border p-4">
+    <div className="flex flex-col lg:h-full lg:flex-row">
+      <aside className="shrink-0 border-b border-border p-4 lg:w-56 lg:border-b-0 lg:border-r">
         <h2 className="mb-3 text-sm font-semibold text-secondary">Site Pages</h2>
-        <ul className="space-y-1">
+        <ul className="flex gap-1 overflow-x-auto pb-1 lg:block lg:space-y-1 lg:overflow-visible lg:pb-0">
           {pages.map((page) => (
-            <li key={page.slug}>
+            <li key={page.slug} className="shrink-0 lg:shrink">
               <button
                 onClick={() => selectPage(page)}
-                className={`block w-full rounded-md px-3 py-2 text-left text-sm ${
+                className={`block whitespace-nowrap rounded-md px-3 py-2 text-left text-sm lg:w-full ${
                   activeSlug === page.slug ? "bg-primary/10 font-medium text-primary" : "text-secondary hover:bg-muted"
                 }`}
               >
@@ -81,7 +81,7 @@ export default function AdminPagesPage() {
         </ul>
       </aside>
 
-      <div className="flex-1 space-y-5 p-6">
+      <div className="min-w-0 flex-1 space-y-5 p-4 sm:p-6">
         {activeSlug ? (
           <>
             <div>
@@ -107,11 +107,11 @@ export default function AdminPagesPage() {
               />
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                className="w-full rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50 sm:w-auto"
               >
                 {saving ? "Saving..." : "Save Changes"}
               </button>

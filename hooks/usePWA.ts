@@ -84,6 +84,7 @@ export function useInstallPrompt() {
    * (never dismissed OR dismissed more than reshowAfterSec seconds ago)
    */
   const canShow = useCallback((reshowAfterSec: number): boolean => {
+    if (typeof window === "undefined") return false
     if (isInstalled) return false
     const dismissedAt = localStorage.getItem(DISMISSED_KEY)
     if (!dismissedAt) return true

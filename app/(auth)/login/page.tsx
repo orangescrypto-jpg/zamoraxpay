@@ -15,18 +15,40 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setUnconfirmedEmail(null)
+    setResendState("idle")
     setLoading(true)
     try {
       await AuthService.login(identifier, password)
       router.push(searchParams.get("redirect") || "/dashboard")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed")
+      const authErr = err as Error & { requiresConfirmation?: boolean; email?: string }
+      if (authErr.requiresConfirmation && authErr.email) {
+        setUnconfirmedEmail(authErr.email)
+        setError(null)
+      } else {
+        setError(err instanceof Error ? err.message : "Login failed")
+      }
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleResend() {
+    if (!unconfirmedEmail) return
+    setResendState("sending")
+    try {
+      await AuthService.resendConfirmationEmail(unconfirmedEmail)
+      setResendState("sent")
+    } catch (err) {
+      setResendState("idle")
+      setError(err instanceof Error ? err.message : "Failed to resend confirmation email")
     }
   }
 
@@ -36,6 +58,27 @@ function LoginForm() {
       <p className="mb-6 text-sm text-muted-foreground">Log in to your ZamoraxPay account.</p>
 
       {error && <p className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+
+      {unconfirmedEmail && (
+        <div className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+          <p>
+            Check your email — we sent a verification link to <strong>{unconfirmedEmail}</strong>. Click it before
+            logging in.
+          </p>
+          {resendState === "sent" ? (
+            <p className="mt-2 font-medium text-emerald-700">Confirmation email sent — check your inbox.</p>
+          ) : (
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resendState === "sending"}
+              className="mt-2 font-medium text-primary underline disabled:opacity-50"
+            >
+              {resendState === "sending" ? "Sending…" : "Resend confirmation email"}
+            </button>
+          )}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

@@ -59,7 +59,7 @@ interface RouteCandidate {
 
 async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promise<RouteCandidate[]> {
   const activeProviders = await getActiveVtuProviders(req.serviceType, nativeDB)
-  const activeProviderKeys = new Set(activeProviders.map((p) => p.providerKey))
+  const activeProviderKeys = new Set<string>(activeProviders.map((p) => p.providerKey))
 
   // Cost-based routing only applies to plan-coded services where we
   // actually have a planCode to look up (data, cable — exam_pin's

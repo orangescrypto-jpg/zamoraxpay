@@ -89,8 +89,24 @@ function SettingField({
   onSave: (key: string, value: string) => void
   saving: boolean
 }) {
+  const isKobo = setting.valueType === "number" && setting.key.endsWith("_kobo")
+
+  // Kobo-denominated settings are stored and read as kobo everywhere
+  // else in the app (pricing, wallet debits, etc.) — but admins think
+  // in naira. This field shows/accepts naira and converts at the
+  // boundary, so the stored value never changes shape.
+  const [naira, setNaira] = useState(() => (isKobo ? String(Number(setting.value) / 100) : setting.value))
   const [value, setValue] = useState(setting.value)
-  const dirty = value !== setting.value
+  const dirty = isKobo ? naira !== String(Number(setting.value) / 100) : value !== setting.value
+
+  function handleSave() {
+    if (isKobo) {
+      const kobo = Math.round(parseFloat(naira || "0") * 100)
+      onSave(setting.key, String(kobo))
+    } else {
+      onSave(setting.key, value)
+    }
+  }
 
   return (
     <div className="rounded-lg border border-border bg-white p-4">
@@ -98,7 +114,7 @@ function SettingField({
         <label className="text-sm font-medium text-secondary">{setting.label}</label>
         {dirty && (
           <button
-            onClick={() => onSave(setting.key, value)}
+            onClick={handleSave}
             disabled={saving}
             className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
           >
@@ -126,6 +142,18 @@ function SettingField({
           <option value="percentage">Percentage</option>
           <option value="flat">Flat amount</option>
         </select>
+      ) : isKobo ? (
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">₦</span>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={naira}
+            onChange={(e) => setNaira(e.target.value)}
+            className="w-full rounded-md border border-border py-1.5 pl-7 pr-3 text-sm"
+          />
+        </div>
       ) : (
         <input
           type={setting.valueType === "number" ? "number" : "text"}

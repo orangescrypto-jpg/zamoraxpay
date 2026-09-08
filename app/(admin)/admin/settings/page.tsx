@@ -9,6 +9,10 @@ const GROUPS: { title: string; keys: string[] }[] = [
   { title: "Homepage & Blog", keys: ["homepage_post_count", "related_post_count"] },
   { title: "Reseller", keys: ["reseller_upgrade_fee_kobo"] },
   {
+    title: "Withdrawal",
+    keys: ["withdrawal_min_amount_kobo", "withdrawal_fee_kobo", "withdrawal_payout_method"],
+  },
+  {
     title: "Cashback",
     keys: [
       "cashback_enabled",

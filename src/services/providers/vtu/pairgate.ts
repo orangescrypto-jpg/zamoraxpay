@@ -19,12 +19,15 @@ const SERVICE_ENDPOINT: Record<string, string> = {
   cable: "/tv",
   electricity: "/electricity",
   exam_pin: "/exam-pin",
+  airtime: "/airtime",
+  data: "/data",
+  betting: "/betting",
 }
 
 export const pairgateAdapter: IVtuProviderAdapter = {
   key: "pairgate",
   label: "Pairgate",
-  supportsServices: ["cable", "electricity", "exam_pin"],
+  supportsServices: ["cable", "electricity", "exam_pin", "airtime", "data", "betting"],
 
   async purchase(req: VtuPurchaseRequest, credentials: VtuProviderCredentials): Promise<VtuPurchaseResult> {
     const baseUrl = credentials.baseUrl || process.env.PAIRGATE_BASE_URL || "https://api.pairgate.com/v1"

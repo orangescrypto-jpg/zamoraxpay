@@ -1,24 +1,80 @@
 // app/(dashboard)/services/data/page.tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/src/services/providers/supabase/client"
+import { formatNaira } from "@/lib/utils"
 
 const NETWORKS = ["MTN", "Airtel", "Glo", "9mobile"]
-const PLANS = [
-  { code: "1GB_30D", label: "1GB - 30 days" },
-  { code: "2GB_30D", label: "2GB - 30 days" },
-  { code: "5GB_30D", label: "5GB - 30 days" },
-  { code: "10GB_30D", label: "10GB - 30 days" },
-]
+
+interface Plan {
+  planCode: string
+  priceKobo: number
+}
+
+// Plan codes are admin-defined (e.g. "1GB_30D"), so we turn them into
+// a readable label rather than keeping a second, separate label list
+// in the frontend that could drift from what admin actually configured.
+function labelFromPlanCode(code: string): string {
+  const match = code.match(/^(\d+(?:\.\d+)?)(GB|MB)_(\d+)D$/i)
+  if (!match) return code
+  const [, size, unit, days] = match
+  return `${size}${unit.toUpperCase()} - ${days} days`
+}
 
 export default function DataPage() {
+  const { user } = useAuth()
   const [network, setNetwork] = useState(NETWORKS[0])
   const [phone, setPhone] = useState("")
-  const [planCode, setPlanCode] = useState(PLANS[0].code)
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [plansLoading, setPlansLoading] = useState(true)
+  const [plansError, setPlansError] = useState<string | null>(null)
+  const [planCode, setPlanCode] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPlans() {
+      setPlansLoading(true)
+      setPlansError(null)
+      setPlanCode("")
+
+      try {
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+
+        const res = await fetch(
+          `/api/pricing?serviceType=data&networkOrBiller=${encodeURIComponent(network)}`,
+          { headers: { Authorization: `Bearer ${session?.access_token}` } },
+        )
+        const data = await res.json()
+        if (cancelled) return
+
+        if (!res.ok) {
+          setPlansError(data.error ?? "Could not load data plans")
+          setPlans([])
+          return
+        }
+
+        setPlans(data.plans ?? [])
+        if (data.plans?.length) setPlanCode(data.plans[0].planCode)
+      } catch {
+        if (!cancelled) setPlansError("Could not load data plans")
+      } finally {
+        if (!cancelled) setPlansLoading(false)
+      }
+    }
+
+    loadPlans()
+    return () => { cancelled = true }
+  }, [network])
+
+  const selectedPlan = plans.find((p) => p.planCode === planCode)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -70,19 +126,47 @@ export default function DataPage() {
 
         <div>
           <label className="mb-1 block text-sm font-medium text-secondary">Data plan</label>
-          <select value={planCode} onChange={(e) => setPlanCode(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-sm">
-            {PLANS.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
-          </select>
+          {plansLoading ? (
+            <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">Loading plans…</div>
+          ) : plansError ? (
+            <div className="w-full rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{plansError}</div>
+          ) : plans.length === 0 ? (
+            <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
+              No data plans are configured for {network} yet.
+            </div>
+          ) : (
+            <select value={planCode} onChange={(e) => setPlanCode(e.target.value)}
+              className="w-full rounded-md border border-border px-3 py-2 text-sm">
+              {plans.map((p) => (
+                <option key={p.planCode} value={p.planCode}>
+                  {labelFromPlanCode(p.planCode)} — {formatNaira(p.priceKobo)}
+                </option>
+              ))}
+            </select>
+          )}
+          {selectedPlan && (
+            <p className="mt-1 text-sm font-medium text-secondary">
+              You'll pay {formatNaira(selectedPlan.priceKobo)}
+            </p>
+          )}
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>
-          <input required type="password" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest" />
-        </div>
+        {user && !user.hasTransactionPin ? (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            You need to set a transaction PIN before you can buy data.{" "}
+            <Link href="/settings" className="font-medium underline">
+              Set your PIN in Settings
+            </Link>
+          </div>
+        ) : (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>
+            <input required type="password" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value)}
+              className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest" />
+          </div>
+        )}
 
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || !planCode || !user?.hasTransactionPin}
           className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
           {loading ? "Processing..." : "Buy data"}
         </button>

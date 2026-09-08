@@ -16,6 +16,7 @@ import { requireAuth } from "@/lib/auth-server"
 import { korapayAdapter } from "@/src/services/providers/payment/korapay"
 import { getPaymentProviderCredentials } from "@/src/services/config"
 import { creditWallet } from "@/src/services/wallet"
+import { recordFundingSource, extractKorapayFundingSource } from "@/src/services/fundingSource"
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req)
@@ -51,6 +52,15 @@ export async function GET(req: NextRequest) {
     providerReference: result.providerReference ?? reference,
     metadata: { provider: "korapay", source: "verify-on-return" },
   })
+
+  // Same guardrail-source recording the webhook does — without this,
+  // a payment confirmed via this fallback path (rather than the
+  // webhook) would leave the user with a credited balance but no
+  // eligible withdrawal account on file.
+  const fundingSource = extractKorapayFundingSource(result.raw)
+  recordFundingSource(auth.uid, "korapay", fundingSource).catch((err) =>
+    console.error("[wallet/fund/verify] Funding source recording failed:", err),
+  )
 
   return NextResponse.json({ status: "success", newBalanceKobo })
 }

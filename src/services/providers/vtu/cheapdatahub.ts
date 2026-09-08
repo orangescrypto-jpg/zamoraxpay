@@ -16,10 +16,19 @@ import type {
   VtuProviderCredentials,
 } from "@/src/services/providers/vtu/types"
 
+const SERVICE_ENDPOINT: Record<string, string> = {
+  airtime: "/airtime",
+  data: "/data",
+  cable: "/tv",
+  electricity: "/electricity",
+  exam_pin: "/exam-pin",
+  betting: "/betting",
+}
+
 export const cheapdatahubAdapter: IVtuProviderAdapter = {
   key: "cheapdatahub",
   label: "CheapDataHub",
-  supportsServices: ["airtime", "data"],
+  supportsServices: ["airtime", "data", "cable", "electricity", "exam_pin", "betting"],
 
   async purchase(req: VtuPurchaseRequest, credentials: VtuProviderCredentials): Promise<VtuPurchaseResult> {
     const baseUrl = credentials.baseUrl || process.env.CHEAPDATAHUB_BASE_URL || "https://api.cheapdatahub.ng/v1"
@@ -29,7 +38,10 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
       return { success: false, message: "CheapDataHub API key not configured" }
     }
 
-    const endpoint = req.serviceType === "airtime" ? "/airtime" : "/data"
+    const endpoint = SERVICE_ENDPOINT[req.serviceType]
+    if (!endpoint) {
+      return { success: false, message: `CheapDataHub does not support service type: ${req.serviceType}` }
+    }
 
     try {
       const res = await fetchWithRetry(

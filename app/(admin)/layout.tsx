@@ -1,6 +1,13 @@
 // app/(admin)/layout.tsx
 "use client"
 
+// All admin pages are auth-gated, client-only dashboards with no
+// meaningful static content — force dynamic rendering so Next.js
+// doesn't attempt to prerender them at build time (prerendering can
+// crash pages that touch browser-only APIs like localStorage via
+// @supabase/ssr's browser client).
+export const dynamic = "force-dynamic"
+
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"

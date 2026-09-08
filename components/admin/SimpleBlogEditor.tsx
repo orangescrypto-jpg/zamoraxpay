@@ -64,7 +64,7 @@ export function SimpleBlogEditor({ value, onChange, minHeight = 400 }: SimpleBlo
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1 rounded-md border border-border p-0.5">
             <button
               type="button"

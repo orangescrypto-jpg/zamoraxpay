@@ -28,7 +28,7 @@ export default function AdminProvidersPage() {
   const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([])
   const [loading, setLoading] = useState(true)
   const [editingCreds, setEditingCreds] = useState<{ type: "vtu" | "payment"; key: string } | null>(null)
-  const [credsInput, setCredsInput] = useState("{}")
+  const [credsFields, setCredsFields] = useState<Record<string, string>>({})
   const [credsLoading, setCredsLoading] = useState(false)
 
   async function getAuthHeader() {
@@ -85,21 +85,48 @@ export default function AdminProvidersPage() {
     load()
   }
 
-  // Default field templates shown when a provider has no saved
-  // credentials yet — each provider's adapter expects different keys,
-  // so a single generic template doesn't fit all four.
-  const VTU_CRED_TEMPLATES: Record<string, string> = {
-    cheapdatahub: '{\n  "apiKey": ""\n}',
-    pairgate: '{\n  "apiKey": "",\n  "testMode": "false"\n}',
-    vtpass: '{\n  "apiKey": "",\n  "secretKey": ""\n}',
-    vtung: '{\n  "username": "",\n  "password": ""\n}',
+  // Field definitions per provider — label + key + whether it's a
+  // secret (masked input) or plain text (e.g. baseUrl, testMode).
+  // baseUrl is included for every VTU provider so an admin can
+  // override the adapter's built-in default host without a redeploy
+  // — left blank, the adapter falls back to its correct hardcoded
+  // default, so there's no need to fill this in unless you actually
+  // need to point at a different host.
+  const VTU_CRED_FIELDS: Record<string, { key: string; label: string; secret?: boolean; placeholder?: string }[]> = {
+    cheapdatahub: [
+      { key: "apiKey", label: "API Key", secret: true },
+      { key: "baseUrl", label: "Base URL (leave blank for default)", placeholder: "https://www.cheapdatahub.ng/api/v1/resellers" },
+    ],
+    pairgate: [
+      { key: "apiKey", label: "API Key", secret: true },
+      { key: "baseUrl", label: "Base URL (leave blank for default)", placeholder: "https://pairgate.com/api/v1" },
+      { key: "testMode", label: "Test Mode (\"true\" or \"false\")", placeholder: "false" },
+    ],
+    vtpass: [
+      { key: "apiKey", label: "API Key", secret: true },
+      { key: "secretKey", label: "Secret Key", secret: true },
+      { key: "baseUrl", label: "Base URL (leave blank for default)" },
+    ],
+    vtung: [
+      { key: "username", label: "Username" },
+      { key: "password", label: "Password", secret: true },
+      { key: "baseUrl", label: "Base URL (leave blank for default)" },
+    ],
+  }
+  const PAYMENT_CRED_FIELDS = [
+    { key: "secretKey", label: "Secret Key", secret: true },
+    { key: "webhookSecret", label: "Webhook Secret", secret: true },
+  ]
+
+  function fieldsFor(type: "vtu" | "payment", key: string) {
+    return type === "vtu" ? (VTU_CRED_FIELDS[key] ?? [{ key: "apiKey", label: "API Key", secret: true }]) : PAYMENT_CRED_FIELDS
   }
 
   async function openVtuCredsEditor(p: VtuProvider) {
     setEditingCreds({ type: "vtu", key: p.providerKey })
-    setCredsInput(VTU_CRED_TEMPLATES[p.providerKey] ?? '{\n  "apiKey": ""\n}')
+    setCredsFields({})
 
-    if (!p.hasCredentials) return // nothing saved yet — blank template is correct
+    if (!p.hasCredentials) return // nothing saved yet — blank fields is correct
 
     setCredsLoading(true)
     try {
@@ -107,33 +134,25 @@ export default function AdminProvidersPage() {
       const res = await fetch(`/api/admin/providers/vtu/credentials?providerKey=${p.providerKey}`, { headers })
       if (res.ok) {
         const data = await res.json()
-        if (data.credentials && Object.keys(data.credentials).length > 0) {
-          setCredsInput(JSON.stringify(data.credentials, null, 2))
-        }
+        if (data.credentials) setCredsFields(data.credentials)
       }
       // On a non-OK response (e.g. not super_admin) we silently keep
-      // the blank template rather than blocking the modal — the save
-      // itself will still enforce the super_admin check.
+      // blank fields rather than blocking the modal — the save itself
+      // still enforces the super_admin check.
     } finally {
       setCredsLoading(false)
     }
   }
+
   async function saveCredentials() {
     if (!editingCreds) return
-    let parsed: Record<string, string>
-    try {
-      parsed = JSON.parse(credsInput)
-    } catch {
-      alert("Invalid JSON")
-      return
-    }
 
     const headers = await getAuthHeader()
     const endpoint = editingCreds.type === "vtu" ? "/api/admin/providers/vtu" : "/api/admin/providers/payment"
     const res = await fetch(endpoint, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ providerKey: editingCreds.key, credentials: parsed }),
+      body: JSON.stringify({ providerKey: editingCreds.key, credentials: credsFields }),
     })
 
     if (!res.ok) {
@@ -219,7 +238,7 @@ export default function AdminProvidersPage() {
                     <button
                       onClick={() => {
                         setEditingCreds({ type: "payment", key: p.providerKey })
-                        setCredsInput('{\n  "secretKey": "",\n  "webhookSecret": ""\n}')
+                        setCredsFields({})
                       }}
                       className="text-sm text-primary hover:underline"
                     >
@@ -251,12 +270,24 @@ export default function AdminProvidersPage() {
             {credsLoading ? (
               <p className="mb-4 text-sm text-muted-foreground">Loading saved credentials…</p>
             ) : (
-              <textarea
-                value={credsInput}
-                onChange={(e) => setCredsInput(e.target.value)}
-                rows={8}
-                className="mb-4 w-full rounded-md border border-border p-3 font-mono text-xs"
-              />
+              <div className="mb-4 space-y-3">
+                {fieldsFor(editingCreds.type, editingCreds.key).map((f) => (
+                  <label key={f.key} className="block text-xs text-muted-foreground">
+                    {f.label}
+                    <input
+                      type={f.secret ? "password" : "text"}
+                      value={credsFields[f.key] ?? ""}
+                      onChange={(e) => setCredsFields({ ...credsFields, [f.key]: e.target.value })}
+                      placeholder={f.placeholder}
+                      autoComplete="off"
+                      className="mt-1 w-full rounded-md border border-border px-3 py-1.5 font-mono text-sm"
+                    />
+                  </label>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  Leaving a field blank and saving clears that field. Fields you don't touch keep their saved value.
+                </p>
+              </div>
             )}
             <div className="flex justify-end gap-2">
               <button

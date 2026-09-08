@@ -32,7 +32,7 @@ function FooterBanner() {
 }
 
 export function Footer() {
-  const marketplaceUrl = process.env.NEXT_PUBLIC_ZAMORAX_MARKETPLACE_URL || "https://zamorax.com"
+  const marketplaceUrl = "https://zamorax.com"
 
   return (
     <footer className="border-t border-border bg-secondary text-white">

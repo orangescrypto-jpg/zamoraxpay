@@ -4,8 +4,7 @@
 // All admin pages are auth-gated, client-only dashboards with no
 // meaningful static content — force dynamic rendering so Next.js
 // doesn't attempt to prerender them at build time (prerendering can
-// crash pages that touch browser-only APIs like localStorage via
-// @supabase/ssr's browser client).
+// crash pages that touch browser-only APIs like localStorage).
 export const dynamic = "force-dynamic"
 
 import { useEffect, useState } from "react"

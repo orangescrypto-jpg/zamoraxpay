@@ -66,6 +66,39 @@ export async function lookupPrice(
   }
 }
 
+export interface CustomerPlan {
+  planCode: string
+  priceKobo: number
+}
+
+// Customer-facing plan list for a given service/network, priced at the
+// caller's tier. Unlike listPricingRules (admin-only, full rows), this
+// only returns what a buy-data/buy-cable page needs, and never exposes
+// wholesale price, provider cost basis, or admin metadata.
+export async function listPlans(
+  serviceType: VtuServiceType,
+  networkOrBiller: string,
+  userTier: "retail" | "reseller",
+  nativeDB?: any,
+): Promise<CustomerPlan[]> {
+  const result = await d1Query(
+    `SELECT plan_code, retail_price_kobo, wholesale_price_kobo, convenience_fee_kobo
+     FROM pricing_rules
+     WHERE service_type = ? AND network_or_biller = ? AND is_active = 1 AND plan_code IS NOT NULL
+     ORDER BY retail_price_kobo`,
+    [serviceType, networkOrBiller],
+    nativeDB,
+  )
+
+  const rows = result.results ?? []
+  const wholesale = userTier === "reseller"
+
+  return rows.map((row: any) => ({
+    planCode: row.plan_code,
+    priceKobo: (wholesale ? row.wholesale_price_kobo : row.retail_price_kobo) + row.convenience_fee_kobo,
+  }))
+}
+
 export async function listPricingRules(serviceType?: VtuServiceType, nativeDB?: any) {
   const sql = serviceType
     ? "SELECT * FROM pricing_rules WHERE service_type = ? ORDER BY network_or_biller"

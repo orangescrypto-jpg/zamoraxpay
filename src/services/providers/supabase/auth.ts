@@ -59,11 +59,32 @@ export const AuthService: IAuthService = {
       body: JSON.stringify({ identifier, password }),
     })
     const json = await safeJson(res)
-    if (!res.ok) throw new Error(json.error ?? "Login failed")
+    if (!res.ok) {
+      if (json.requiresConfirmation) {
+        const err = new Error(json.error ?? "Login failed") as Error & {
+          requiresConfirmation?: boolean
+          email?: string
+        }
+        err.requiresConfirmation = true
+        err.email = json.email
+        throw err
+      }
+      throw new Error(json.error ?? "Login failed")
+    }
 
     const profile = await fetchUserProfile(json.user.id)
     if (!profile) throw new Error("Profile not found")
     return profile
+  },
+
+  async resendConfirmationEmail(email: string) {
+    const res = await fetch("/api/auth/resend-confirmation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    })
+    const json = await safeJson(res)
+    if (!res.ok) throw new Error(json.error ?? "Failed to resend confirmation email")
   },
 
   async signOut() {

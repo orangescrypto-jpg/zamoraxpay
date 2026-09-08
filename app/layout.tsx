@@ -16,6 +16,25 @@ export const metadata: Metadata = {
     "Buy airtime, data, cable TV, electricity, exam PINs, and fund your betting wallet — all from one fast, reliable wallet.",
   manifest: "/manifest.json",
   themeColor: "#0057FF",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
+  openGraph: {
+    title: "ZamoraxPay — Airtime, Data, Bills & More",
+    description:
+      "Buy airtime, data, cable TV, electricity, exam PINs, and fund your betting wallet — all from one fast, reliable wallet.",
+    images: [{ url: "/icon-512.png", width: 512, height: 512 }],
+  },
+  twitter: {
+    card: "summary",
+    title: "ZamoraxPay — Airtime, Data, Bills & More",
+    images: ["/icon-512.png"],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

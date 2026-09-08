@@ -98,6 +98,7 @@ function BannerSlider() {
 export function Header() {
   const { user, isAuthenticated, signOut } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const isAdmin = !!user?.adminRole
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white">
@@ -108,15 +109,22 @@ export function Header() {
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex">
-          <Link href="/dashboard" className="text-sm font-medium text-secondary hover:text-primary">
-            Dashboard
-          </Link>
+          {isAuthenticated && (
+            <Link href="/dashboard" className="text-sm font-medium text-secondary hover:text-primary">
+              Dashboard
+            </Link>
+          )}
           <Link href="/blog" className="text-sm font-medium text-secondary hover:text-primary">
             Blog
           </Link>
           <Link href="/reseller" className="text-sm font-medium text-secondary hover:text-primary">
             Become a Reseller
           </Link>
+          {isAdmin && (
+            <Link href="/admin" className="text-sm font-medium text-secondary hover:text-primary">
+              Admin
+            </Link>
+          )}
         </nav>
 
         <div className="flex items-center gap-3">
@@ -127,26 +135,116 @@ export function Header() {
               </Link>
               <button
                 onClick={() => signOut()}
-                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+                className="hidden rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted sm:block"
               >
                 Sign out
               </button>
             </>
           ) : (
             <>
-              <Link href="/login" className="text-sm font-medium text-secondary hover:text-primary">
+              <Link href="/login" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
                 Log in
               </Link>
               <Link
                 href="/signup"
-                className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+                className="hidden rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 sm:block"
               >
                 Sign up
               </Link>
             </>
           )}
+
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            className="flex h-9 w-9 items-center justify-center rounded-md border border-border md:hidden"
+          >
+            <span className="flex flex-col gap-1">
+              <span className={cn("block h-0.5 w-5 bg-secondary transition-transform", menuOpen && "translate-y-1.5 rotate-45")} />
+              <span className={cn("block h-0.5 w-5 bg-secondary transition-opacity", menuOpen && "opacity-0")} />
+              <span className={cn("block h-0.5 w-5 bg-secondary transition-transform", menuOpen && "-translate-y-1.5 -rotate-45")} />
+            </span>
+          </button>
         </div>
       </div>
+
+      {menuOpen && (
+        <nav className="border-t border-border bg-white md:hidden">
+          <div className="container flex flex-col gap-1 py-3">
+            {isAuthenticated && (
+              <Link
+                href="/dashboard"
+                onClick={() => setMenuOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+              >
+                Dashboard
+              </Link>
+            )}
+            <Link
+              href="/wallet"
+              onClick={() => setMenuOpen(false)}
+              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+            >
+              Wallet
+            </Link>
+            <Link
+              href="/blog"
+              onClick={() => setMenuOpen(false)}
+              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+            >
+              Blog
+            </Link>
+            <Link
+              href="/reseller"
+              onClick={() => setMenuOpen(false)}
+              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+            >
+              Become a Reseller
+            </Link>
+            {isAdmin && (
+              <Link
+                href="/admin"
+                onClick={() => setMenuOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+              >
+                Admin
+              </Link>
+            )}
+
+            <div className="mt-2 border-t border-border pt-2">
+              {isAuthenticated ? (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    signOut()
+                  }}
+                  className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-secondary hover:bg-muted"
+                >
+                  Sign out
+                </button>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <Link
+                    href="/login"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+                  >
+                    Log in
+                  </Link>
+                  <Link
+                    href="/signup"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-md bg-primary px-3 py-2 text-center text-sm font-medium text-primary-foreground hover:opacity-90"
+                  >
+                    Sign up
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </nav>
+      )}
 
       <div className="container pb-3">
         <BannerSlider />

@@ -1,81 +1,164 @@
-// app/(dashboard)/dashboard/page.tsx
+// app/(dashboard)/services/data/page.tsx
 "use client"
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
-import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 
-const SERVICES = [
-  { href: "/services/airtime", label: "Airtime" },
-  { href: "/services/data", label: "Data" },
-  { href: "/services/cable", label: "Cable TV" },
-  { href: "/services/electricity", label: "Electricity" },
-  { href: "/services/exam-pin", label: "Exam PINs" },
-  { href: "/services/betting", label: "Betting" },
-]
+const NETWORKS = ["MTN", "Airtel", "Glo", "9mobile"]
 
-export default function DashboardPage() {
-  const { user } = useAuth()
-  const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
+interface Plan {
+  planCode: string
+  priceKobo: number
+}
+
+// Plan codes are admin-defined (e.g. "1GB_30D"), so we turn them into
+// a readable label rather than keeping a second, separate label list
+// in the frontend that could drift from what admin actually configured.
+function labelFromPlanCode(code: string): string {
+  const match = code.match(/^(\d+(?:\.\d+)?)(GB|MB)_(\d+)D$/i)
+  if (!match) return code
+  const [, size, unit, days] = match
+  return `${size}${unit.toUpperCase()} - ${days} days`
+}
+
+export default function DataPage() {
+  const [network, setNetwork] = useState(NETWORKS[0])
+  const [phone, setPhone] = useState("")
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [plansLoading, setPlansLoading] = useState(true)
+  const [plansError, setPlansError] = useState<string | null>(null)
+  const [planCode, setPlanCode] = useState("")
+  const [pin, setPin] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
 
   useEffect(() => {
-    async function loadBalance() {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch("/api/wallet/balance", {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      })
-      const data = await res.json()
-      setBalanceKobo(data.balanceKobo ?? 0)
+    let cancelled = false
+
+    async function loadPlans() {
+      setPlansLoading(true)
+      setPlansError(null)
+      setPlanCode("")
+
+      try {
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+
+        const res = await fetch(
+          `/api/pricing?serviceType=data&networkOrBiller=${encodeURIComponent(network)}`,
+          { headers: { Authorization: `Bearer ${session?.access_token}` } },
+        )
+        const data = await res.json()
+        if (cancelled) return
+
+        if (!res.ok) {
+          setPlansError(data.error ?? "Could not load data plans")
+          setPlans([])
+          return
+        }
+
+        setPlans(data.plans ?? [])
+        if (data.plans?.length) setPlanCode(data.plans[0].planCode)
+      } catch {
+        if (!cancelled) setPlansError("Could not load data plans")
+      } finally {
+        if (!cancelled) setPlansLoading(false)
+      }
     }
-    loadBalance()
-  }, [])
+
+    loadPlans()
+    return () => { cancelled = true }
+  }, [network])
+
+  const selectedPlan = plans.find((p) => p.planCode === planCode)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setResult(null)
+    setLoading(true)
+
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    const res = await fetch("/api/vtu/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ network, phone, planCode, transactionPin: pin }),
+    })
+    const data = await res.json()
+    setLoading(false)
+    setResult({ success: data.success, message: data.message ?? data.error })
+    if (data.success) { setPhone(""); setPin("") }
+  }
 
   return (
-    <div className="container max-w-3xl py-8">
-      <h1 className="mb-1 text-2xl font-heading font-bold text-secondary">
-        Hi{user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""} 👋
-      </h1>
-      <p className="mb-6 text-muted-foreground">What would you like to do today?</p>
+    <div className="container max-w-md py-8">
+      <h1 className="mb-6 text-2xl font-heading font-bold text-secondary">Buy Data</h1>
 
-      <div className="mb-8 rounded-lg bg-secondary p-6 text-white">
-        <p className="text-sm text-white/70">Wallet balance</p>
-        <p className="mt-1 text-3xl font-heading font-bold">
-          {balanceKobo === null ? "..." : formatNaira(balanceKobo)}
+      {result && (
+        <p className={`mb-4 rounded-md p-3 text-sm ${result.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"}`}>
+          {result.message}
         </p>
-        <Link
-          href="/wallet"
-          className="mt-4 inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-        >
-          Fund wallet
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {SERVICES.map((s) => (
-          <Link
-            key={s.href}
-            href={s.href}
-            className="rounded-lg border border-border p-4 text-center font-medium text-secondary hover:border-primary hover:text-primary"
-          >
-            {s.label}
-          </Link>
-        ))}
-      </div>
-
-      {user?.tier === "retail" && (
-        <div className="mt-8 rounded-lg border border-dashed border-accent p-4">
-          <p className="text-sm font-medium text-secondary">Buying in bulk?</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Upgrade to a reseller account for wholesale pricing on every purchase.
-          </p>
-          <Link href="/reseller" className="mt-2 inline-block text-sm font-medium text-primary hover:underline">
-            Become a reseller →
-          </Link>
-        </div>
       )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-secondary">Network</label>
+          <div className="grid grid-cols-4 gap-2">
+            {NETWORKS.map((n) => (
+              <button type="button" key={n} onClick={() => setNetwork(n)}
+                className={`rounded-md border py-2 text-sm font-medium ${network === n ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"}`}>
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-secondary">Phone number</label>
+          <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08012345678"
+            className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-secondary">Data plan</label>
+          {plansLoading ? (
+            <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">Loading plans…</div>
+          ) : plansError ? (
+            <div className="w-full rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{plansError}</div>
+          ) : plans.length === 0 ? (
+            <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
+              No data plans are configured for {network} yet.
+            </div>
+          ) : (
+            <select value={planCode} onChange={(e) => setPlanCode(e.target.value)}
+              className="w-full rounded-md border border-border px-3 py-2 text-sm">
+              {plans.map((p) => (
+                <option key={p.planCode} value={p.planCode}>
+                  {labelFromPlanCode(p.planCode)} — {formatNaira(p.priceKobo)}
+                </option>
+              ))}
+            </select>
+          )}
+          {selectedPlan && (
+            <p className="mt-1 text-sm font-medium text-secondary">
+              You'll pay {formatNaira(selectedPlan.priceKobo)}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>
+          <input required type="password" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value)}
+            className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest" />
+        </div>
+
+        <button type="submit" disabled={loading || !planCode}
+          className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
+          {loading ? "Processing..." : "Buy data"}
+        </button>
+      </form>
     </div>
   )
 }

@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;         /* #F5F7FA */
+    --foreground: 222 47% 8%;          /* near-black text */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 8%;
+    --primary: 219 100% 50%;           /* #0057FF — Electric Blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 47% 8%;           /* #0B1220 — near-black navy */
+    --secondary-foreground: 0 0% 100%;
+    --accent: 154 100% 42%;            /* #00D67A — Green */
+    --accent-foreground: 0 0% 100%;
+    --muted: 210 20% 94%;
+    --muted-foreground: 215 16% 47%;
+    --destructive: 0 84% 60%;          /* #EF4444 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 20% 89%;
+    --input: 214 20% 89%;
+    --ring: 219 100% 50%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 217 47% 6%;
+    --foreground: 210 20% 98%;
+    --card: 217 40% 10%;
+    --card-foreground: 210 20% 98%;
+    --popover: 217 40% 10%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 219 100% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 32% 18%;
+    --secondary-foreground: 210 20% 98%;
+    --accent: 154 100% 45%;
+    --accent-foreground: 0 0% 100%;
+    --muted: 217 32% 18%;
+    --muted-foreground: 215 20% 65%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 217 32% 22%;
+    --input: 217 32% 22%;
+    --ring: 219 100% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+}
+
+/* Banner slider transitions */
+@layer utilities {
+  .banner-slide-enter {
+    animation: slide-in-right 0.6s ease-out;
+  }
+  .banner-slide-exit {
+    animation: slide-out-left 0.6s ease-out;
+  }
+}

@@ -14,7 +14,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: `${page?.title ?? "Contact Us"} — ZamoraxPay`, description: page?.meta_description }
 }
 
-export const revalidate = 3600
+export const revalidate = 60
 
 export default async function ContactPage() {
   const page = await getPage()

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="192" height="192">
+  <rect width="512" height="512" fill="#0B1220"/>
+  <!-- Hexagon - flat top/bottom, rounded corners via rx on path -->
+  <path d="M256 52 L422 150 L422 362 L256 460 L90 362 L90 150 Z"
+        fill="none" stroke="#0057FF" stroke-width="24" stroke-linejoin="round"/>
+  <!-- Z top horizontal bar -->
+  <line x1="168" y1="168" x2="332" y2="168" stroke="#0057FF" stroke-width="46" stroke-linecap="round"/>
+  <!-- Z diagonal stroke -->
+  <line x1="320" y1="168" x2="185" y2="332" stroke="#0057FF" stroke-width="46" stroke-linecap="round"/>
+  <!-- Z bottom horizontal bar (shorter, ends before arrow) -->
+  <line x1="172" y1="332" x2="285" y2="332" stroke="#0057FF" stroke-width="46" stroke-linecap="round"/>
+  <!-- Arrow head breaking out of hexagon bottom-right, in accent green -->
+  <path d="M278 305 L355 340 L278 372" fill="#00D67A"/>
+</svg>

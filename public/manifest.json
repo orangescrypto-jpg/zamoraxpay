@@ -1,0 +1,24 @@
+{
+  "name": "ZamoraxPay — Airtime, Data & Bills",
+  "short_name": "ZamoraxPay",
+  "description": "Buy airtime, data, cable TV, electricity, exam PINs, and fund your betting wallet — all from one fast, reliable wallet.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1220",
+  "theme_color": "#0057FF",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en-NG",
+  "categories": ["finance", "utilities"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Buy Airtime",   "url": "/services/airtime", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Buy Data",      "url": "/services/data",    "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Fund Wallet",   "url": "/wallet",           "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

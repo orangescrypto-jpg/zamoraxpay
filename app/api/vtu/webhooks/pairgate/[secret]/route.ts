@@ -5,40 +5,68 @@
 // service types deliver the PIN/token AFTER the purchase call
 // returns, via webhook — this is that webhook).
 //
-// URL / AUTH: Pairgate's public docs (as reflected in our own adapter
-// file) don't document an HMAC/signature scheme for webhooks, unlike
-// Paystack/Korapay. The safe fallback when a provider only lets you
-// register a plain callback URL with no signing support is a secret
-// token embedded IN THE URL PATH ITSELF, checked before anything else
-// runs — that's the [secret] segment below. Give Pairgate this exact
-// URL in their dashboard/API config:
+// URL / AUTH: two layers.
 //
-//   https://<your-domain>/api/vtu/webhooks/pairgate/<PAIRGATE_WEBHOOK_SECRET>
+// 1) Path secret — Pairgate's webhook URL is registered with a secret
+//    segment, checked before anything else runs:
 //
-// e.g. https://zamoraxpay.com.ng/api/vtu/webhooks/pairgate/a1b2c3d4e5f6...
+//      https://<your-domain>/api/vtu/webhooks/pairgate/<PAIRGATE_WEBHOOK_SECRET>
 //
-// Generate PAIRGATE_WEBHOOK_SECRET yourself (a long random string —
-// `openssl rand -hex 32` works well) and set it as an env var. Because
-// it's inside the path, anyone without it gets a 401 before we parse
-// or trust anything in the request body — this is NOT a substitute
-// for a real HMAC signature if Pairgate's dashboard/docs turn out to
-// expose one; if you find a signing secret in your Pairgate account
-// settings, prefer that and verify it here in addition to (or instead
-// of) the path token.
+//    Generate PAIRGATE_WEBHOOK_SECRET yourself (`openssl rand -hex 32`)
+//    and set it as an env var.
 //
-// PAYLOAD SHAPE: also not pinned down by public docs the way
-// Paystack/Korapay's are, so this reads defensively across the
-// plausible field names (reference/reference_code, status, and the
-// same pins/token shapes the adapter's checkStatus already guesses
-// at) and logs the full raw payload either way so nothing is lost if
-// the real shape differs — check vtu_webhook_events.payload by hand
-// the first time a real callback arrives and extend the parsing below
-// if the field names don't match.
+// 2) HMAC signature — Pairgate's dashboard has an optional "Webhook
+//    Verification" toggle (see https://pairgate.com/developers/webhooks).
+//    When enabled, Pairgate sends X-Pairgate-Timestamp and
+//    X-Pairgate-Signature headers, computed as:
+//
+//      signature = HMAC_SHA256(key = webhook secret, message = timestamp + "." + rawBody)
+//
+//    hex-encoded. Turn verification ON in the dashboard, copy the
+//    secret shown (only shown once) into PAIRGATE_WEBHOOK_SIGNING_SECRET,
+//    and this route will verify it below — rejecting unsigned or
+//    stale (>5 min old) requests once that env var is set. If it's
+//    not set, we fall back to path-secret-only auth, so verification
+//    is opt-in as you roll it out.
+//
+// PAYLOAD SHAPE: documented at the URL above. Confirmed fields:
+// event, reference (client ref, often null), reference_code, status
+// ("successful"/"failed"), message, plan/item, recipient, amount,
+// pin (electricity/education only), completed_at. Parsing below reads
+// defensively across a couple of historical field-name variants too.
 
 import { NextRequest, NextResponse } from "next/server"
+import { createHmac, timingSafeEqual } from "node:crypto"
 import { d1Query } from "@/lib/d1"
 import { getOrderById, attachDeliveredData } from "@/src/services/vtuOrders"
 import type { VtuDeliveredData } from "@/src/services/providers/vtu/types"
+
+const MAX_TIMESTAMP_SKEW_SECONDS = 300 // 5 minutes, per Pairgate's docs
+
+function verifyPairgateSignature(rawBody: string, timestampHeader: string | null, signatureHeader: string | null, signingSecret: string): { ok: true } | { ok: false; reason: string } {
+  if (!timestampHeader || !signatureHeader) {
+    return { ok: false, reason: "Missing signature headers" }
+  }
+
+  const timestamp = Number(timestampHeader)
+  if (!Number.isFinite(timestamp)) {
+    return { ok: false, reason: "Invalid timestamp header" }
+  }
+  if (Math.abs(Date.now() / 1000 - timestamp) > MAX_TIMESTAMP_SKEW_SECONDS) {
+    return { ok: false, reason: "Timestamp outside allowed window" }
+  }
+
+  const signedPayload = `${timestampHeader}.${rawBody}`
+  const expectedSignature = createHmac("sha256", signingSecret).update(signedPayload).digest("hex")
+
+  const expectedBuf = Buffer.from(expectedSignature, "utf8")
+  const providedBuf = Buffer.from(signatureHeader, "utf8")
+  if (expectedBuf.length !== providedBuf.length || !timingSafeEqual(expectedBuf, providedBuf)) {
+    return { ok: false, reason: "Signature mismatch" }
+  }
+
+  return { ok: true }
+}
 
 function extractOrderId(reference: unknown): string | null {
   if (typeof reference !== "string") return null
@@ -79,6 +107,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
   }
 
   const rawBody = await req.text()
+
+  // HMAC verification — only enforced once you've turned on "Webhook
+  // Verification" in the Pairgate dashboard and set the secret it gives
+  // you here. Until then this step is skipped and the path secret above
+  // is your only auth layer.
+  const signingSecret = process.env.PAIRGATE_WEBHOOK_SIGNING_SECRET
+  if (signingSecret) {
+    const timestampHeader = req.headers.get("x-pairgate-timestamp")
+    const signatureHeader = req.headers.get("x-pairgate-signature")
+    const verification = verifyPairgateSignature(rawBody, timestampHeader, signatureHeader, signingSecret)
+    if (!verification.ok) {
+      console.error("[pairgate webhook] Signature verification failed:", verification.reason)
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+    }
+  }
+
   let payload: any
   try {
     payload = JSON.parse(rawBody)

@@ -58,7 +58,7 @@ const QUICK_LINKS: { href: string; label: string; icon: LucideIcon; iconClass: s
   { href: "/services/bulk-data", label: "Bulk Data", icon: Users, iconClass: "bg-indigo-50 text-indigo-600" },
   { href: "/services/bulk-airtime", label: "Bulk Airtime", icon: Users, iconClass: "bg-sky-50 text-sky-600" },
   { href: "/services/airtime-to-cash", label: "Airtime to Cash", icon: Banknote, iconClass: "bg-lime-50 text-lime-600" },
-  { href: "/referrals", label: "Refer & Earn", icon: Gift, iconClass: "bg-teal-50 text-teal-600" },
+  { href: "/rewards", label: "Rewards", icon: Gift, iconClass: "bg-teal-50 text-teal-600" },
 ]
 
 const STATUS_STYLES: Record<string, { badge: string; icon: LucideIcon; iconClass: string }> = {
@@ -81,6 +81,7 @@ const WALLET_LABELS: Record<string, string> = {
   refund: "Refund",
   cashback: "Cashback",
   referral_bonus: "Referral bonus",
+  daily_streak: "Daily check-in reward",
   reseller_upgrade: "Reseller upgrade",
   admin_adjustment: "Wallet adjustment",
 }
@@ -90,7 +91,6 @@ export default function DashboardPage() {
   const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [withdrawalEnabled, setWithdrawalEnabled] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -111,14 +111,6 @@ export default function DashboardPage() {
         if (cancelled) return
 
         setBalanceKobo(balanceData.balanceKobo ?? 0)
-
-        // Independent of the above — a failure here shouldn't block
-        // balance/history from rendering, so it's fetched separately
-        // rather than added to the Promise.all above.
-        fetch("/api/withdrawal-status")
-          .then((res) => res.json())
-          .then((data) => { if (!cancelled) setWithdrawalEnabled(data.enabled ?? true) })
-          .catch(() => { /* default stays true on failure */ })
 
         const orders: Order[] = historyData.orders ?? []
         const walletTransactions: WalletTx[] = historyData.walletTransactions ?? []
@@ -168,15 +160,6 @@ export default function DashboardPage() {
             <Wallet className="h-4 w-4" />
             Fund wallet
           </Link>
-          {withdrawalEnabled && (
-            <Link
-              href="/refund"
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/50 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
-            >
-              <ArrowDownToLine className="h-4 w-4" />
-              Refund
-            </Link>
-          )}
         </div>
       </div>
 

@@ -211,20 +211,19 @@ export default function DashboardPage() {
       <div className="mt-9">
         <h2 className="text-[15px] font-semibold text-primary">Quick actions</h2>
 
-        {/* Horizontal scroll on mobile, wraps to a grid at wider widths */}
-        <div className="mt-3.5 -mx-4 flex gap-2.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-5 sm:gap-3 sm:overflow-visible sm:px-0">
+        <div className="mt-3.5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {QUICK_LINKS.map((link) => {
             const Icon = link.icon
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className="group flex w-[84px] shrink-0 flex-col items-center gap-2 rounded-2xl border border-border/70 bg-white px-2 py-4 text-center transition hover:border-blue-200 hover:shadow-[0_4px_16px_-6px_rgba(15,30,77,0.18)] sm:w-auto"
+                className="group flex flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-white px-4 py-5 text-center transition hover:border-blue-200 hover:shadow-[0_4px_16px_-6px_rgba(15,30,77,0.18)]"
               >
                 <span className={`flex h-11 w-11 items-center justify-center rounded-full transition group-hover:scale-105 ${link.iconClass}`}>
                   <Icon className="h-5 w-5" />
                 </span>
-                <span className="text-[12.5px] font-medium leading-tight text-secondary group-hover:text-primary">
+                <span className="text-sm font-medium leading-tight text-secondary group-hover:text-primary">
                   {link.label}
                 </span>
               </Link>

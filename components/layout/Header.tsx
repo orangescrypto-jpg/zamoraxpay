@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import type { Banner } from "@/src/types"
@@ -97,13 +98,25 @@ function BannerSlider() {
 
 export function Header() {
   const { user, isAuthenticated, signOut } = useAuth()
+  const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
   const isAdmin = !!user?.adminRole
+
+  // Full sign-out: clear the session, then hard-navigate home so no
+  // stale client-side router cache or component state can show the
+  // dashboard again after logout.
+  const handleSignOut = async () => {
+    await signOut()
+    window.location.href = "/"
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white">
       <div className="container flex h-16 items-center justify-between">
-        <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex items-center gap-2">
+        {/* Always link to "/" here — middleware already redirects logged-in
+            visitors from "/" to "/dashboard" server-side, so this never
+            depends on (potentially stale) client auth state. */}
+        <Link href="/" className="flex items-center gap-2">
           <span className="text-xl font-heading font-bold text-primary">Zamorax</span>
           <span className="text-xl font-heading font-bold text-secondary">Pay</span>
         </Link>
@@ -140,7 +153,7 @@ export function Header() {
                 Settings
               </Link>
               <button
-                onClick={() => signOut()}
+                onClick={handleSignOut}
                 className="hidden rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted sm:block"
               >
                 Sign out
@@ -237,7 +250,7 @@ export function Header() {
                 <button
                   onClick={() => {
                     setMenuOpen(false)
-                    signOut()
+                    handleSignOut()
                   }}
                   className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-secondary hover:bg-muted"
                 >

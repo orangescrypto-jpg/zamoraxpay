@@ -59,7 +59,7 @@ export default function AirtimeToCashPage() {
     <div className="container max-w-md py-8">
       <h1 className="mb-2 text-2xl font-heading font-bold text-secondary">Airtime to Cash</h1>
       <p className="mb-6 text-sm text-secondary/70">
-        Convert unused airtime into cash. This is handled directly by our team — reach out using the
+        Convert unused airtime into cash. This is handled directly by our team, reach out using the
         details below to get started.
       </p>
 
@@ -110,7 +110,7 @@ export default function AirtimeToCashPage() {
       <div className="mt-6 flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
         <Info className="h-4 w-4 shrink-0" />
         <p>
-          This exchange happens directly with our team outside the app — we don't process it through
+          This exchange happens directly with our team outside the app, we don't process it through
           your wallet. Only deal with the official contact shown above.
         </p>
       </div>

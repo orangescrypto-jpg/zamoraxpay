@@ -149,6 +149,9 @@ export function Header() {
               <Link href="/referrals" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
                 Refer & Earn
               </Link>
+              <Link href="/daily-streak" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+                Daily Streak
+              </Link>
               <Link href="/settings" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
                 Settings
               </Link>
@@ -213,6 +216,13 @@ export function Header() {
               className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
             >
               Refer & Earn
+            </Link>
+            <Link
+              href="/daily-streak"
+              onClick={() => setMenuOpen(false)}
+              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+            >
+              Daily Streak
             </Link>
             <Link
               href="/blog"

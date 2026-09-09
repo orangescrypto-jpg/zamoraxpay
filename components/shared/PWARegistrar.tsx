@@ -8,8 +8,13 @@ import { useInstallPrompt } from "@/hooks/usePWA"
 const RESHOW_AFTER_SEC = 60 * 60 * 24
 
 export default function PWAInstallBanner() {
-  const { canInstall, isInstalled, isIOS, isMobile, canShow, install, dismiss } = useInstallPrompt()
+  const { canInstall, isInstalled, isIOS, isMobile, checked, canShow, install, dismiss } = useInstallPrompt()
   const [showIOSSheet, setShowIOSSheet] = useState(false)
+
+  // Don't render anything until we've actually checked install state —
+  // rendering with the default "not installed" value for even one frame
+  // is what causes the banner to flash before disappearing.
+  if (!checked) return null
 
   // Never show once installed, or if the user dismissed it recently.
   if (isInstalled) return null

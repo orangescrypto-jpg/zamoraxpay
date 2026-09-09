@@ -11,6 +11,8 @@ interface CheckinHistoryRow {
   period_key: string
   streak_day: number
   amount_kobo: number
+  claimed: number
+  claimed_at: string | null
   created_at: string
 }
 
@@ -21,6 +23,7 @@ interface StreakData {
   alreadyCheckedInToday: boolean
   nextRewardKobo: number
   graceAvailable: boolean
+  unclaimedKobo: number
   history: CheckinHistoryRow[]
 }
 
@@ -28,6 +31,7 @@ export default function DailyStreakPage() {
   const [data, setData] = useState<StreakData | null>(null)
   const [loading, setLoading] = useState(true)
   const [checkingIn, setCheckingIn] = useState(false)
+  const [claiming, setClaiming] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
 
   async function getAuthHeader() {
@@ -57,6 +61,23 @@ export default function DailyStreakPage() {
     const json = await res.json()
     setResult({ success: json.success, message: json.message })
     setCheckingIn(false)
+    if (json.success) {
+      await load()
+    }
+  }
+
+  async function handleClaim() {
+    setClaiming(true)
+    setResult(null)
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/rewards/claim", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "streak" }),
+    })
+    const json = await res.json()
+    setResult({ success: json.success, message: json.message })
+    setClaiming(false)
     if (json.success) {
       await load()
     }
@@ -100,6 +121,22 @@ export default function DailyStreakPage() {
         )}
       </div>
 
+      <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-white p-4">
+        <div>
+          <p className="text-xs font-medium text-secondary">Unclaimed check-in rewards</p>
+          <p className="mt-1 text-lg font-bold text-primary">
+            {loading ? "…" : formatNaira(data?.unclaimedKobo ?? 0)}
+          </p>
+        </div>
+        <button
+          onClick={handleClaim}
+          disabled={loading || claiming || !data?.unclaimedKobo}
+          className="inline-flex items-center gap-1.5 rounded-full bg-orange-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {claiming ? "Claiming..." : "Claim to wallet"}
+        </button>
+      </div>
+
       {!loading && data?.graceAvailable && (
         <p className="mt-3 text-xs text-secondary/70">
           You have a grace day available this week, missing one day won&apos;t break your streak.
@@ -123,7 +160,10 @@ export default function DailyStreakPage() {
                   <p className="text-sm font-medium text-primary">Day {h.streak_day}</p>
                   <p className="text-xs text-secondary">{new Date(h.created_at).toLocaleDateString()}</p>
                 </div>
-                <p className="text-sm font-medium text-emerald-600">{formatNaira(h.amount_kobo)}</p>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-emerald-600">{formatNaira(h.amount_kobo)}</p>
+                  <p className="text-xs text-secondary">{h.claimed ? "Claimed" : "Unclaimed"}</p>
+                </div>
               </div>
             ))
           )}

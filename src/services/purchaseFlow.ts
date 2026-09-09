@@ -25,6 +25,7 @@ export interface PurchaseFlowParams {
   networkOrBiller: string
   recipient: string
   planCode?: string | null
+  quantity?: number // exam_pin only — planCode is repurposed to carry quantity through to the provider adapters (see pairgate.ts/cheapdatahub.ts), so pricing needs its own copy to multiply the per-unit price by
   requestedAmountKobo?: number // for flexible-amount services (airtime, electricity, betting)
   transactionPin: string
   isAutoReload?: boolean
@@ -62,15 +63,33 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
   }
 
   // 3. Resolve price (admin-configured, tier-aware).
+  //
+  // exam_pin is priced per-unit with a null plan_code in pricing_rules
+  // (see admin/pricing page — "leave blank for flexible-amount
+  // services"... exam_pin isn't flexible-amount, but it likewise has
+  // no plan_code concept, just a flat per-PIN price per exam body).
+  // params.planCode for exam_pin actually carries the *quantity*
+  // through to the provider adapters, not a real plan code — so it
+  // must NOT be passed to lookupPrice here, or the query
+  // (plan_code = '3') will never match the admin's (plan_code IS NULL)
+  // rule and every exam PIN purchase fails with "No price configured."
+  const pricingPlanCode = params.serviceType === "exam_pin" ? null : params.planCode ?? null
   const pricing = await lookupPrice(
     params.serviceType,
     params.networkOrBiller,
-    params.planCode ?? null,
+    pricingPlanCode,
     user.tier,
     params.requestedAmountKobo,
   )
   if (!pricing.found) {
     return { success: false, message: "No price configured for this selection. Please contact support." }
+  }
+
+  const quantity = params.serviceType === "exam_pin" ? Math.max(1, params.quantity ?? 1) : 1
+  if (quantity > 1) {
+    pricing.baseAmountKobo *= quantity
+    pricing.chargeAmountKobo *= quantity
+    pricing.convenienceFeeKobo *= quantity
   }
 
   // 4. Create the pending order record.

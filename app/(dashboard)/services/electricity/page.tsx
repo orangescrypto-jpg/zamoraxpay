@@ -6,6 +6,12 @@ import { createClient } from "@/src/services/providers/supabase/client"
 
 const BILLERS = ["IKEDC", "EKEDC", "AEDC", "PHEDC", "IBEDC", "KEDCO"]
 
+interface DeliveredData {
+  token?: string
+  units?: string
+  deliveryNote?: string
+}
+
 export default function ElectricityPage() {
   const [biller, setBiller] = useState(BILLERS[0])
   const [meterNumber, setMeterNumber] = useState("")
@@ -14,10 +20,12 @@ export default function ElectricityPage() {
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [deliveredData, setDeliveredData] = useState<DeliveredData | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setResult(null)
+    setDeliveredData(null)
     setLoading(true)
 
     const supabase = createClient()
@@ -37,7 +45,10 @@ export default function ElectricityPage() {
     const data = await res.json()
     setLoading(false)
     setResult({ success: data.success, message: data.message ?? data.error })
-    if (data.success) { setMeterNumber(""); setAmount(""); setPin("") }
+    if (data.success) {
+      setMeterNumber(""); setAmount(""); setPin("")
+      if (data.deliveredData) setDeliveredData(data.deliveredData)
+    }
   }
 
   return (
@@ -48,6 +59,36 @@ export default function ElectricityPage() {
         <p className={`mb-4 rounded-md p-3 text-sm ${result.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"}`}>
           {result.message}
         </p>
+      )}
+
+      {deliveredData?.token && (
+        <div className="mb-4 space-y-2 rounded-md border border-accent/30 bg-accent/5 p-4">
+          <p className="text-sm font-semibold text-secondary">Your prepaid token</p>
+          <div className="rounded-md bg-white p-3 font-mono text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="tracking-widest">{deliveredData.token}</span>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(deliveredData.token!)}
+                className="shrink-0 rounded border border-border px-2 py-1 text-xs font-sans text-secondary hover:bg-muted"
+              >
+                Copy
+              </button>
+            </div>
+            {deliveredData.units && (
+              <p className="mt-1 text-xs font-sans text-secondary/70">Units: {deliveredData.units}</p>
+            )}
+          </div>
+          <p className="text-xs text-secondary/70">
+            Save this now. You can also find it later in your order history.
+          </p>
+        </div>
+      )}
+
+      {deliveredData?.deliveryNote && (
+        <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          {deliveredData.deliveryNote}
+        </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">

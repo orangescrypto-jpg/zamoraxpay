@@ -1,32 +1,36 @@
-// src/services/providers/vtu/pairgate.ts
-// Pairgate VTU adapter — implements IVtuProviderAdapter.
+// src/services/providers/vtu/vtung.ts
+// VTU.ng adapter — implements IVtuProviderAdapter.
 //
-// Verified against live docs: https://pairgate.com/developers/introduction
-// Live base: https://pairgate.com/api/v1
-// Auth: Authorization: Bearer <API key>
-// Response envelope: { code, status: "success"|"error", data: {...} } on
-// the outer object; the actual purchase result (status: true/false,
-// message, reference_code, ...) lives inside `data`.
-// Endpoints (all POST unless noted):
-//   /data/purchase           { provider_id, plan_id, recipient, reference }
-//   /airtime/purchase        { provider_id, amount, recipient, reference }
-//   /cable/purchase          { provider_id, plan_id, smartcard, recipient_name?, reference }
-//   /electricity/purchase    { provider_id, amount, meter_number, meter_type (1|2), recipient_name?, reference }
-//   /education/purchase      { provider_id, quantity, reference }  (WAEC/NECO/NABTEB exam pins)
-//   /bet/purchase             { provider_id, amount, customer_id, recipient_name?, reference }
-//   GET /transaction/status?reference_code=...
-// Betting funding uses a DIFFERENT path segment ("bet") than our
-// internal "betting" service type — mapped below.
-// Electricity token & exam pins are delivered asynchronously via
-// webhook; the purchase call itself only confirms the debit succeeded
-// and processing started (message says "...successful & processing.").
-// See app/api/vtu/webhooks/pairgate/[secret]/route.ts for the receiver.
-// Cable is NOT part of that async list — Pairgate's docs only name
-// electricity token & exam pins, and a cable purchase just activates a
-// subscription (no PIN/token/deliverable to show the customer
-// afterward), so it deliberately has no webhook handling or
-// deliveredData here.
-// Prepend /test to any endpoint to dry-run (credentials.testMode).
+// Verified against live docs: https://vtu.ng/api/
+// Base: https://vtu.ng/wp-json
+// Auth is NOT a static API key — it's JWT username/password login:
+//   POST /jwt-auth/v1/token  { username, password } -> { token }
+//   Authorization: Bearer <token> on every subsequent call
+// Token expires after 7 days, but since this runs in a stateless
+// serverless/Workers environment (no persistent in-memory cache
+// across invocations), we just fetch a fresh token on every purchase
+// call. Store the VTU.ng account's username + password in
+// credentials.username / credentials.password (NOT an "apiKey" —
+// there isn't one).
+//
+// Endpoints (base + these paths):
+//   POST /api/v2/airtime      { request_id, phone, service_id, amount }
+//   POST /api/v2/data         { request_id, phone, service_id, variation_id }
+//   GET  /api/v2/variations/data?service_id=  (no auth)
+//   POST /api/v2/tv           { request_id, customer_id, service_id, variation_id, subscription_type?, amount? }
+//   GET  /api/v2/variations/tv?service_id=  (no auth)
+//   POST /api/v2/electricity  { request_id, customer_id, service_id, variation_id: "prepaid"|"postpaid", amount }
+//   POST /api/v2/betting      { request_id, customer_id, service_id, amount }
+//   POST /api/v2/epins        { request_id, service_id, value, quantity }  (exam pin / recharge card printing — NOT exam checker pins)
+//   POST /api/v2/requery      { request_id }
+// service_id values differ per service type (network slug for
+// airtime/data; "dstv"/"gotv"/"startimes"/"showmax" for cable;
+// disco slugs like "ikeja-electric" for electricity; provider names
+// like "Bet9ja" for betting — passed through as networkOrBiller).
+//
+// Note: VTU.ng's public API does not offer WAEC/NECO/NABTEB exam
+// checker pins — only network recharge-card ePINs — so exam_pin is
+// NOT in supportsServices below (was incorrectly claimed before).
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import type {
@@ -39,94 +43,119 @@ import type {
 } from "@/src/services/providers/vtu/types"
 
 const SERVICE_ENDPOINT: Record<string, string> = {
-  data: "/data/purchase",
-  airtime: "/airtime/purchase",
-  cable: "/cable/purchase",
-  electricity: "/electricity/purchase",
-  exam_pin: "/education/purchase",
-  betting: "/bet/purchase",
+  airtime: "/api/v2/airtime",
+  data: "/api/v2/data",
+  cable: "/api/v2/tv",
+  electricity: "/api/v2/electricity",
+  betting: "/api/v2/betting",
 }
 
-function buildBody(req: VtuPurchaseRequest): Record<string, unknown> {
-  switch (req.serviceType) {
-    case "data":
-      return {
-        provider_id: req.networkOrBiller.toLowerCase(),
-        plan_id: req.planCode,
-        recipient: req.recipient,
-        reference: req.internalReference,
-      }
-    case "airtime":
-      return {
-        provider_id: req.networkOrBiller.toLowerCase(),
-        amount: req.amountKobo / 100,
-        recipient: req.recipient,
-        reference: req.internalReference,
-      }
-    case "cable":
-      return {
-        provider_id: req.networkOrBiller.toLowerCase(),
-        plan_id: req.planCode,
-        smartcard: req.recipient,
-        ...(req.recipientName ? { recipient_name: req.recipientName } : {}),
-        reference: req.internalReference,
-      }
-    case "electricity":
-      return {
-        provider_id: req.networkOrBiller.toLowerCase(),
-        amount: req.amountKobo / 100,
-        meter_number: req.recipient,
-        meter_type: req.meterType === "postpaid" ? 2 : 1,
-        ...(req.recipientName ? { recipient_name: req.recipientName } : {}),
-        reference: req.internalReference,
-      }
-    case "exam_pin":
-      return {
-        provider_id: req.networkOrBiller.toLowerCase(),
-        quantity: req.planCode ? Number(req.planCode) || 1 : 1,
-        reference: req.internalReference,
-      }
-    case "betting":
-      return {
-        provider_id: req.networkOrBiller.toLowerCase(),
-        amount: req.amountKobo / 100,
-        customer_id: req.recipient,
-        ...(req.recipientName ? { recipient_name: req.recipientName } : {}),
-        reference: req.internalReference,
-      }
-    default:
-      return { reference: req.internalReference }
+async function getToken(baseUrl: string, credentials: VtuProviderCredentials): Promise<string | null> {  const username = credentials.username || process.env.VTUNG_USERNAME
+  const password = credentials.password || process.env.VTUNG_PASSWORD
+  if (!username || !password) return null
+
+  try {
+    const res = await fetchWithRetry(
+      `${baseUrl}/jwt-auth/v1/token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      },
+      { retries: 1, timeoutMs: 10_000, retryUnsafe: false },
+    )
+    const json = (await res.json()) as any
+    return res.ok ? json?.token ?? null : null
+  } catch {
+    return null
   }
 }
 
-export const pairgateAdapter: IVtuProviderAdapter = {
-  key: "pairgate",
-  label: "Pairgate",
-  supportsServices: ["cable", "electricity", "exam_pin", "airtime", "data", "betting"],
+function buildBody(req: VtuPurchaseRequest): Record<string, unknown> {
+  const requestId = req.internalReference.slice(0, 50)
+  switch (req.serviceType) {
+    case "airtime":
+      return {
+        request_id: requestId,
+        phone: req.recipient,
+        service_id: req.networkOrBiller.toLowerCase(),
+        amount: req.amountKobo / 100,
+      }
+    case "data":
+      return {
+        request_id: requestId,
+        phone: req.recipient,
+        service_id: req.networkOrBiller.toLowerCase(),
+        variation_id: req.planCode,
+      }
+    case "cable":
+      return {
+        request_id: requestId,
+        customer_id: req.recipient,
+        service_id: req.networkOrBiller.toLowerCase(),
+        variation_id: req.planCode,
+        subscription_type: "renew",
+      }
+    case "electricity":
+      return {
+        request_id: requestId,
+        customer_id: req.recipient,
+        service_id: req.networkOrBiller.toLowerCase(),
+        variation_id: req.meterType === "postpaid" ? "postpaid" : "prepaid",
+        amount: req.amountKobo / 100,
+      }
+    case "betting":
+      return {
+        request_id: requestId,
+        customer_id: req.recipient,
+        service_id: req.networkOrBiller,
+        amount: req.amountKobo / 100,
+      }
+    default:
+      return { request_id: requestId }
+  }
+}
+
+// VTU.ng's electricity response docs aren't public enough to pin an
+// exact field name, so this checks the plausible common shapes
+// (mirroring the pattern used for the other adapters); if a real
+// response uses something else, `raw` still has it for the admin.
+function extractDeliveredData(json: any): VtuDeliveredData | undefined {
+  const data = json?.data
+  const token = data?.token ?? data?.meter_token ?? json?.token
+  const units = data?.units ?? json?.units
+  if (token || units) {
+    return { token: token ?? undefined, units: units != null ? String(units) : undefined }
+  }
+  return undefined
+}
+
+export const vtungAdapter: IVtuProviderAdapter = {
+  key: "vtung",
+  label: "VTU.ng",
+  supportsServices: ["airtime", "data", "cable", "electricity", "betting"],
 
   async purchase(req: VtuPurchaseRequest, credentials: VtuProviderCredentials): Promise<VtuPurchaseResult> {
-    const baseUrl = credentials.baseUrl || process.env.PAIRGATE_BASE_URL || "https://pairgate.com/api/v1"
-    const apiKey = credentials.apiKey || process.env.PAIRGATE_API_KEY
+    const baseUrl = credentials.baseUrl || process.env.VTUNG_BASE_URL || "https://vtu.ng/wp-json"
     const endpoint = SERVICE_ENDPOINT[req.serviceType]
-    const testMode = credentials.testMode === "true" || credentials.testMode === "1"
 
-    if (!apiKey) {
-      return { success: false, message: "Pairgate API key not configured" }
-    }
     if (!endpoint) {
-      return { success: false, message: `Pairgate does not support service type: ${req.serviceType}` }
+      return { success: false, message: `VTU.ng does not support service type: ${req.serviceType}` }
     }
 
-    const url = testMode ? `${baseUrl}/test${endpoint}` : `${baseUrl}${endpoint}`
+    const token = await getToken(baseUrl, credentials)
+    if (!token) {
+      return { success: false, message: "VTU.ng authentication failed — check username/password credentials" }
+    }
 
     try {
       const res = await fetchWithRetry(
-        url,
+        `${baseUrl}${endpoint}`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(buildBody(req)),
         },
@@ -135,82 +164,69 @@ export const pairgateAdapter: IVtuProviderAdapter = {
 
       const json = (await res.json()) as any
       const data = json?.data
-      const ok = res.ok && json?.status === "success" && (data?.status === true || data?.test_mode === true)
+      // VTU.ng returns code:"success" with a status string inside data
+      // that can be processing-api / completed-api / refunded / etc.
+      // Only "refunded" (all providers failed) or an explicit error
+      // code counts as a hard failure here — "processing-api" and
+      // "completed-api" both mean the debit went through and the
+      // order is in flight, which the router should treat as success
+      // (status is then tracked via requery/webhook).
+      const status = data?.status as string | undefined
+      const ok = res.ok && json?.code === "success" && status !== "refunded" && status !== "cancelled" && status !== "failed"
 
       if (ok) {
-        // Pairgate's own docs say exam_pin and electricity delivery
-        // happens ASYNCHRONOUSLY via webhook — this purchase response
-        // only confirms the debit succeeded and delivery has started.
-        // We have no webhook receiver wired up yet (see checkStatus
-        // below for the same caveat), so today there is genuinely no
-        // PIN/token to show at this point for these two service types
-        // — set deliveryNote so the UI can be honest about that rather
-        // than silently show nothing with no explanation.
-        const deliveredData: VtuDeliveredData | undefined =
-          req.serviceType === "exam_pin" || req.serviceType === "electricity"
-            ? {
-                deliveryNote:
-                  "Pairgate delivers this asynchronously. Check back shortly, or contact support with your order ID if it hasn't arrived.",
-              }
-            : undefined
-
         return {
           success: true,
-          providerReference: data?.reference_code ?? data?.reference ?? req.internalReference,
-          message: data?.message ?? "Purchase successful via Pairgate",
-          deliveredData,
+          providerReference: data?.request_id ?? req.internalReference,
+          message: json?.message ?? "Purchase successful via VTU.ng",
+          deliveredData: req.serviceType === "electricity" ? extractDeliveredData(json) : undefined,
           raw: json,
         }
       }
 
       return {
         success: false,
-        message: json?.message ?? data?.message ?? "Pairgate returned a failing status",
+        message: json?.message ?? "VTU.ng returned a failing status",
         raw: json,
       }
     } catch (err) {
       return {
         success: false,
-        message: err instanceof Error ? err.message : "Pairgate request failed",
+        message: err instanceof Error ? err.message : "VTU.ng request failed",
       }
     }
   },
 
   async checkStatus(providerReference: string, credentials: VtuProviderCredentials): Promise<VtuStatusResult> {
-    const baseUrl = credentials.baseUrl || process.env.PAIRGATE_BASE_URL || "https://pairgate.com/api/v1"
-    const apiKey = credentials.apiKey || process.env.PAIRGATE_API_KEY
+    const baseUrl = credentials.baseUrl || process.env.VTUNG_BASE_URL || "https://vtu.ng/wp-json"
 
-    if (!apiKey) {
-      return { status: "failed", message: "Pairgate API key not configured" }
+    const token = await getToken(baseUrl, credentials)
+    if (!token) {
+      return { status: "failed", message: "VTU.ng authentication failed — check username/password credentials" }
     }
 
     try {
       const res = await fetchWithRetry(
-        `${baseUrl}/transaction/status?reference_code=${encodeURIComponent(providerReference)}`,
-        { method: "GET", headers: { Authorization: `Bearer ${apiKey}` } },
-        { retries: 2, timeoutMs: 10_000 },
+        `${baseUrl}/api/v2/requery`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ request_id: providerReference }),
+        },
+        { retries: 2, timeoutMs: 10_000, retryUnsafe: false },
       )
       const json = (await res.json()) as any
-      const raw = json?.data?.status
+      const raw = json?.data?.status as string | undefined
       const status =
-        raw === "successful" ? "success" : raw === "processing" || raw === "pending" ? "pending" : "failed"
-
-      // Best-effort: once Pairgate's async delivery completes, the
-      // requery response should carry the PIN/token somewhere under
-      // `data`. Their public docs don't pin down the exact field name
-      // for this (only that delivery is async), so this checks the
-      // plausible shapes; if none match, `raw` still preserves
-      // everything for the admin to inspect and this should be
-      // updated once a real completed response is seen.
-      const data = json?.data
-      let deliveredData: VtuDeliveredData | undefined
-      if (Array.isArray(data?.pins) && data.pins.length > 0) {
-        deliveredData = { pins: data.pins.map((p: any) => (typeof p === "string" ? { pin: p } : p)) }
-      } else if (data?.token) {
-        deliveredData = { token: data.token, units: data.units != null ? String(data.units) : undefined }
-      }
-
-      return { status, message: json?.data?.message ?? json?.message ?? "", deliveredData, raw: json }
+        raw === "completed-api"
+          ? "success"
+          : raw === "refunded" || raw === "cancelled" || raw === "failed"
+            ? "failed"
+            : "pending"
+      return { status, message: json?.message ?? "", deliveredData: extractDeliveredData(json), raw: json }
     } catch (err) {
       return { status: "failed", message: err instanceof Error ? err.message : "Status check failed" }
     }

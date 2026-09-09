@@ -134,10 +134,16 @@ export default function DataPage() {
           <label className="mb-1 block text-sm font-medium text-secondary">Phone number</label>
           <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08012345678"
             className={`w-full rounded-md border px-3 py-2 text-sm ${networkMismatch ? "border-destructive" : "border-border"}`} />
-          {networkMismatch && (
+          {networkMismatch ? (
             <p className="mt-1 text-xs text-destructive">
               This looks like a {detected} number, but you selected {network}. Double-check before you pay.
             </p>
+          ) : (
+            phone.length >= 4 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {detected ? `Detected network: ${detected}` : "Network not recognized from this prefix — you can still proceed"}
+              </p>
+            )
           )}
         </div>
 

@@ -27,6 +27,10 @@ const GROUPS: { title: string; keys: string[] }[] = [
   { title: "WhatsApp Support", keys: ["whatsapp_support_enabled", "whatsapp_support_number"] },
   { title: "Signup Bonus", keys: ["signup_bonus_amount_kobo"] },
   { title: "Weekend Bonus", keys: ["weekend_bonus_amount_kobo", "weekend_bonus_days"] },
+  {
+    title: "Airtime to Cash",
+    keys: ["airtime_to_cash_discount_percent", "airtime_to_cash_contact_phone", "airtime_to_cash_contact_email"],
+  },
 ]
 
 export default function AdminSettingsPage() {

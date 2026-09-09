@@ -87,6 +87,9 @@ export default function ReferralsPage() {
         <p className="mt-2 text-3xl font-bold tracking-tight">
           {loading ? "…" : formatNaira(data?.bonusPerReferralKobo ?? 0)}
         </p>
+        <p className="mt-1 text-xs text-emerald-100/80">
+          Added to your wallet automatically and usable for purchases only, it can&apos;t be refunded.
+        </p>
 
         <div className="mt-5 rounded-xl bg-white/10 p-3">
           <p className="text-xs font-medium text-emerald-100">Your referral link</p>

@@ -18,6 +18,7 @@ import {
   Clock,
   ArrowRight,
   Gift,
+  Users,
   type LucideIcon,
 } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
@@ -53,6 +54,8 @@ const QUICK_LINKS: { href: string; label: string; icon: LucideIcon; iconClass: s
   { href: "/services/electricity", label: "Electricity", icon: Zap, iconClass: "bg-amber-50 text-amber-600" },
   { href: "/services/exam-pin", label: "Exam PIN", icon: GraduationCap, iconClass: "bg-emerald-50 text-emerald-600" },
   { href: "/services/betting", label: "Betting", icon: Dices, iconClass: "bg-rose-50 text-rose-600" },
+  { href: "/services/bulk-data", label: "Bulk Data", icon: Users, iconClass: "bg-indigo-50 text-indigo-600" },
+  { href: "/services/bulk-airtime", label: "Bulk Airtime", icon: Users, iconClass: "bg-sky-50 text-sky-600" },
   { href: "/referrals", label: "Refer & Earn", icon: Gift, iconClass: "bg-teal-50 text-teal-600" },
 ]
 

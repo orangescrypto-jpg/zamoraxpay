@@ -2,7 +2,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth-server"
 import { requestWithdrawal, getWithdrawableBalance } from "@/src/services/withdrawals"
-import { d1Query } from "@/lib/db"
+import { isFeatureEnabled } from "@/src/services/config"
+import { d1Query } from "@/lib/d1"
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req)
@@ -22,6 +23,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
   if (!auth.ok) return auth.error
+
+  // This is the actual guardrail — /api/withdrawal-status only controls
+  // what the UI shows. Without this check, a user could still POST here
+  // directly while admin has the feature switched off.
+  if (!(await isFeatureEnabled("withdrawal"))) {
+    return NextResponse.json({ error: "Withdrawals are currently unavailable" }, { status: 403 })
+  }
 
   try {
     const { amountKobo, bankName, accountNumber, accountName, bankCode } = await req.json()
@@ -44,3 +52,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Withdrawal request failed" }, { status: 500 })
   }
 }
+

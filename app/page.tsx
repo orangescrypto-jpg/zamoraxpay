@@ -39,8 +39,8 @@ export default async function HomePage() {
             Airtime, data, and bills, all from one fast, reliable wallet
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/70">
-            Every purchase routes through multiple providers automatically, so your transaction goes through even
-            when one is down. No more failed data bundles.
+            Built for reliability. Transactions go through fast, every time, with instant delivery on airtime,
+            data, and bills. No more failed purchases wasting your money.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link

@@ -93,6 +93,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [canCheckInToday, setCanCheckInToday] = useState(false)
   const [nextRewardKobo, setNextRewardKobo] = useState(0)
+  const [streakLoaded, setStreakLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -122,8 +123,9 @@ export default function DashboardPage() {
             if (cancelled) return
             setCanCheckInToday(Boolean(data.canCheckInToday))
             setNextRewardKobo(data.nextRewardKobo ?? 0)
+            setStreakLoaded(true)
           })
-          .catch(() => { /* notice just stays hidden on failure */ })
+          .catch(() => { if (!cancelled) setStreakLoaded(true) /* notice just stays hidden */ })
 
         const orders: Order[] = historyData.orders ?? []
         const walletTransactions: WalletTx[] = historyData.walletTransactions ?? []
@@ -208,7 +210,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {canCheckInToday && (
+      {streakLoaded && canCheckInToday && (
         <Link
           href="/daily-streak"
           className="mt-4 flex items-center gap-3 rounded-2xl border border-teal-200/70 bg-teal-50 px-4 py-3.5 text-sm text-teal-900 transition hover:bg-teal-100"

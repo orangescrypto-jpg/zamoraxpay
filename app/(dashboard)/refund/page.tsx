@@ -111,14 +111,24 @@ export default function RefundPage() {
         </p>
       </div>
 
+      <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <p className="font-medium">Wallet funding errors</p>
+        <p className="mt-1">
+          Deposits made to this platform are intended solely for airtime, data, and bill payments. If you fund your
+          wallet by mistake, refunds can only be processed back to the originating bank account and may take up to
+          48 hours to clear.
+        </p>
+      </div>
+
       {!withdrawalEnabled ? (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           Refunds are temporarily unavailable. Please check back later.
         </div>
       ) : sources.length === 0 ? (
         <div className="mb-6 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-          You need to fund your wallet at least once before you can request a refund. Refunds can only go to a bank
-          account you&apos;ve previously funded from.
+          Wallet funding errors: Deposits made to this platform are intended solely for airtime, data, and bill
+          payments. If you fund your wallet by mistake, refunds can only be processed back to the originating bank
+          account and may take up to 48 hours to clear.
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="mb-8 space-y-4">
@@ -211,7 +221,7 @@ export default function RefundPage() {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                {w.bank_name} — {w.account_number} · {formatDate(w.created_at)}
+                {w.bank_name} · {w.account_number} · {formatDate(w.created_at)}
               </p>
               {w.rejection_reason && <p className="mt-1 text-xs text-destructive">{w.rejection_reason}</p>}
             </div>

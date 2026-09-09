@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
 import { requireAuth } from "@/lib/auth-server"
-import { d1Query } from "@/lib/db"
+import { d1Query } from "@/lib/d1"
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req)

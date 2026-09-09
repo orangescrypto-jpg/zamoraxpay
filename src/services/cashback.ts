@@ -18,7 +18,6 @@ import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
 import { isFeatureEnabled } from "@/src/services/config"
 import { getSetting, getSettingBoolean, getSettingNumber } from "@/src/services/siteSettings"
-import { creditWallet } from "@/src/services/wallet"
 
 export interface CashbackCalculation {
   eligible: boolean
@@ -62,9 +61,13 @@ export async function calculateCashback(purchaseAmountKobo: number, nativeDB?: a
 }
 
 /**
- * Calculates and credits cashback for a successful order. Idempotent
- * via the wallet ledger's own reference-uniqueness check (keyed off
- * the order id), so calling this twice for the same order is safe.
+ * Calculates cashback for a successful order and records it as an
+ * UNCLAIMED award — it does NOT touch the wallet. The user claims it
+ * later from the Rewards page (see src/services/rewardsClaim.ts),
+ * which is what actually calls creditWallet() and makes it show up
+ * in transaction history. Idempotent via the UNIQUE(order_id)
+ * constraint on cashback_awards, so calling this twice for the same
+ * order is safe.
  */
 export async function awardCashbackForOrder(
   params: { userId: string; orderId: string; purchaseAmountKobo: number },
@@ -73,21 +76,22 @@ export async function awardCashbackForOrder(
   const calc = await calculateCashback(params.purchaseAmountKobo, nativeDB)
   if (!calc.eligible) return calc
 
-  await creditWallet(
-    {
-      userId: params.userId,
-      amountKobo: calc.amountKobo,
-      type: "cashback",
-      reference: `ZPCB-${params.orderId}`,
-      relatedOrderId: params.orderId,
-      metadata: { purchaseAmountKobo: params.purchaseAmountKobo },
-    },
-    nativeDB,
-  )
+  try {
+    await d1Query(
+      "INSERT INTO cashback_awards (id, user_id, order_id, amount_kobo) VALUES (?, ?, ?, ?)",
+      [randomUUID(), params.userId, params.orderId, calc.amountKobo],
+      nativeDB,
+    )
+  } catch {
+    // UNIQUE(order_id) already recorded — safe no-op on retry.
+    return calc
+  }
 
   // Track lifetime cashback on the wallet row separately from the
   // ledger, for a fast "total cashback earned" display without
-  // summing the whole transaction history every time.
+  // summing the whole transaction history every time. This is
+  // informational only and still increments at award time, not claim
+  // time — it does not affect spendable balance.
   await d1Query(
     "UPDATE wallets SET cashback_kobo = cashback_kobo + ? WHERE user_id = ?",
     [calc.amountKobo, params.userId],

@@ -36,6 +36,7 @@ export function useInstallPrompt() {
   const [isInstalled,    setIsInstalled]    = useState(false)
   const [isIOS,          setIsIOS]          = useState(false)
   const [isMobile,       setIsMobile]       = useState(false)
+  const [checked,        setChecked]        = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -47,6 +48,7 @@ export function useInstallPrompt() {
     // Check if already installed via localStorage flag
     if (localStorage.getItem(INSTALLED_KEY) === "true") {
       setIsInstalled(true)
+      setChecked(true)
       return
     }
 
@@ -54,8 +56,11 @@ export function useInstallPrompt() {
     if (isStandalone()) {
       localStorage.setItem(INSTALLED_KEY, "true")
       setIsInstalled(true)
+      setChecked(true)
       return
     }
+
+    setChecked(true)
 
     // Listen for Chrome/Android beforeinstallprompt
     const handlePrompt = (e: Event) => {
@@ -113,6 +118,7 @@ export function useInstallPrompt() {
     isInstalled,
     isIOS,
     isMobile,
+    checked,
     canShow,
     install,
     dismiss,

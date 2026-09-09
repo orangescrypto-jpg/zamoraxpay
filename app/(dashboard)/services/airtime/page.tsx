@@ -3,8 +3,9 @@
 
 import { useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
+import { detectNetwork, matchesSelectedNetwork, type NetworkName } from "@/lib/networkDetect"
 
-const NETWORKS = ["MTN", "Airtel", "Glo", "9mobile"]
+const NETWORKS: NetworkName[] = ["MTN", "Airtel", "Glo", "9mobile"]
 
 export default function AirtimePage() {
   const [network, setNetwork] = useState(NETWORKS[0])
@@ -14,9 +15,20 @@ export default function AirtimePage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
 
+  const networkMismatch = phone.length > 0 && !matchesSelectedNetwork(phone, network)
+  const detected = detectNetwork(phone)
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setResult(null)
+
+    if (networkMismatch) {
+      const proceed = window.confirm(
+        `This number looks like it's on ${detected}, not ${network}. Buy anyway?`,
+      )
+      if (!proceed) return
+    }
+
     setLoading(true)
 
     const supabase = createClient()
@@ -79,8 +91,15 @@ export default function AirtimePage() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="08012345678"
-            className="w-full rounded-md border border-border px-3 py-2 text-sm"
+            className={`w-full rounded-md border px-3 py-2 text-sm ${
+              networkMismatch ? "border-destructive" : "border-border"
+            }`}
           />
+          {networkMismatch && (
+            <p className="mt-1 text-xs text-destructive">
+              This looks like a {detected} number, but you selected {network}. Double-check before you pay.
+            </p>
+          )}
         </div>
 
         <div>

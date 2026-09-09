@@ -6,16 +6,28 @@ import { createClient } from "@/src/services/providers/supabase/client"
 
 const EXAM_BODIES = ["WAEC", "NECO", "JAMB", "NABTEB"]
 
+interface DeliveredPin {
+  pin: string
+  serialNumber?: string
+}
+
+interface DeliveredData {
+  pins?: DeliveredPin[]
+  deliveryNote?: string
+}
+
 export default function ExamPinPage() {
   const [examBody, setExamBody] = useState(EXAM_BODIES[0])
   const [quantity, setQuantity] = useState("1")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [deliveredData, setDeliveredData] = useState<DeliveredData | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setResult(null)
+    setDeliveredData(null)
     setLoading(true)
 
     const supabase = createClient()
@@ -29,7 +41,10 @@ export default function ExamPinPage() {
     const data = await res.json()
     setLoading(false)
     setResult({ success: data.success, message: data.message ?? data.error })
-    if (data.success) setPin("")
+    if (data.success) {
+      setPin("")
+      if (data.deliveredData) setDeliveredData(data.deliveredData)
+    }
   }
 
   return (
@@ -40,6 +55,42 @@ export default function ExamPinPage() {
         <p className={`mb-4 rounded-md p-3 text-sm ${result.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"}`}>
           {result.message}
         </p>
+      )}
+
+      {/* This is the actual thing the customer paid for — it must stay
+          visible and copyable, not just flash in a toast. It's also
+          saved with the order (delivered_data column), so it's still
+          retrievable from history afterward if they navigate away. */}
+      {deliveredData?.pins && deliveredData.pins.length > 0 && (
+        <div className="mb-4 space-y-2 rounded-md border border-accent/30 bg-accent/5 p-4">
+          <p className="text-sm font-semibold text-secondary">Your PIN{deliveredData.pins.length > 1 ? "s" : ""}</p>
+          {deliveredData.pins.map((p, i) => (
+            <div key={i} className="rounded-md bg-white p-3 font-mono text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="tracking-widest">{p.pin}</span>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard?.writeText(p.pin)}
+                  className="shrink-0 rounded border border-border px-2 py-1 text-xs font-sans text-secondary hover:bg-muted"
+                >
+                  Copy
+                </button>
+              </div>
+              {p.serialNumber && (
+                <p className="mt-1 text-xs font-sans text-secondary/70">Serial: {p.serialNumber}</p>
+              )}
+            </div>
+          ))}
+          <p className="text-xs text-secondary/70">
+            Save this now. You can also find it later in your order history.
+          </p>
+        </div>
+      )}
+
+      {deliveredData?.deliveryNote && (
+        <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          {deliveredData.deliveryNote}
+        </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">

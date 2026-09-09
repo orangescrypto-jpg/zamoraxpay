@@ -1,181 +1,154 @@
-// app/(dashboard)/referrals/page.tsx
+// app/(dashboard)/rewards/page.tsx
 "use client"
 
 import { useEffect, useState } from "react"
-import { Users, Copy, Check, Gift, Share2 } from "lucide-react"
+import Link from "next/link"
+import { Gift, Users, Flame, ArrowRight } from "lucide-react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 
-interface Referral {
-  id: string
-  bonus_awarded: number
-  bonus_kobo: number
-  awarded_at: string | null
-  created_at: string
+interface UnclaimedSummary {
+  cashbackUnclaimedKobo: number
+  referralUnclaimedKobo: number
+  streakUnclaimedKobo: number
 }
 
-interface ReferralData {
-  referralCode: string | null
-  bonusPerReferralKobo: number
-  totalReferrals: number
-  totalEarnedKobo: number
-  referrals: Referral[]
-}
+type ClaimSource = "cashback" | "referral" | "streak"
 
-export default function ReferralsPage() {
-  const [data, setData] = useState<ReferralData | null>(null)
+export default function RewardsPage() {
+  const [summary, setSummary] = useState<UnclaimedSummary | null>(null)
   const [loading, setLoading] = useState(true)
-  const [copied, setCopied] = useState(false)
+  const [claiming, setClaiming] = useState<ClaimSource | null>(null)
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  async function getAuthHeader() {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    return { Authorization: `Bearer ${session?.access_token}` }
+  }
+
+  async function load() {
+    setLoading(true)
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/rewards/claim", { headers })
+    const json = await res.json()
+    setSummary(json)
+    setLoading(false)
+  }
 
   useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      setLoading(true)
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch("/api/referrals", {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      })
-      const json = await res.json()
-      if (!cancelled) {
-        setData(json)
-        setLoading(false)
-      }
-    }
-
     load()
-    return () => {
-      cancelled = true
-    }
   }, [])
 
-  const referralLink =
-    data?.referralCode && typeof window !== "undefined"
-      ? `${window.location.origin}/signup?ref=${data.referralCode}`
-      : ""
-
-  async function handleCopy() {
-    if (!referralLink) return
-    await navigator.clipboard.writeText(referralLink)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  async function handleShare() {
-    if (!referralLink) return
-    if (navigator.share) {
-      await navigator.share({ title: "Join ZamoraxPay", url: referralLink })
-    } else {
-      handleCopy()
+  async function handleClaim(source: ClaimSource) {
+    setClaiming(source)
+    setResult(null)
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/rewards/claim", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ source }),
+    })
+    const json = await res.json()
+    setResult({ success: json.success, message: json.message })
+    setClaiming(null)
+    if (json.success) {
+      await load()
     }
   }
+
+  const cards = [
+    {
+      source: "cashback" as ClaimSource,
+      label: "Cashback",
+      amountKobo: summary?.cashbackUnclaimedKobo ?? 0,
+      icon: Gift,
+      colorClass: "from-emerald-600 to-emerald-800",
+      link: "/cashback",
+    },
+    {
+      source: "referral" as ClaimSource,
+      label: "Referral bonus",
+      amountKobo: summary?.referralUnclaimedKobo ?? 0,
+      icon: Users,
+      colorClass: "from-blue-600 to-blue-800",
+      link: "/referrals",
+    },
+    {
+      source: "streak" as ClaimSource,
+      label: "Daily check-in",
+      amountKobo: summary?.streakUnclaimedKobo ?? 0,
+      icon: Flame,
+      colorClass: "from-orange-500 to-amber-600",
+      link: "/daily-streak",
+    },
+  ]
+
+  const totalUnclaimedKobo =
+    (summary?.cashbackUnclaimedKobo ?? 0) + (summary?.referralUnclaimedKobo ?? 0) + (summary?.streakUnclaimedKobo ?? 0)
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-primary">Refer & earn</h1>
+      <h1 className="text-2xl font-bold text-primary">Rewards</h1>
       <p className="mt-1 text-sm text-secondary">
-        Share your link — you earn a bonus when someone you refer completes their first
-        purchase.
+        Claim your cashback, referral bonus, and daily check-in rewards to your wallet. Once claimed, the amount
+        is transferable and shows up in your transaction history.
       </p>
 
-      <div className="mt-6 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-6 text-white shadow-lg shadow-emerald-900/10">
-        <div className="flex items-center gap-2 text-sm font-medium text-emerald-100">
-          <Gift className="h-4 w-4" />
-          Bonus per successful referral
-        </div>
-        <p className="mt-2 text-3xl font-bold tracking-tight">
-          {loading ? "…" : formatNaira(data?.bonusPerReferralKobo ?? 0)}
+      <div className="mt-6 rounded-xl border border-border bg-white p-4">
+        <p className="text-xs font-medium text-secondary">Total unclaimed</p>
+        <p className="mt-1 text-2xl font-bold text-primary">
+          {loading ? "…" : formatNaira(totalUnclaimedKobo)}
         </p>
-        <p className="mt-1 text-xs text-emerald-100/80">
-          Added to your wallet automatically and usable for purchases only, it can&apos;t be refunded.
-        </p>
-
-        <div className="mt-5 rounded-xl bg-white/10 p-3">
-          <p className="text-xs font-medium text-emerald-100">Your referral link</p>
-          <p className="mt-1 truncate text-sm font-medium">
-            {loading ? "…" : referralLink || "Sign in to get your link"}
-          </p>
-        </div>
-
-        <div className="mt-4 flex gap-3">
-          <button
-            onClick={handleCopy}
-            disabled={!referralLink}
-            className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-          >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? "Copied" : "Copy link"}
-          </button>
-          <button
-            onClick={handleShare}
-            disabled={!referralLink}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/40 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 disabled:opacity-50"
-          >
-            <Share2 className="h-4 w-4" />
-            Share
-          </button>
-        </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-border bg-white p-4">
-          <div className="flex items-center gap-2 text-xs font-medium text-secondary">
-            <Users className="h-4 w-4" />
-            Total referrals
-          </div>
-          <p className="mt-1 text-2xl font-bold text-primary">
-            {loading ? "…" : data?.totalReferrals ?? 0}
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-white p-4">
-          <div className="flex items-center gap-2 text-xs font-medium text-secondary">
-            <Gift className="h-4 w-4" />
-            Total earned
-          </div>
-          <p className="mt-1 text-2xl font-bold text-primary">
-            {loading ? "…" : formatNaira(data?.totalEarnedKobo ?? 0)}
-          </p>
-        </div>
-      </div>
+      {result && (
+        <p className={`mt-4 rounded-md p-3 text-sm ${result.success ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
+          {result.message}
+        </p>
+      )}
 
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold text-primary">Referral history</h2>
-        <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-white shadow-sm">
-          {loading ? (
-            <p className="p-4 text-sm text-secondary">Loading…</p>
-          ) : !data?.referrals.length ? (
-            <div className="flex flex-col items-center gap-2 p-8 text-center">
-              <Users className="h-8 w-8 text-gray-300" />
-              <p className="text-sm text-secondary">
-                No referrals yet — share your link to start earning.
-              </p>
-            </div>
-          ) : (
-            data.referrals.map((r) => (
-              <div key={r.id} className="flex items-center justify-between p-4">
+      <div className="mt-6 space-y-4">
+        {cards.map((card) => {
+          const Icon = card.icon
+          return (
+            <div
+              key={card.source}
+              className={`overflow-hidden rounded-2xl bg-gradient-to-br ${card.colorClass} p-5 text-white shadow-lg`}
+            >
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-primary">
-                    {r.bonus_awarded ? "Bonus earned" : "Pending first purchase"}
-                  </p>
-                  <p className="text-xs text-secondary">
-                    Joined {new Date(r.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p
-                    className={`text-sm font-medium ${
-                      r.bonus_awarded ? "text-emerald-600" : "text-amber-600"
-                    }`}
-                  >
-                    {r.bonus_awarded ? formatNaira(r.bonus_kobo) : "Not yet"}
+                  <div className="flex items-center gap-2 text-sm font-medium text-white/80">
+                    <Icon className="h-4 w-4" />
+                    {card.label}
+                  </div>
+                  <p className="mt-1 text-2xl font-bold tracking-tight">
+                    {loading ? "…" : formatNaira(card.amountKobo)}
                   </p>
                 </div>
+                <button
+                  onClick={() => handleClaim(card.source)}
+                  disabled={loading || claiming === card.source || !card.amountKobo}
+                  className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {claiming === card.source ? "Claiming..." : "Claim"}
+                </button>
               </div>
-            ))
-          )}
-        </div>
+              <Link
+                href={card.link}
+                className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-white/80 hover:text-white"
+              >
+                View details <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          )
+        })}
       </div>
+
+      <p className="mt-6 text-xs text-secondary/70">
+        Cashback and referral bonus stay usable for purchases and transfers once claimed, they cannot be refunded to
+        a bank account. Daily check-in rewards work the same way.
+      </p>
     </div>
   )
 }

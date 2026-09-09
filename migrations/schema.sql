@@ -17,6 +17,22 @@
 -- is that both use a Supabase UUID as their user identifier convention,
 -- but ZamoraxPay uses its OWN Supabase project, so these are independent
 -- identity spaces unless a user is manually cross-verified.
+--
+-- EXCEPTION TO THE "safe to re-run" NOTE ABOVE: adding a column to an
+-- existing table is NOT covered by CREATE TABLE IF NOT EXISTS (SQLite
+-- only creates it once). If vtu_orders already exists in your deployed
+-- D1 and you're picking up the new delivered_data column, run this
+-- ONE-TIME statement yourself first (safe to run even if it's already
+-- there — D1/SQLite will error harmlessly on a duplicate column, which
+-- you can ignore):
+--
+--   ALTER TABLE vtu_orders ADD COLUMN delivered_data TEXT;
+--
+-- Same applies to the new vtu_webhook_events table added alongside
+-- delivered_data — CREATE TABLE IF NOT EXISTS only takes effect on a
+-- database that doesn't already have vtu_orders et al.; on an existing
+-- deployed D1, run the CREATE TABLE statement for vtu_webhook_events
+-- (copy it from this file) by hand once.
 -- =====================================================================
 
 
@@ -132,6 +148,15 @@ CREATE TABLE IF NOT EXISTS payment_webhook_events (
   processed_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS vtu_webhook_events (
+  id                TEXT PRIMARY KEY,      -- provider's event/transaction ID (idempotency key)
+  provider          TEXT NOT NULL,         -- 'pairgate' (only Pairgate delivers async today)
+  order_id          TEXT,                  -- our vtu_orders.id, once resolved from the reference
+  event_type        TEXT NOT NULL,
+  payload           TEXT NOT NULL,         -- raw JSON payload, for audit/replay
+  processed_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS vtu_orders (
   id                TEXT PRIMARY KEY,
   user_id           TEXT NOT NULL REFERENCES users(id),
@@ -146,6 +171,10 @@ CREATE TABLE IF NOT EXISTS vtu_orders (
   provider_used     TEXT,            -- which VTU adapter actually fulfilled it
   provider_attempts TEXT,            -- JSON array log of every provider tried + result
   provider_reference TEXT,
+  delivered_data    TEXT,            -- JSON: provider-issued data the customer must be shown/kept
+                                      -- (exam PIN + serial, electricity token, etc). NULL if the
+                                      -- service type has none, or if delivery is async (webhook)
+                                      -- and hasn't arrived yet.
   status            TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'success' | 'failed' | 'refunded'
   failure_reason    TEXT,
   is_auto_reload    INTEGER NOT NULL DEFAULT 0,

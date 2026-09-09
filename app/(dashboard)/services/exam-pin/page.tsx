@@ -1,8 +1,9 @@
 // app/(dashboard)/services/exam-pin/page.tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
+import { formatNaira } from "@/lib/utils"
 
 const EXAM_BODIES = ["WAEC", "NECO", "JAMB", "NABTEB"]
 
@@ -23,6 +24,51 @@ export default function ExamPinPage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [deliveredData, setDeliveredData] = useState<DeliveredData | null>(null)
+  const [unitPriceKobo, setUnitPriceKobo] = useState<number | null>(null)
+  const [priceLoading, setPriceLoading] = useState(true)
+  const [priceError, setPriceError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPrice() {
+      setPriceLoading(true)
+      setPriceError(null)
+      setUnitPriceKobo(null)
+
+      try {
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+
+        const res = await fetch(
+          `/api/pricing?serviceType=exam_pin&networkOrBiller=${encodeURIComponent(examBody)}&flat=1`,
+          { headers: { Authorization: `Bearer ${session?.access_token}` } },
+        )
+        const data = await res.json()
+        if (cancelled) return
+
+        if (!res.ok) {
+          setPriceError(data.error ?? "Could not load price")
+          return
+        }
+        if (data.priceKobo == null) {
+          setPriceError(`No price configured for ${examBody} yet.`)
+          return
+        }
+        setUnitPriceKobo(data.priceKobo)
+      } catch {
+        if (!cancelled) setPriceError("Could not load price")
+      } finally {
+        if (!cancelled) setPriceLoading(false)
+      }
+    }
+
+    loadPrice()
+    return () => { cancelled = true }
+  }, [examBody])
+
+  const parsedQuantity = Math.max(1, parseInt(quantity, 10) || 1)
+  const totalPriceKobo = unitPriceKobo != null ? unitPriceKobo * parsedQuantity : null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -112,13 +158,28 @@ export default function ExamPinPage() {
             className="w-full rounded-md border border-border px-3 py-2 text-sm" />
         </div>
 
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+          {priceLoading ? (
+            <span className="text-secondary/60">Loading price…</span>
+          ) : priceError ? (
+            <span className="text-destructive">{priceError}</span>
+          ) : totalPriceKobo != null ? (
+            <div className="flex items-center justify-between">
+              <span className="text-secondary/70">
+                {formatNaira(unitPriceKobo!)} × {parsedQuantity}
+              </span>
+              <span className="font-semibold text-secondary">You'll pay {formatNaira(totalPriceKobo)}</span>
+            </div>
+          ) : null}
+        </div>
+
         <div>
           <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>
           <input required type="password" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value)}
             className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest" />
         </div>
 
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || priceLoading || unitPriceKobo == null}
           className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
           {loading ? "Processing..." : "Buy PIN"}
         </button>

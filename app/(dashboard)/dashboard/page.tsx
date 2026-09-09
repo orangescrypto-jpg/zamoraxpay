@@ -90,6 +90,7 @@ export default function DashboardPage() {
   const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [withdrawalEnabled, setWithdrawalEnabled] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -110,6 +111,14 @@ export default function DashboardPage() {
         if (cancelled) return
 
         setBalanceKobo(balanceData.balanceKobo ?? 0)
+
+        // Independent of the above — a failure here shouldn't block
+        // balance/history from rendering, so it's fetched separately
+        // rather than added to the Promise.all above.
+        fetch("/api/withdrawal-status")
+          .then((res) => res.json())
+          .then((data) => { if (!cancelled) setWithdrawalEnabled(data.enabled ?? true) })
+          .catch(() => { /* default stays true on failure */ })
 
         const orders: Order[] = historyData.orders ?? []
         const walletTransactions: WalletTx[] = historyData.walletTransactions ?? []
@@ -159,13 +168,15 @@ export default function DashboardPage() {
             <Wallet className="h-4 w-4" />
             Fund wallet
           </Link>
-          <Link
-            href="/withdraw"
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/40 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
-          >
-            <ArrowDownToLine className="h-4 w-4" />
-            Withdraw
-          </Link>
+          {withdrawalEnabled && (
+            <Link
+              href="/withdraw"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/40 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+            >
+              <ArrowDownToLine className="h-4 w-4" />
+              Withdraw
+            </Link>
+          )}
         </div>
       </div>
 

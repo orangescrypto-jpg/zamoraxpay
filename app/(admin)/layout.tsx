@@ -28,6 +28,7 @@ const NAV_ITEMS: { href: string; label: string; minRole: "moderator" | "admin" |
   { href: "/admin/blog", label: "Blog", minRole: "admin" },
   { href: "/admin/blog-categories", label: "Blog Categories", minRole: "admin" },
   { href: "/admin/settings", label: "Site Settings", minRole: "admin" },
+  { href: "/admin/weekend-bonus", label: "Weekend Bonus", minRole: "admin" },
   { href: "/admin/users", label: "Users", minRole: "moderator" },
   { href: "/admin/transactions", label: "Transactions", minRole: "moderator" },
   { href: "/admin/withdrawals", label: "Withdrawals", minRole: "admin" },

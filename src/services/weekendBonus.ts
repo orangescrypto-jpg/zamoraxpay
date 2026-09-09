@@ -10,15 +10,17 @@
 //                                      can widen/narrow it without a
 //                                      redeploy or schema change
 //
-// Meant to be driven by a daily cron job (see
-// app/api/cron/weekend-bonus/route.ts): the job calls
-// runWeekendBonusForToday() once a day, and this module decides
-// whether today qualifies and who gets paid.
+// There is no automatic cron for this — an admin manually triggers a
+// payout run from the admin panel (see
+// app/api/admin/weekend-bonus/route.ts and
+// app/(admin)/admin/weekend-bonus/page.tsx), which calls
+// runWeekendBonusForToday() below.
 //
 // Idempotency: each user can only be credited once per "period" (one
 // calendar day, identified by an ISO date string) via a UNIQUE
-// (user_id, period_key) row in weekend_bonus_payouts. If the cron
-// fires more than once on the same day, later calls are no-ops.
+// (user_id, period_key) row in weekend_bonus_payouts. If an admin
+// clicks "run" more than once on the same day, later runs are no-ops
+// for anyone already paid.
 
 import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
@@ -59,18 +61,28 @@ export async function isTodayWeekendBonusDay(nativeDB?: any, date: Date = new Da
 }
 
 /**
- * Runs the weekend bonus for "today" (UTC) — call once a day from the
- * cron job. Pays every active user the configured amount, skipping
- * anyone already paid for today's period key. Safe to call more than
- * once per day; repeat calls just report skippedCount instead of
- * double-crediting.
+ * Runs the weekend bonus for "today" (UTC) — triggered on demand from
+ * the admin panel (there is no automatic cron for this). Pays every
+ * active user the configured amount, skipping anyone already paid for
+ * today's period key. Safe to call more than once per day; repeat
+ * calls just report skippedCount instead of double-crediting.
+ *
+ * options.ignoreDayCheck lets an admin force a run on a non-weekend
+ * day (e.g. to pay it a day early, or re-run a day that was missed).
+ * The flag/amount checks and the per-user idempotency guard still
+ * apply either way — this only bypasses the "is today a configured
+ * weekend day" gate.
  */
-export async function runWeekendBonusForToday(nativeDB?: any, date: Date = new Date()): Promise<WeekendBonusRunResult> {
+export async function runWeekendBonusForToday(
+  nativeDB?: any,
+  date: Date = new Date(),
+  options?: { ignoreDayCheck?: boolean },
+): Promise<WeekendBonusRunResult> {
   if (!(await isFeatureEnabled("weekend_bonus", nativeDB))) {
     return { ran: false, reason: "Weekend bonus is currently disabled" }
   }
 
-  if (!(await isTodayWeekendBonusDay(nativeDB, date))) {
+  if (!options?.ignoreDayCheck && !(await isTodayWeekendBonusDay(nativeDB, date))) {
     return { ran: false, reason: `${todayName(date)} is not a configured weekend bonus day` }
   }
 

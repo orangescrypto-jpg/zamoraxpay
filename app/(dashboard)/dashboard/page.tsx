@@ -170,11 +170,11 @@ export default function DashboardPage() {
           </Link>
           {withdrawalEnabled && (
             <Link
-              href="/withdraw"
+              href="/refund"
               className="inline-flex items-center gap-1.5 rounded-full border border-white/40 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
             >
               <ArrowDownToLine className="h-4 w-4" />
-              Withdraw
+              Refund
             </Link>
           )}
         </div>

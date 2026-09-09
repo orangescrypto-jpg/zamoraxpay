@@ -9,10 +9,14 @@ export async function GET(req: NextRequest) {
   const auth = await requireAuth(req)
   if (!auth.ok) return auth.error
 
-  const [status, historyResult] = await Promise.all([
+  const [status, historyResult, unclaimedResult] = await Promise.all([
     getStreakStatus(auth.uid),
     d1Query(
-      "SELECT id, period_key, streak_day, amount_kobo, created_at FROM daily_streak_checkins WHERE user_id = ? ORDER BY created_at DESC LIMIT 30",
+      "SELECT id, period_key, streak_day, amount_kobo, claimed, claimed_at, created_at FROM daily_streak_checkins WHERE user_id = ? ORDER BY created_at DESC LIMIT 30",
+      [auth.uid],
+    ),
+    d1Query(
+      "SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM daily_streak_checkins WHERE user_id = ? AND claimed = 0",
       [auth.uid],
     ),
   ])
@@ -20,6 +24,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ...status,
     history: historyResult.results ?? [],
+    unclaimedKobo: unclaimedResult.results?.[0]?.total ?? 0,
   })
 }
 

@@ -31,7 +31,6 @@
 
 import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
-import { creditWallet } from "@/src/services/wallet"
 import { getSettingBoolean, getSettingNumber } from "@/src/services/siteSettings"
 import { isFeatureEnabled } from "@/src/services/config"
 
@@ -146,9 +145,12 @@ export async function getStreakStatus(userId: string, nativeDB?: any): Promise<S
 /**
  * Performs today's check-in for a user: validates eligibility, applies
  * the grace-day rule if a day was missed, computes the reward from
- * admin-configured tiers, credits the wallet, and records the
- * check-in. Safe to call more than once per day — later calls in the
- * same day return success:false rather than double-crediting.
+ * admin-configured tiers, and records the check-in as UNCLAIMED. It
+ * does NOT touch the wallet — the user claims it later from the
+ * Rewards page (see src/services/rewardsClaim.ts), which is what
+ * actually calls creditWallet(). Safe to call more than once per day
+ * — later calls in the same day return success:false rather than
+ * double-recording.
  */
 export async function checkIn(userId: string, nativeDB?: any): Promise<CheckInResult> {
   if (!(await isFeatureEnabled("daily_streak", nativeDB))) {
@@ -224,17 +226,6 @@ export async function checkIn(userId: string, nativeDB?: any): Promise<CheckInRe
       nativeDB,
     )
   }
-
-  await creditWallet(
-    {
-      userId,
-      amountKobo,
-      type: "daily_streak",
-      reference: `ZPDS-${userId}-${today}`,
-      metadata: { streakDay: newStreak },
-    },
-    nativeDB,
-  )
 
   return { success: true, message: `Day ${newStreak} check-in complete!`, newStreak, amountKobo }
 }

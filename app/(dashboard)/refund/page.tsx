@@ -1,4 +1,4 @@
-// app/(dashboard)/withdraw/page.tsx
+// app/(dashboard)/refund/page.tsx
 "use client"
 
 import { useEffect, useState } from "react"
@@ -25,7 +25,7 @@ interface WithdrawalRow {
   rejection_reason: string | null
 }
 
-export default function WithdrawPage() {
+export default function RefundPage() {
   const [withdrawableKobo, setWithdrawableKobo] = useState<number | null>(null)
   const [history, setHistory] = useState<WithdrawalRow[]>([])
   const [sources, setSources] = useState<FundingSource[]>([])
@@ -99,25 +99,25 @@ export default function WithdrawPage() {
 
   return (
     <div className="container max-w-md py-8">
-      <h1 className="mb-6 text-2xl font-heading font-bold text-secondary">Withdraw</h1>
+      <h1 className="mb-6 text-2xl font-heading font-bold text-secondary">Refund</h1>
 
       <div className="mb-6 rounded-lg bg-secondary p-6 text-white">
-        <p className="text-sm text-white/70">Withdrawable balance</p>
+        <p className="text-sm text-white/70">Refundable balance</p>
         <p className="mt-1 text-3xl font-heading font-bold">
           {withdrawableKobo === null ? "..." : formatNaira(withdrawableKobo)}
         </p>
         <p className="mt-2 text-xs text-white/50">
-          Deposited funds and referral bonuses only. Cashback can&apos;t be withdrawn — it can only be used for purchases.
+          Deposited funds and referral bonuses only. Cashback can&apos;t be refunded, it can only be used for purchases.
         </p>
       </div>
 
       {!withdrawalEnabled ? (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          Withdrawals are temporarily unavailable. Please check back later.
+          Refunds are temporarily unavailable. Please check back later.
         </div>
       ) : sources.length === 0 ? (
         <div className="mb-6 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-          You need to fund your wallet at least once before you can withdraw — withdrawals can only go to a bank
+          You need to fund your wallet at least once before you can request a refund. Refunds can only go to a bank
           account you&apos;ve previously funded from.
         </div>
       ) : (
@@ -129,7 +129,7 @@ export default function WithdrawPage() {
           )}
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-secondary">Withdraw to</label>
+            <label className="mb-1 block text-sm font-medium text-secondary">Refund to</label>
             <select
               value={selectedAccount}
               onChange={(e) => setSelectedAccount(e.target.value)}
@@ -138,7 +138,7 @@ export default function WithdrawPage() {
               <option value="">Select an account</option>
               {sources.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.bank_name ?? "Bank"} — {s.account_number} {s.account_name ? `(${s.account_name})` : ""}
+                  {s.bank_name ?? "Bank"} · {s.account_number} {s.account_name ? `(${s.account_name})` : ""}
                 </option>
               ))}
             </select>
@@ -162,8 +162,8 @@ export default function WithdrawPage() {
                 ))}
               </select>
               <p className="mt-1 text-xs text-muted-foreground">
-                We couldn&apos;t automatically detect your bank from your deposit — please confirm it so we can pay
-                you out correctly.
+                We couldn&apos;t automatically detect your bank from your deposit, so please confirm it so we can pay
+                you correctly.
               </p>
             </div>
           )}
@@ -184,14 +184,14 @@ export default function WithdrawPage() {
             disabled={loading || !selectedAccount || !amount}
             className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
-            {loading ? "Submitting..." : "Request withdrawal"}
+            {loading ? "Submitting..." : "Request refund"}
           </button>
         </form>
       )}
 
       <h2 className="mb-3 font-heading font-semibold text-secondary">History</h2>
       {history.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No withdrawal requests yet.</p>
+        <p className="text-sm text-muted-foreground">No refund requests yet.</p>
       ) : (
         <div className="space-y-2">
           {history.map((w) => (

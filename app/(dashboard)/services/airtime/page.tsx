@@ -95,10 +95,16 @@ export default function AirtimePage() {
               networkMismatch ? "border-destructive" : "border-border"
             }`}
           />
-          {networkMismatch && (
+          {networkMismatch ? (
             <p className="mt-1 text-xs text-destructive">
               This looks like a {detected} number, but you selected {network}. Double-check before you pay.
             </p>
+          ) : (
+            phone.length >= 4 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {detected ? `Detected network: ${detected}` : "Network not recognized from this prefix — you can still proceed"}
+              </p>
+            )
           )}
         </div>
 

@@ -17,6 +17,7 @@ import type {
   VtuPurchaseResult,
   VtuStatusResult,
   VtuProviderCredentials,
+  VtuDeliveredData,
 } from "@/src/services/providers/vtu/types"
 
 const SERVICE_ENDPOINT: Record<string, string> = {
@@ -55,12 +56,19 @@ function buildBody(req: VtuPurchaseRequest) {
         phone: req.recipient,
       }
     case "exam_pin":
-      // CheapDataHub only accepts quantity 1, 2, or 5. VtuPurchaseRequest
-      // has no dedicated quantity field yet, so this always requests 1
-      // pin — safe default until a quantity field is added upstream.
+      // CheapDataHub only accepts quantity 1, 2, or 5. req.recipient
+      // carries the quantity for exam_pin (see purchaseFlow /
+      // route — recipient is set to "<quantity>x" upstream), so parse
+      // it back out here instead of hardcoding 1, which silently
+      // shorted every multi-PIN order to a single PIN before.
+      const requestedQty = parseInt(req.recipient, 10) || 1
+      const allowedQty = [1, 2, 5]
+      const quantity = allowedQty.includes(requestedQty)
+        ? requestedQty
+        : allowedQty.reduce((closest, q) => (q <= requestedQty ? q : closest), 1)
       return {
         product_id: req.planCode,
-        quantity: 1,
+        quantity,
       }
     default:
       return {
@@ -71,6 +79,43 @@ function buildBody(req: VtuPurchaseRequest) {
         reference: req.internalReference,
       }
   }
+}
+
+// CheapDataHub's exam-PIN/electricity response field names aren't
+// pinned down by public docs the way VTpass's are, so this checks
+// every plausible key (seen across similar Nigerian VTU aggregators)
+// rather than assuming one shape. If a real response uses a field
+// name not covered here, `raw` still has everything for the admin to
+// find it in the audit trail and this list should be extended.
+function extractDeliveredData(req: VtuPurchaseRequest, json: any): VtuDeliveredData | undefined {
+  const data = json?.data ?? json
+
+  if (req.serviceType === "exam_pin") {
+    const pinsArray = data?.pins ?? data?.cards ?? data?.epins
+    if (Array.isArray(pinsArray) && pinsArray.length > 0) {
+      return {
+        pins: pinsArray.map((p: any) =>
+          typeof p === "string"
+            ? { pin: p }
+            : { pin: p.pin ?? p.Pin ?? p.epin, serialNumber: p.serial ?? p.Serial ?? p.serial_number },
+        ),
+      }
+    }
+    const singlePin = data?.pin ?? data?.epin
+    if (singlePin) {
+      return { pins: [{ pin: singlePin, serialNumber: data?.serial ?? data?.serial_number }] }
+    }
+  }
+
+  if (req.serviceType === "electricity") {
+    const token = data?.token ?? data?.meter_token
+    const units = data?.units ?? data?.token_units
+    if (token || units) {
+      return { token: token ?? undefined, units: units != null ? String(units) : undefined }
+    }
+  }
+
+  return undefined
 }
 
 export const cheapdatahubAdapter: IVtuProviderAdapter = {
@@ -114,6 +159,7 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
           success: true,
           providerReference: json.transaction_id ?? json.reference ?? json.data?.reference,
           message: json?.message ?? "Purchase successful via CheapDataHub",
+          deliveredData: extractDeliveredData(req, json),
           raw: json,
         }
       }
@@ -153,7 +199,10 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
         : raw === "pending" || raw === "processing" || raw === "initiated"
           ? "pending"
           : "failed"
-      return { status, message: json?.message ?? "", raw: json }
+      const deliveredData =
+        extractDeliveredData({ serviceType: "exam_pin" } as VtuPurchaseRequest, json) ??
+        extractDeliveredData({ serviceType: "electricity" } as VtuPurchaseRequest, json)
+      return { status, message: json?.message ?? "", deliveredData, raw: json }
     } catch (err) {
       return { status: "failed", message: err instanceof Error ? err.message : "Status check failed" }
     }

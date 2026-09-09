@@ -5,6 +5,18 @@ import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira, formatDate } from "@/lib/utils"
 
+interface DeliveredPin {
+  pin: string
+  serialNumber?: string
+}
+
+interface OrderDeliveredData {
+  pins?: DeliveredPin[]
+  token?: string
+  units?: string
+  deliveryNote?: string
+}
+
 interface OrderRow {
   id: string
   service_type: string
@@ -13,6 +25,7 @@ interface OrderRow {
   amount_kobo: number
   status: string
   created_at: string
+  delivered_data?: string | null // JSON string from D1 — parsed on render
 }
 
 interface WalletTransactionRow {
@@ -50,6 +63,7 @@ function statusColor(status: string) {
 export default function HistoryPage() {
   const [items, setItems] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -95,21 +109,83 @@ export default function HistoryPage() {
           {items.map((item) => {
             if (item.kind === "order") {
               const order = item.data
+              let delivered: OrderDeliveredData | null = null
+              if (order.delivered_data) {
+                try { delivered = JSON.parse(order.delivered_data) } catch { delivered = null }
+              }
+              const hasDelivered = !!(delivered?.pins?.length || delivered?.token || delivered?.deliveryNote)
+              const isExpanded = expandedOrderId === order.id
+
               return (
-                <div key={`order-${order.id}`} className="flex items-center justify-between rounded-lg border border-border p-4">
-                  <div>
-                    <p className="text-sm font-medium capitalize text-secondary">
-                      {order.service_type.replace("_", " ")} — {order.network_or_biller}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{order.recipient}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-secondary">{formatNaira(order.amount_kobo)}</p>
-                    <span className={`text-xs font-medium capitalize ${statusColor(order.status)}`}>
-                      {order.status}
-                    </span>
-                  </div>
+                <div key={`order-${order.id}`} className="rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => hasDelivered && setExpandedOrderId(isExpanded ? null : order.id)}
+                    className={`flex w-full items-center justify-between p-4 text-left ${hasDelivered ? "cursor-pointer" : "cursor-default"}`}
+                  >
+                    <div>
+                      <p className="text-sm font-medium capitalize text-secondary">
+                        {order.service_type.replace("_", " ")} — {order.network_or_biller}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{order.recipient}</p>
+                      <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
+                      {hasDelivered && (
+                        <p className="mt-1 text-xs font-medium text-primary">
+                          {isExpanded ? "Hide details ▲" : "View PIN/token ▼"}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-secondary">{formatNaira(order.amount_kobo)}</p>
+                      <span className={`text-xs font-medium capitalize ${statusColor(order.status)}`}>
+                        {order.status}
+                      </span>
+                    </div>
+                  </button>
+
+                  {isExpanded && delivered && (
+                    <div className="space-y-2 border-t border-border p-4">
+                      {delivered.pins?.map((p, i) => (
+                        <div key={i} className="rounded-md border border-border bg-muted/30 p-3 font-mono text-sm">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="tracking-widest">{p.pin}</span>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard?.writeText(p.pin)}
+                              className="shrink-0 rounded border border-border px-2 py-1 text-xs font-sans text-secondary hover:bg-muted"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                          {p.serialNumber && (
+                            <p className="mt-1 text-xs font-sans text-secondary/70">Serial: {p.serialNumber}</p>
+                          )}
+                        </div>
+                      ))}
+                      {delivered.token && (
+                        <div className="rounded-md border border-border bg-muted/30 p-3 font-mono text-sm">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="tracking-widest">{delivered.token}</span>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard?.writeText(delivered!.token!)}
+                              className="shrink-0 rounded border border-border px-2 py-1 text-xs font-sans text-secondary hover:bg-muted"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                          {delivered.units && (
+                            <p className="mt-1 text-xs font-sans text-secondary/70">Units: {delivered.units}</p>
+                          )}
+                        </div>
+                      )}
+                      {delivered.deliveryNote && (
+                        <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                          {delivered.deliveryNote}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             }

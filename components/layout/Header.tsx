@@ -146,11 +146,11 @@ export function Header() {
               <Link href="/wallet" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
                 Wallet
               </Link>
-              <Link href="/referrals" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
-                Refer & Earn
+              <Link href="/rewards" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+                Rewards
               </Link>
-              <Link href="/daily-streak" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
-                Daily Streak
+              <Link href="/refund" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+                Refund
               </Link>
               <Link href="/settings" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
                 Settings
@@ -211,18 +211,18 @@ export function Header() {
               Wallet
             </Link>
             <Link
-              href="/referrals"
+              href="/rewards"
               onClick={() => setMenuOpen(false)}
               className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
             >
-              Refer & Earn
+              Rewards
             </Link>
             <Link
-              href="/daily-streak"
+              href="/refund"
               onClick={() => setMenuOpen(false)}
               className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
             >
-              Daily Streak
+              Refund
             </Link>
             <Link
               href="/blog"

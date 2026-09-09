@@ -65,7 +65,8 @@ function extractDeliveredData(payload: any): VtuDeliveredData | undefined {
   return undefined
 }
 
-export async function POST(req: NextRequest, { params }: { params: { secret: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ secret: string }> }) {
+  const { secret } = await params
   const expectedSecret = process.env.PAIRGATE_WEBHOOK_SECRET
   if (!expectedSecret) {
     // Misconfiguration, not a client error — fail loudly in logs so
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: { secret: str
     console.error("[pairgate webhook] PAIRGATE_WEBHOOK_SECRET is not set — rejecting all callbacks")
     return NextResponse.json({ error: "Not configured" }, { status: 503 })
   }
-  if (params.secret !== expectedSecret) {
+  if (secret !== expectedSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

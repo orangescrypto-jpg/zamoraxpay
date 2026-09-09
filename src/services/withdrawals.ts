@@ -1,28 +1,29 @@
 // src/services/withdrawals.ts
-// Service abstraction layer — withdrawals.
+// Service abstraction layer — refunds (user-facing "withdraw" flow).
 //
 // THE ELIGIBLE-BALANCE RULE (per product decision): a user's single
 // wallet balance is not literally split into separate "buckets" in
-// storage — instead, eligibility is computed from the ledger:
-//   - 'funding' credits and 'referral_bonus' credits count toward the
-//     withdrawable total
-//   - 'cashback' credits do NOT — cashback is spend-only, forever
-//   - Every debit (purchase, reseller_upgrade, existing withdrawal)
-//     reduces the withdrawable total, in the order it actually
-//     happened, so we're never letting someone withdraw money that's
-//     already been spent — including spending cashback that "shares
-//     the pool" with the wallet.
+// storage, instead, eligibility is computed from the ledger:
+//   - only 'funding' credits count toward the refundable total
+//   - 'cashback' credits do NOT, cashback is spend-only, forever
+//   - 'referral_bonus' credits do NOT either, referral bonus is also
+//     spend-only: it can be used for purchases but never refunded
+//   - Every debit (purchase, reseller_upgrade, existing refund)
+//     reduces the refundable total, in the order it actually
+//     happened, so we're never letting someone refund money that's
+//     already been spent, including spending cashback or referral
+//     bonus that "shares the pool" with the wallet.
 //
 // The simplest CORRECT way to compute this without a second balance
 // column (which would need to be kept in perfect lockstep with every
-// future feature that touches the wallet) is: withdrawable amount =
-// min(current wallet balance, sum of funding+referral_bonus credits
-// minus sum of all debits and prior withdrawals). This treats
-// cashback as the last money spent, conceptually — which matches "you
-// can spend cashback, but you can't withdraw it": if cashback is
-// sitting unspent, it simply doesn't count toward what you can pull
-// out, and if it's been spent already, it's already gone from
-// everyone's math.
+// future feature that touches the wallet) is: refundable amount =
+// min(current wallet balance, sum of funding credits minus sum of
+// all debits and prior refunds). This treats cashback and referral
+// bonus as the last money spent, conceptually, which matches "you
+// can spend them, but you can't refund them": if they're sitting
+// unspent, they simply don't count toward what's refundable, and if
+// they've been spent already, they're already gone from everyone's
+// math.
 
 import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
@@ -51,7 +52,7 @@ export async function getWithdrawableBalance(userId: string, nativeDB?: any): Pr
   const credits: Record<string, number> = {}
   for (const row of creditSums.results ?? []) credits[row.type] = row.total
 
-  const withdrawableCredits = (credits.funding ?? 0) + (credits.referral_bonus ?? 0)
+  const withdrawableCredits = credits.funding ?? 0
   const totalDebits = debitSum.results?.[0]?.total ?? 0
 
   const withdrawable = withdrawableCredits - totalDebits
@@ -79,14 +80,14 @@ export async function requestWithdrawal(
 ): Promise<WithdrawalRequestResult> {
   const minAmount = await getSettingNumber("withdrawal_min_amount_kobo", 100000, nativeDB)
   if (params.amountKobo < minAmount) {
-    return { success: false, message: `Minimum withdrawal is ₦${(minAmount / 100).toLocaleString()}` }
+    return { success: false, message: `Minimum refund is ₦${(minAmount / 100).toLocaleString()}` }
   }
 
   const withdrawable = await getWithdrawableBalance(params.userId, nativeDB)
   if (params.amountKobo > withdrawable) {
     return {
       success: false,
-      message: `You can withdraw up to ₦${(withdrawable / 100).toLocaleString()}. Cashback balance is not withdrawable — it can only be used for purchases.`,
+      message: `You can refund up to ₦${(withdrawable / 100).toLocaleString()}. Cashback and referral bonus can't be refunded, they can only be used for purchases.`,
     }
   }
 
@@ -96,7 +97,7 @@ export async function requestWithdrawal(
   if (!matchedSourceId) {
     return {
       success: false,
-      message: "You can only withdraw to a bank account you've previously funded your wallet from. Fund from this account first, or choose an account you've used before.",
+      message: "You can only get a refund to a bank account you've previously funded your wallet from. Fund from this account first, or choose an account you've used before.",
     }
   }
 
@@ -140,7 +141,7 @@ export async function requestWithdrawal(
     nativeDB,
   )
 
-  return { success: true, withdrawalId, message: "Withdrawal request submitted. You'll be notified once it's processed." }
+  return { success: true, withdrawalId, message: "Refund request submitted. You'll be notified once it's processed." }
 }
 
 /** Admin rejects a withdrawal — refunds the held amount back to the wallet. */

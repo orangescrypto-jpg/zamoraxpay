@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
       serviceType: "exam_pin",
       networkOrBiller: examBody, // 'WAEC' | 'NECO' | 'JAMB' | 'NABTEB'
       recipient: `${quantity}x`, // no per-user recipient number for PINs; quantity is the "recipient" field
-      planCode: String(quantity),
+      planCode: String(quantity), // carried through to provider adapters as quantity — NOT used for pricing, see purchaseFlow.ts
+      quantity,
       transactionPin,
     })
 

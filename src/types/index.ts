@@ -39,6 +39,8 @@ export type WalletTransactionType =
   | "referral_bonus"
   | "reseller_upgrade"
   | "admin_adjustment"
+  | "signup_bonus"
+  | "weekend_bonus"
 
 export interface WalletTransaction {
   id: string

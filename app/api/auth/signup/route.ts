@@ -18,6 +18,7 @@ import { randomUUID } from "crypto"
 import { createServiceRoleClient } from "@/src/services/providers/supabase/server"
 import { d1Query } from "@/lib/d1"
 import { sendWelcomeEmail } from "@/src/services/email"
+import { awardSignupBonus } from "@/src/services/signupBonus"
 
 function generateReferralCode(): string {
   return "ZP" + Math.random().toString(36).slice(2, 8).toUpperCase()
@@ -90,6 +91,15 @@ export async function POST(req: NextRequest) {
       )
 
       await d1Query("INSERT INTO wallets (id, user_id, balance_kobo) VALUES (?, ?, 0)", [randomUUID(), uid])
+
+      // Best-effort — a signup bonus hiccup should never fail the whole
+      // signup (the account and wallet are already valid at this point).
+      // creditWallet is idempotent on its own reference, so this is also
+      // safe to leave as fire-and-forget without risking a double credit
+      // if something upstream ever retries this whole request.
+      await awardSignupBonus(uid).catch((err: unknown) =>
+        console.error("[signup] Signup bonus award failed:", err),
+      )
 
       if (referredByUserId) {
         await d1Query(

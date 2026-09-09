@@ -28,7 +28,7 @@
 import { getVtuAdapter } from "@/src/services/providers/vtu/registry"
 import { getActiveVtuProviders, getVtuProviderCredentials } from "@/src/services/config"
 import { getPlanProviderOptions } from "@/src/services/providerPlanMappings"
-import type { VtuPurchaseRequest, VtuPurchaseResult } from "@/src/services/providers/vtu/types"
+import type { VtuPurchaseRequest, VtuPurchaseResult, VtuDeliveredData } from "@/src/services/providers/vtu/types"
 
 export interface VtuRouterAttemptLog {
   providerKey: string
@@ -43,6 +43,7 @@ export interface VtuRouterResult {
   providerUsed: string | null
   providerReference: string | null
   message: string
+  deliveredData?: VtuDeliveredData
   attempts: VtuRouterAttemptLog[]
 }
 
@@ -148,6 +149,7 @@ export async function executeVtuPurchase(
         providerUsed: candidate.providerKey,
         providerReference: result.providerReference ?? null,
         message: result.message,
+        deliveredData: result.deliveredData,
         attempts,
       }
     }

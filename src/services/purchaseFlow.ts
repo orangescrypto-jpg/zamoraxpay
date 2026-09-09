@@ -17,6 +17,7 @@ import { isFeatureEnabled } from "@/src/services/config"
 import { awardCashbackForOrder } from "@/src/services/cashback"
 import { maybeAwardReferralBonus } from "@/src/services/referral"
 import type { VtuServiceType } from "@/src/types"
+import type { VtuDeliveredData } from "@/src/services/providers/vtu/types"
 
 export interface PurchaseFlowParams {
   userId: string
@@ -37,6 +38,7 @@ export interface PurchaseFlowResult {
   chargedAmountKobo?: number
   newBalanceKobo?: number
   cashbackEarnedKobo?: number
+  deliveredData?: VtuDeliveredData
 }
 
 export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<PurchaseFlowResult> {
@@ -122,6 +124,7 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     status: routerResult.success ? "success" : "failed",
     providerUsed: routerResult.providerUsed,
     providerReference: routerResult.providerReference,
+    deliveredData: routerResult.deliveredData,
     attempts: routerResult.attempts,
     failureReason: routerResult.success ? undefined : routerResult.message,
   })
@@ -179,5 +182,6 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     chargedAmountKobo: pricing.chargeAmountKobo,
     newBalanceKobo,
     cashbackEarnedKobo,
+    deliveredData: routerResult.success ? routerResult.deliveredData : undefined,
   }
 }

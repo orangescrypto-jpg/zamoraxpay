@@ -91,6 +91,8 @@ export default function DashboardPage() {
   const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [canCheckInToday, setCanCheckInToday] = useState(false)
+  const [nextRewardKobo, setNextRewardKobo] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -111,6 +113,17 @@ export default function DashboardPage() {
         if (cancelled) return
 
         setBalanceKobo(balanceData.balanceKobo ?? 0)
+
+        // Independent of the above — a failure here shouldn't block
+        // balance/history from rendering, so it's fetched separately.
+        fetch("/api/daily-streak", { headers })
+          .then((res) => res.json())
+          .then((data) => {
+            if (cancelled) return
+            setCanCheckInToday(Boolean(data.canCheckInToday))
+            setNextRewardKobo(data.nextRewardKobo ?? 0)
+          })
+          .catch(() => { /* notice just stays hidden on failure */ })
 
         const orders: Order[] = historyData.orders ?? []
         const walletTransactions: WalletTx[] = historyData.walletTransactions ?? []
@@ -194,6 +207,22 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {canCheckInToday && (
+        <Link
+          href="/daily-streak"
+          className="mt-4 flex items-center gap-3 rounded-2xl border border-teal-200/70 bg-teal-50 px-4 py-3.5 text-sm text-teal-900 transition hover:bg-teal-100"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700">
+            <Gift className="h-4.5 w-4.5" />
+          </span>
+          <span className="flex-1">
+            Check in today to earn{" "}
+            <span className="font-semibold">{formatNaira(nextRewardKobo)}</span> and keep your streak going.
+          </span>
+          <ArrowRight className="h-4 w-4 shrink-0 text-teal-600" />
+        </Link>
+      )}
 
       {user && !user.hasTransactionPin && (
         <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200/70 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">

@@ -34,6 +34,7 @@ export default function WithdrawPage() {
   const [amount, setAmount] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [withdrawalEnabled, setWithdrawalEnabled] = useState(true)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -43,16 +44,19 @@ export default function WithdrawPage() {
 
   async function load() {
     const headers = await getAuthHeader()
-    const [withdrawRes, sourcesRes] = await Promise.all([
+    const [withdrawRes, sourcesRes, statusRes] = await Promise.all([
       fetch("/api/wallet/withdraw", { headers }),
       fetch("/api/wallet/funding-sources", { headers }),
+      fetch("/api/withdrawal-status"),
     ])
     const withdrawData = await withdrawRes.json()
     const sourcesData = await sourcesRes.json()
+    const statusData = await statusRes.json()
 
     setWithdrawableKobo(withdrawData.withdrawableBalanceKobo ?? 0)
     setHistory(withdrawData.withdrawals ?? [])
     setSources(sourcesData.sources ?? [])
+    setWithdrawalEnabled(statusData.enabled ?? true)
     if (sourcesData.sources?.length === 1) setSelectedAccount(sourcesData.sources[0].id)
   }
 
@@ -107,7 +111,11 @@ export default function WithdrawPage() {
         </p>
       </div>
 
-      {sources.length === 0 ? (
+      {!withdrawalEnabled ? (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          Withdrawals are temporarily unavailable. Please check back later.
+        </div>
+      ) : sources.length === 0 ? (
         <div className="mb-6 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
           You need to fund your wallet at least once before you can withdraw — withdrawals can only go to a bank
           account you&apos;ve previously funded from.

@@ -126,9 +126,8 @@ export default function RefundPage() {
         </div>
       ) : sources.length === 0 ? (
         <div className="mb-6 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-          Wallet funding errors: Deposits made to this platform are intended solely for airtime, data, and bill
-          payments. If you fund your wallet by mistake, refunds can only be processed back to the originating bank
-          account and may take up to 48 hours to clear.
+          You need to fund your wallet at least once before you can request a refund. Refunds can only go to a bank
+          account you&apos;ve previously funded from.
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="mb-8 space-y-4">

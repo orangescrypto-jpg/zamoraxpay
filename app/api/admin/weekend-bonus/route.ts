@@ -1,11 +1,10 @@
 // app/api/admin/weekend-bonus/route.ts
 // Lets an admin run the weekend bonus payout manually from the admin
-// panel, instead of only ever relying on the daily cron
-// (app/api/cron/weekend-bonus/route.ts). Both paths call the exact
-// same runWeekendBonusForToday() service function, so a manual run
-// behaves identically to a cron run — same flag/amount checks, same
-// per-user idempotency guard (a user already paid today's period
-// can't be paid again by a manual click).
+// panel. This is the only way the weekend bonus is triggered — there
+// is no automatic cron for it. POST calls runWeekendBonusForToday(),
+// which still enforces the 'weekend_bonus' feature flag, the
+// configured amount, and per-user idempotency (a user already paid
+// today's period can't be paid again by a second click).
 //
 // GET returns recent payout history so the admin panel can show
 // "last run" info without needing a separate endpoint.

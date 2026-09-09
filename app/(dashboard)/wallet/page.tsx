@@ -118,8 +118,8 @@ function WalletPageInner() {
     <div className="container max-w-md py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-heading font-bold text-secondary">Wallet</h1>
-        <Link href="/withdraw" className="text-sm font-medium text-primary hover:underline">
-          Withdraw →
+        <Link href="/refund" className="text-sm font-medium text-primary hover:underline">
+          Refund →
         </Link>
       </div>
 

@@ -8,7 +8,6 @@
 // referrals that never actually convert into real usage).
 
 import { d1Query } from "@/lib/d1"
-import { creditWallet } from "@/src/services/wallet"
 import { getSettingNumber } from "@/src/services/siteSettings"
 import { isFeatureEnabled } from "@/src/services/config"
 
@@ -16,9 +15,11 @@ import { isFeatureEnabled } from "@/src/services/config"
  * Call this after a successful order. Checks whether the purchasing
  * user was referred, whether this is their first successful order,
  * and whether that referral's bonus has already been paid — if all
- * clear, credits the referrer's wallet and marks the referral as
- * awarded. Safe to call on every successful order; it's a no-op past
- * the first qualifying purchase.
+ * clear, marks the referral as awarded (bonus_awarded = 1, qualified
+ * and locked in) but does NOT touch the wallet. The referrer claims
+ * it later from the Rewards page (see src/services/rewardsClaim.ts),
+ * which is what actually calls creditWallet(). Safe to call on every
+ * successful order; it's a no-op past the first qualifying purchase.
  */
 export async function maybeAwardReferralBonus(purchasingUserId: string, nativeDB?: any): Promise<void> {
   if (!(await isFeatureEnabled("referral_program", nativeDB))) return
@@ -43,17 +44,6 @@ export async function maybeAwardReferralBonus(purchasingUserId: string, nativeDB
 
   const bonusKobo = await getSettingNumber("referral_bonus_amount_kobo", 20000, nativeDB)
   if (bonusKobo <= 0) return
-
-  await creditWallet(
-    {
-      userId: referral.referrer_user_id,
-      amountKobo: bonusKobo,
-      type: "referral_bonus",
-      reference: `ZPREFB-${referral.id}`,
-      metadata: { referredUserId: purchasingUserId },
-    },
-    nativeDB,
-  )
 
   await d1Query(
     "UPDATE referrals SET bonus_awarded = 1, bonus_kobo = ?, awarded_at = datetime('now') WHERE id = ?",

@@ -41,6 +41,7 @@ export type WalletTransactionType =
   | "admin_adjustment"
   | "signup_bonus"
   | "weekend_bonus"
+  | "daily_streak"
 
 export interface WalletTransaction {
   id: string

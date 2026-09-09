@@ -21,16 +21,38 @@ export interface VtuPurchaseRequest {
   recipientName?: string // optional display name some providers accept for cable/electricity/betting
 }
 
+/**
+ * Data the provider hands back that the CUSTOMER needs to see or keep —
+ * as opposed to `raw`, which is for our own audit/debugging and is
+ * never shown to the user. Only exam_pin and electricity (token)
+ * purchases populate this today; every field is optional because
+ * providers vary in what they return, and some (see Pairgate) deliver
+ * this asynchronously via webhook rather than in the purchase response
+ * at all, in which case it's simply absent until a follow-up mechanism
+ * (see checkStatus / a future webhook receiver) fills it in.
+ */
+export interface VtuDeliveredData {
+  /** Exam PIN(s) — a purchase can be for more than one (quantity). */
+  pins?: { pin: string; serialNumber?: string }[]
+  /** Electricity prepaid token, plus optional units/receipt metadata some discos return. */
+  token?: string
+  units?: string
+  /** Free-text note for cases where delivery is confirmed-but-delayed, e.g. Pairgate's async flow. */
+  deliveryNote?: string
+}
+
 export interface VtuPurchaseResult {
   success: boolean
   providerReference?: string
   message: string
+  deliveredData?: VtuDeliveredData // customer-facing PIN/token data, when the provider returns it synchronously
   raw?: unknown // raw provider response, stored for audit/debugging
 }
 
 export interface VtuStatusResult {
   status: "pending" | "success" | "failed"
   message: string
+  deliveredData?: VtuDeliveredData // populated once a requery/webhook confirms async delivery
   raw?: unknown
 }
 

@@ -214,6 +214,71 @@ CREATE TABLE IF NOT EXISTS auto_reload_rules (
 
 CREATE INDEX IF NOT EXISTS idx_auto_reload_next_run ON auto_reload_rules(next_run_at, is_active);
 
+-- Bulk purchase — a user saves a named group of phone numbers once,
+-- then reuses it to buy airtime/data for everyone in the group in a
+-- single flow, instead of re-entering numbers every time.
+CREATE TABLE IF NOT EXISTS contact_batches (
+  id                TEXT PRIMARY KEY,
+  user_id           TEXT NOT NULL REFERENCES users(id),
+  name              TEXT NOT NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_batches_user ON contact_batches(user_id);
+
+CREATE TABLE IF NOT EXISTS contact_batch_numbers (
+  id                TEXT PRIMARY KEY,
+  batch_id          TEXT NOT NULL REFERENCES contact_batches(id),
+  phone             TEXT NOT NULL,        -- normalized 11-digit local format (0XXXXXXXXXX)
+  label             TEXT,                 -- optional per-number nickname
+  sort_order        INTEGER NOT NULL DEFAULT 0,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_batch_numbers_batch ON contact_batch_numbers(batch_id);
+
+-- One row per bulk purchase run — a parent record tying together the
+-- individual vtu_orders rows created for each number in the batch, so
+-- history/receipts can show "Bulk data — Family Group — 12 numbers"
+-- as one entry instead of 12 unrelated orders.
+CREATE TABLE IF NOT EXISTS bulk_purchase_runs (
+  id                TEXT PRIMARY KEY,
+  user_id           TEXT NOT NULL REFERENCES users(id),
+  batch_id          TEXT REFERENCES contact_batches(id), -- NULL if the batch was later deleted
+  batch_name_snapshot TEXT NOT NULL, -- captured at run time, survives batch deletion
+  service_type      TEXT NOT NULL,   -- 'airtime' | 'data'
+  network_or_biller TEXT,            -- data: the single network the whole run was bought on (plans are per-network); NULL for airtime, which auto-detects per number
+  plan_code         TEXT,            -- data plan code (airtime runs leave this NULL)
+  amount_kobo       INTEGER,         -- per-recipient airtime amount (NULL for data, which uses plan price)
+  total_numbers     INTEGER NOT NULL,
+  success_count     INTEGER NOT NULL DEFAULT 0,
+  failure_count     INTEGER NOT NULL DEFAULT 0,
+  total_charged_kobo INTEGER NOT NULL DEFAULT 0,
+  status            TEXT NOT NULL DEFAULT 'processing', -- 'processing' | 'completed' | 'completed_with_errors'
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_bulk_purchase_runs_user ON bulk_purchase_runs(user_id);
+
+-- Links each per-number result back to its parent run and to the
+-- underlying vtu_orders row (when one was created — a pre-flight
+-- validation failure, e.g. bad phone number, never reaches vtuOrders).
+CREATE TABLE IF NOT EXISTS bulk_purchase_items (
+  id                TEXT PRIMARY KEY,
+  run_id            TEXT NOT NULL REFERENCES bulk_purchase_runs(id),
+  phone             TEXT NOT NULL,
+  detected_network  TEXT,             -- network auto-detected for this number, if applicable
+  order_id          TEXT REFERENCES vtu_orders(id), -- NULL if it failed before an order could be created
+  status            TEXT NOT NULL,    -- 'success' | 'failed'
+  failure_reason    TEXT,
+  charged_kobo      INTEGER,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_bulk_purchase_items_run ON bulk_purchase_items(run_id);
+
 -- BVN confirmation — in-platform, independent of Zamorax Marketplace.
 -- Sensitive fields never stored raw; only a masked reference + result.
 CREATE TABLE IF NOT EXISTS reseller_bvn_verifications (

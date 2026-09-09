@@ -107,7 +107,7 @@ export default function RefundPage() {
           {withdrawableKobo === null ? "..." : formatNaira(withdrawableKobo)}
         </p>
         <p className="mt-2 text-xs text-white/50">
-          Deposited funds and referral bonuses only. Cashback can&apos;t be refunded, it can only be used for purchases.
+          Deposited funds only. Cashback and referral bonus can&apos;t be refunded, they can only be used for purchases.
         </p>
       </div>
 

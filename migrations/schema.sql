@@ -592,7 +592,8 @@ INSERT OR IGNORE INTO feature_flags (key, label, description, is_enabled) VALUES
   ('reseller_upgrade',     'Reseller/Wholesale Upgrade', 'Allow users to upgrade to wholesale pricing tier', 1),
   ('bvn_verification',     'BVN Verification',        'Require BVN confirmation for higher reseller limits', 1),
   ('low_balance_alerts',   'Low Balance Alerts',      'Notify users when wallet balance is low',             1),
-  ('marketplace_cross_promo', 'Marketplace Cross-Promotion', 'Show banners/prompts promoting Zamorax Marketplace', 1);
+  ('marketplace_cross_promo', 'Marketplace Cross-Promotion', 'Show banners/prompts promoting Zamorax Marketplace', 1),
+  ('airtime_to_cash', 'Airtime to Cash', 'Show the Airtime to Cash info page (off-platform exchange — no wallet transaction)', 1);
 
 
 -- =====================================================================
@@ -612,7 +613,10 @@ INSERT OR IGNORE INTO site_settings (key, label, description, value, value_type)
   ('withdrawal_fee_kobo', 'Withdrawal: Flat Fee', 'Flat fee deducted from every withdrawal payout, in kobo', '5000', 'number'),
   ('withdrawal_payout_method', 'Withdrawal: Payout Method', 'Either "manual" (admin sends transfer by hand) or "automatic" (admin approval triggers a Korapay/Paystack transfer)', 'manual', 'text'),
   ('referral_bonus_amount_kobo', 'Referral: Bonus Amount', 'Amount credited to both the referrer and the new user when a referral''s first purchase completes, in kobo', '20000', 'number'),
-  ('reseller_upgrade_fee_kobo', 'Reseller: Upgrade Fee', 'One-time fee deducted from a user''s wallet when they upgrade from retail to reseller tier, in kobo (e.g. 300000 = ₦3,000)', '300000', 'number');
+  ('reseller_upgrade_fee_kobo', 'Reseller: Upgrade Fee', 'One-time fee deducted from a user''s wallet when they upgrade from retail to reseller tier, in kobo (e.g. 300000 = ₦3,000)', '300000', 'number'),
+  ('airtime_to_cash_discount_percent', 'Airtime to Cash: Discount %', 'Percentage of airtime face value the user is paid in cash, shown on the info page (e.g. 80 = 80%)', '80', 'number'),
+  ('airtime_to_cash_contact_phone', 'Airtime to Cash: Contact Phone', 'Phone/WhatsApp number shown to users on the Airtime to Cash page — the exchange happens off-platform via this contact', '', 'text'),
+  ('airtime_to_cash_contact_email', 'Airtime to Cash: Contact Email', 'Email address shown to users on the Airtime to Cash page — the exchange happens off-platform via this contact', '', 'text');
 
 
 -- =====================================================================

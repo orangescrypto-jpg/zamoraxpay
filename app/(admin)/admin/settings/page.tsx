@@ -31,7 +31,19 @@ const GROUPS: { title: string; keys: string[] }[] = [
     title: "Airtime to Cash",
     keys: ["airtime_to_cash_discount_percent", "airtime_to_cash_contact_phone", "airtime_to_cash_contact_email"],
   },
+  {
+    title: "Daily Streak",
+    keys: ["daily_streak_enabled", "daily_streak_grace_days_per_week"],
+  },
 ]
+
+interface StreakTier {
+  id: string
+  dayFrom: number
+  dayTo: number | null
+  baseAmountKobo: number
+  stepAmountKobo: number
+}
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Record<string, SiteSetting>>({})
@@ -88,6 +100,242 @@ export default function AdminSettingsPage() {
           </div>
         </div>
       ))}
+
+      <StreakTiersSection />
+    </div>
+  )
+}
+
+function StreakTiersSection() {
+  const [tiers, setTiers] = useState<StreakTier[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<StreakTier | "new" | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function getAuthHeader() {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    return { Authorization: `Bearer ${session?.access_token}` }
+  }
+
+  async function load() {
+    setLoading(true)
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/admin/daily-streak/tiers", { headers })
+    const data = await res.json()
+    setTiers(data.tiers ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  async function handleSave(tier: StreakTier | Omit<StreakTier, "id">) {
+    setSaving(true)
+    setError(null)
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/admin/daily-streak/tiers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(tier),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) {
+      setError(data.error ?? "Save failed")
+      return
+    }
+    setTiers(data.tiers ?? [])
+    setEditing(null)
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this tier? This cannot be undone.")) return
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/admin/daily-streak/tiers", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ id }),
+    })
+    const data = await res.json()
+    if (res.ok) setTiers(data.tiers ?? [])
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-heading font-semibold text-secondary">Daily Streak: Reward Tiers</h2>
+        {editing === null && (
+          <button
+            onClick={() => setEditing("new")}
+            className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+          >
+            + Add Tier
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Loading tiers...</div>
+      ) : (
+        <div className="space-y-3">
+          {tiers.map((tier) =>
+            editing !== "new" && editing?.id === tier.id ? (
+              <TierForm
+                key={tier.id}
+                tier={tier}
+                saving={saving}
+                error={error}
+                onCancel={() => {
+                  setEditing(null)
+                  setError(null)
+                }}
+                onSave={handleSave}
+              />
+            ) : (
+              <div key={tier.id} className="rounded-lg border border-border bg-white p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-secondary">
+                    <span className="font-medium">
+                      Day {tier.dayFrom}
+                      {tier.dayTo === null ? "+" : `–${tier.dayTo}`}
+                    </span>
+                    <span className="ml-2 text-muted-foreground">
+                      ₦{(tier.baseAmountKobo / 100).toFixed(2)} base
+                      {tier.stepAmountKobo > 0 && `, +₦${(tier.stepAmountKobo / 100).toFixed(2)}/day`}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setEditing(tier)}
+                      className="rounded-md border border-border px-3 py-1 text-xs font-medium text-secondary"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(tier.id)}
+                      className="rounded-md border border-destructive px-3 py-1 text-xs font-medium text-destructive"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ),
+          )}
+
+          {editing === "new" && (
+            <TierForm
+              saving={saving}
+              error={error}
+              onCancel={() => {
+                setEditing(null)
+                setError(null)
+              }}
+              onSave={handleSave}
+            />
+          )}
+
+          {tiers.length === 0 && editing !== "new" && (
+            <p className="text-sm text-muted-foreground">No tiers configured yet.</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TierForm({
+  tier,
+  saving,
+  error,
+  onCancel,
+  onSave,
+}: {
+  tier?: StreakTier
+  saving: boolean
+  error: string | null
+  onCancel: () => void
+  onSave: (tier: StreakTier | Omit<StreakTier, "id">) => void
+}) {
+  const [dayFrom, setDayFrom] = useState(String(tier?.dayFrom ?? ""))
+  const [dayTo, setDayTo] = useState(tier?.dayTo === null || tier?.dayTo === undefined ? "" : String(tier.dayTo))
+  const [baseNaira, setBaseNaira] = useState(tier ? String(tier.baseAmountKobo / 100) : "")
+  const [stepNaira, setStepNaira] = useState(tier ? String(tier.stepAmountKobo / 100) : "0")
+
+  function handleSubmit() {
+    const payload = {
+      ...(tier ? { id: tier.id } : {}),
+      dayFrom: Number(dayFrom),
+      dayTo: dayTo === "" ? null : Number(dayTo),
+      baseAmountKobo: Math.round(parseFloat(baseNaira || "0") * 100),
+      stepAmountKobo: Math.round(parseFloat(stepNaira || "0") * 100),
+    }
+    onSave(payload as StreakTier)
+  }
+
+  return (
+    <div className="rounded-lg border border-primary bg-white p-4 space-y-3">
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-secondary">Day From</label>
+          <input
+            type="number"
+            min="1"
+            value={dayFrom}
+            onChange={(e) => setDayFrom(e.target.value)}
+            className="w-full rounded-md border border-border px-3 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-secondary">Day To (blank = forever)</label>
+          <input
+            type="number"
+            min="1"
+            value={dayTo}
+            onChange={(e) => setDayTo(e.target.value)}
+            placeholder="Open-ended"
+            className="w-full rounded-md border border-border px-3 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-secondary">Base Amount (₦)</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={baseNaira}
+            onChange={(e) => setBaseNaira(e.target.value)}
+            className="w-full rounded-md border border-border px-3 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-secondary">Step per Day (₦)</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={stepNaira}
+            onChange={(e) => setStepNaira(e.target.value)}
+            className="w-full rounded-md border border-border px-3 py-1.5 text-sm"
+          />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancel} className="rounded-md border border-border px-3 py-1 text-xs font-medium text-secondary">
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={saving || !dayFrom || !baseNaira}
+          className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
     </div>
   )
 }

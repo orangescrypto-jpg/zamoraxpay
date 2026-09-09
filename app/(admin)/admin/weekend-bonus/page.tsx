@@ -78,10 +78,9 @@ export default function AdminWeekendBonusPage() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        This normally runs automatically once a day via cron and only pays out on the configured
-        weekend days. Use the button below to trigger it manually instead of waiting for the cron —
-        for example, to pay it right now, or to catch up a day that was missed. It's safe to click
-        even if the cron already ran today: anyone already paid for today won't be paid twice.
+        This bonus is only ever paid when you click the button below — there's no automatic daily
+        job for it. It's safe to click more than once: anyone already paid for today won't be paid
+        twice.
       </p>
 
       <div className="rounded-lg border border-border bg-white p-4">

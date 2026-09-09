@@ -37,6 +37,19 @@ export function normalizeNgPhone(raw: string): string {
 }
 
 /**
+ * Basic structural validation for a Nigerian mobile number: exactly 11
+ * digits, starting with 070/080/090 (the three ranges NCC allocates
+ * mobile prefixes under — see NETWORK_PREFIXES above, which are all
+ * 070x/080x/090x). Does NOT check the number is a real, reachable
+ * line — only that it's shaped like one. Expects an already-normalized
+ * number (run normalizeNgPhone first if the input may have +234/234
+ * or formatting characters).
+ */
+export function isValidNgPhone(normalized: string): boolean {
+  return /^0(70|80|90)\d{8}$/.test(normalized)
+}
+
+/**
  * Returns the detected network for a Nigerian phone number, or null if
  * the number is too short or doesn't match any known prefix.
  */

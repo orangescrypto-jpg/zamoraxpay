@@ -138,34 +138,66 @@ export default function DashboardPage() {
     }
   }, [])
 
-  return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-primary">
-        Welcome back{user?.fullName ? `, ${user.fullName}` : ""}
-      </h1>
+  const firstName = user?.fullName?.split(" ")[0]
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
 
-      <div className="mt-6 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 p-6 text-white shadow-lg shadow-blue-900/10">
-        <div className="flex items-center gap-2 text-sm font-medium text-blue-100">
-          <Wallet className="h-4 w-4" />
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-8 sm:py-10">
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-secondary">{greeting}{firstName ? `, ${firstName}` : ""}</p>
+          <h1 className="mt-0.5 text-[1.65rem] font-semibold tracking-tight text-primary">
+            Your wallet
+          </h1>
+        </div>
+      </div>
+
+      {/* Balance card — the one bold move on this page */}
+      <div className="relative mt-5 overflow-hidden rounded-[20px] bg-[#0F1E4D] p-6 text-white shadow-[0_20px_40px_-16px_rgba(15,30,77,0.55)] sm:p-7">
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute -right-10 -top-14 h-56 w-56 opacity-[0.16]"
+          viewBox="0 0 200 200"
+        >
+          <circle cx="100" cy="100" r="99" fill="none" stroke="white" strokeWidth="1" />
+          <circle cx="100" cy="100" r="74" fill="none" stroke="white" strokeWidth="1" />
+          <circle cx="100" cy="100" r="49" fill="none" stroke="white" strokeWidth="1" />
+        </svg>
+
+        <div className="relative flex items-center gap-2 text-[13px] font-medium text-white/60">
+          <Wallet className="h-3.5 w-3.5" />
           Wallet balance
         </div>
-        <p className="mt-2 text-4xl font-bold tracking-tight">
-          {loading ? "…" : formatNaira(balanceKobo ?? 0)}
+        <p className="relative mt-2 font-[600] text-[2.5rem] leading-none tracking-tight tabular-nums sm:text-[2.75rem]">
+          {loading ? (
+            <span className="inline-block h-9 w-40 animate-pulse rounded-md bg-white/10 align-middle" />
+          ) : (
+            formatNaira(balanceKobo ?? 0)
+          )}
         </p>
-        <div className="mt-5 flex gap-3">
+
+        <div className="relative mt-6 flex items-center gap-2.5">
           <Link
             href="/wallet"
-            className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F1E4D] transition hover:bg-blue-50"
           >
             <Wallet className="h-4 w-4" />
             Fund wallet
+          </Link>
+          <Link
+            href="/rewards"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/[0.06] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.12]"
+          >
+            <Gift className="h-4 w-4" />
+            Rewards
           </Link>
         </div>
       </div>
 
       {user && !user.hasTransactionPin && (
-        <div className="mt-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200/70 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4.5 w-4.5 shrink-0 text-amber-500" />
           <p>
             You haven't set a transaction PIN yet.{" "}
             <Link href="/settings" className="font-semibold underline underline-offset-2">
@@ -176,21 +208,23 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold text-primary">Quick actions</h2>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mt-9">
+        <h2 className="text-[15px] font-semibold text-primary">Quick actions</h2>
+
+        {/* Horizontal scroll on mobile, wraps to a grid at wider widths */}
+        <div className="mt-3.5 -mx-4 flex gap-2.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-5 sm:gap-3 sm:overflow-visible sm:px-0">
           {QUICK_LINKS.map((link) => {
             const Icon = link.icon
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className="group flex flex-col items-center gap-2.5 rounded-xl border border-border bg-white px-4 py-5 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+                className="group flex w-[84px] shrink-0 flex-col items-center gap-2 rounded-2xl border border-border/70 bg-white px-2 py-4 text-center transition hover:border-blue-200 hover:shadow-[0_4px_16px_-6px_rgba(15,30,77,0.18)] sm:w-auto"
               >
-                <span className={`flex h-11 w-11 items-center justify-center rounded-full ${link.iconClass}`}>
+                <span className={`flex h-11 w-11 items-center justify-center rounded-full transition group-hover:scale-105 ${link.iconClass}`}>
                   <Icon className="h-5 w-5" />
                 </span>
-                <span className="text-sm font-medium text-secondary group-hover:text-primary">
+                <span className="text-[12.5px] font-medium leading-tight text-secondary group-hover:text-primary">
                   {link.label}
                 </span>
               </Link>
@@ -199,9 +233,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-8">
+      <div className="mt-9">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-primary">Recent transactions</h2>
+          <h2 className="text-[15px] font-semibold text-primary">Recent transactions</h2>
           <Link
             href="/history"
             className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
@@ -211,72 +245,86 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-white shadow-sm">
+        <div className="mt-3.5 overflow-hidden rounded-2xl border border-border/70 bg-white">
           {loading ? (
-            <p className="p-4 text-sm text-secondary">Loading…</p>
+            <div className="divide-y divide-border/70">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-3 p-4">
+                  <span className="h-9 w-9 shrink-0 animate-pulse rounded-full bg-gray-100" />
+                  <div className="flex-1 space-y-2">
+                    <span className="block h-3 w-32 animate-pulse rounded bg-gray-100" />
+                    <span className="block h-2.5 w-20 animate-pulse rounded bg-gray-100" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : activity.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 p-8 text-center">
-              <Clock className="h-8 w-8 text-gray-300" />
-              <p className="text-sm text-secondary">No transactions yet.</p>
+            <div className="flex flex-col items-center gap-2.5 px-6 py-12 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-50">
+                <Clock className="h-5 w-5 text-gray-300" />
+              </span>
+              <p className="text-sm text-secondary">No transactions yet — fund your wallet to get started.</p>
             </div>
           ) : (
-            activity.map((item) => {
-              if (item.kind === "order") {
-                const order = item.data
-                const { badge, icon: StatusIcon, iconClass } = statusStyle(order.status)
+            <div className="divide-y divide-border/70">
+              {activity.map((item) => {
+                if (item.kind === "order") {
+                  const order = item.data
+                  const { badge, icon: StatusIcon, iconClass } = statusStyle(order.status)
+                  return (
+                    <div key={item.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-gray-50/70">
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}>
+                        <StatusIcon className="h-4.5 w-4.5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13.5px] font-medium text-primary">
+                          {order.service_type} · {order.network_or_biller}
+                        </p>
+                        <p className="text-xs text-secondary">
+                          {new Date(order.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-[13.5px] font-medium tabular-nums text-primary">
+                          {formatNaira(order.amount_kobo)}
+                        </p>
+                        <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${badge}`}>
+                          {order.status}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                }
+
+                const tx = item.data
+                const isCredit = tx.direction === "credit"
                 return (
-                  <div key={item.id} className="flex items-center gap-3 p-4">
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}>
-                      <StatusIcon className="h-4.5 w-4.5" />
+                  <div key={item.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-gray-50/70">
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                        isCredit ? "text-emerald-600 bg-emerald-50" : "text-red-600 bg-red-50"
+                      }`}
+                    >
+                      {isCredit ? <ArrowDownToLine className="h-4.5 w-4.5" /> : <Wallet className="h-4.5 w-4.5" />}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-primary">
-                        {order.service_type} · {order.network_or_biller}
+                      <p className="truncate text-[13.5px] font-medium text-primary">
+                        {WALLET_LABELS[tx.type] ?? tx.type}
                       </p>
                       <p className="text-xs text-secondary">
-                        {new Date(order.created_at).toLocaleString()}
+                        {new Date(tx.created_at).toLocaleString()}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-sm font-medium text-primary">
-                        {formatNaira(order.amount_kobo)}
+                      <p className={`text-[13.5px] font-medium tabular-nums ${isCredit ? "text-emerald-700" : "text-primary"}`}>
+                        {isCredit ? "+" : "-"}
+                        {formatNaira(tx.amount_kobo)}
                       </p>
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${badge}`}>
-                        {order.status}
-                      </span>
                     </div>
                   </div>
                 )
-              }
-
-              const tx = item.data
-              const isCredit = tx.direction === "credit"
-              return (
-                <div key={item.id} className="flex items-center gap-3 p-4">
-                  <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-                      isCredit ? "text-emerald-600 bg-emerald-50" : "text-red-600 bg-red-50"
-                    }`}
-                  >
-                    {isCredit ? <ArrowDownToLine className="h-4.5 w-4.5" /> : <Wallet className="h-4.5 w-4.5" />}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-primary">
-                      {WALLET_LABELS[tx.type] ?? tx.type}
-                    </p>
-                    <p className="text-xs text-secondary">
-                      {new Date(tx.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className={`text-sm font-medium ${isCredit ? "text-emerald-700" : "text-primary"}`}>
-                      {isCredit ? "+" : "-"}
-                      {formatNaira(tx.amount_kobo)}
-                    </p>
-                  </div>
-                </div>
-              )
-            })
+              })}
+            </div>
           )}
         </div>
       </div>

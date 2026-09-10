@@ -11,6 +11,7 @@ import { getPaymentProviderCredentials } from "@/src/services/config"
 import { creditWallet } from "@/src/services/wallet"
 import { sendWalletFundedEmail } from "@/src/services/email"
 import { recordFundingSource, extractKorapayFundingSource } from "@/src/services/fundingSource"
+import { awardDepositBonusForFunding } from "@/src/services/depositBonus"
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
@@ -73,6 +74,12 @@ export async function POST(req: NextRequest) {
       recordFundingSource(userId, "korapay", fundingSource).catch((err) =>
         console.error("[korapay webhook] Funding source recording failed:", err),
       )
+
+      awardDepositBonusForFunding({
+        userId,
+        depositAmountKobo: amountKobo,
+        fundingReference: `ZPWF-KORAPAY-${eventId}`,
+      }).catch((err) => console.error("[korapay webhook] Deposit bonus award failed:", err))
 
       const userResult = await d1Query("SELECT email, phone FROM users WHERE id = ?", [userId])
       const user = userResult.results?.[0]

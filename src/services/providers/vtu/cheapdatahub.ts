@@ -5,10 +5,11 @@
 // Live base: https://www.cheapdatahub.ng/api/v1/resellers
 // Auth: Authorization: Bearer <API key>
 // Responses use status: "true" (string) on success, not "success".
-// Exam PIN quantity must be 1, 2, or 5 (enforced upstream — this
-// adapter always sends 1 until a quantity field exists on the shared
-// request type). meter_type is now read from req.meterType (defaults
-// to "prepaid" if unset) instead of being hardcoded.
+// Exam PIN quantity must be 1, 2, or 5 (enforced here via req.quantity,
+// rounded down to the nearest allowed value). product_id (req.planCode)
+// carries the pin type (registration vs. result-checker), mapped
+// per-provider via provider_plan_mappings. meter_type is read from
+// req.meterType (defaults to "prepaid" if unset).
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import type {
@@ -55,13 +56,12 @@ function buildBody(req: VtuPurchaseRequest) {
         cardnumber: req.recipient,
         phone: req.recipient,
       }
-    case "exam_pin":
-      // CheapDataHub only accepts quantity 1, 2, or 5. req.recipient
-      // carries the quantity for exam_pin (see purchaseFlow /
-      // route — recipient is set to "<quantity>x" upstream), so parse
-      // it back out here instead of hardcoding 1, which silently
-      // shorted every multi-PIN order to a single PIN before.
-      const requestedQty = parseInt(req.recipient, 10) || 1
+    case "exam_pin": {
+      // CheapDataHub only accepts quantity 1, 2, or 5. req.planCode
+      // here is the pin type ("registration" | "result_checker"),
+      // mapped per-provider via provider_plan_mappings to
+      // CheapDataHub's own product_id.
+      const requestedQty = req.quantity && req.quantity > 0 ? req.quantity : 1
       const allowedQty = [1, 2, 5]
       const quantity = allowedQty.includes(requestedQty)
         ? requestedQty
@@ -70,6 +70,7 @@ function buildBody(req: VtuPurchaseRequest) {
         product_id: req.planCode,
         quantity,
       }
+    }
     default:
       return {
         network_id: req.networkOrBiller,

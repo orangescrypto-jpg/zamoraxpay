@@ -1,0 +1,33 @@
+name: Fetch Pairgate Plans
+
+# Runs on demand from the Actions tab — no schedule, so it never
+# fires unexpectedly or racks up minutes you didn't ask for.
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch-plans:
+    runs-on: ubuntu-latest
+    # v3 of the script retries on rate limits with backoff, so a full
+    # run can take several minutes — give it plenty of room.
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run fetch script
+        env:
+          PAIRGATE_API_KEY: ${{ secrets.PAIRGATE_API_KEY }}
+        run: node fetch-pairgate-plans.js > pairgate-plans.txt
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: pairgate-plans
+          path: pairgate-plans.txt
+          retention-days: 7

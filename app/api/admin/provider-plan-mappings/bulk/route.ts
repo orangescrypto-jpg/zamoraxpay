@@ -17,7 +17,7 @@ import { d1Query } from "@/lib/db"
 import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
 
-const VALID_SERVICE_TYPES: VtuServiceType[] = ["data", "cable", "exam_pin", "electricity"]
+const VALID_SERVICE_TYPES: VtuServiceType[] = ["data", "cable", "exam_pin", "epin", "electricity"]
 
 const REQUIRED_HEADERS = [
   "service_type",

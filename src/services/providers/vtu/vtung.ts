@@ -21,7 +21,7 @@
 //   GET  /api/v2/variations/tv?service_id=  (no auth)
 //   POST /api/v2/electricity  { request_id, customer_id, service_id, variation_id: "prepaid"|"postpaid", amount }
 //   POST /api/v2/betting      { request_id, customer_id, service_id, amount }
-//   POST /api/v2/epins        { request_id, service_id, value, quantity }  (exam pin / recharge card printing — NOT exam checker pins)
+//   POST /api/v2/epins        { request_id, service_id, value, quantity }
 //   POST /api/v2/requery      { request_id }
 // service_id values differ per service type (network slug for
 // airtime/data; "dstv"/"gotv"/"startimes"/"showmax" for cable;
@@ -29,8 +29,22 @@
 // like "Bet9ja" for betting — passed through as networkOrBiller).
 //
 // Note: VTU.ng's public API does not offer WAEC/NECO/NABTEB exam
-// checker pins — only network recharge-card ePINs — so exam_pin is
-// NOT in supportsServices below (was incorrectly claimed before).
+// checker pins — so exam_pin is NOT in supportsServices below.
+// It DOES offer network recharge-card ePINs (MTN/Glo/Airtel/9mobile),
+// via /api/v2/epins — mapped to our own "epin" service type (distinct
+// from "exam_pin"), which IS in supportsServices below:
+//   service_id: network slug (mtn/airtel/glo/9mobile) — sent as
+//     req.networkOrBiller.toLowerCase(), same as airtime/data.
+//   value: denomination — one of 100 / 200 / 500 (VTU.ng-enforced enum)
+//     — carried in req.planCode as a string, same slot exam_pin uses
+//     for its pin-type. Admins configure allowed denominations via
+//     pricing/provider_plan_mappings, same pattern as exam_pin.
+//   quantity: 1–40 PINs per request — req.quantity, same field
+//     exam_pin already uses.
+// Response shape on completion carries an `epins` array:
+//   [{ amount, pin, serial, instruction }, ...]
+// — mapped into VtuDeliveredData.pins below the same way exam_pin
+// PINs already are.
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import type {
@@ -48,7 +62,13 @@ const SERVICE_ENDPOINT: Record<string, string> = {
   cable: "/api/v2/tv",
   electricity: "/api/v2/electricity",
   betting: "/api/v2/betting",
+  epin: "/api/v2/epins",
 }
+
+// VTU.ng only accepts these three denominations for ePINs — enforced
+// here too so a bad admin-configured planCode fails fast with a clear
+// message instead of a confusing provider-side invalid_value error.
+const VALID_EPIN_VALUES = new Set(["100", "200", "500"])
 
 async function getToken(baseUrl: string, credentials: VtuProviderCredentials): Promise<string | null> {  const username = credentials.username || process.env.VTUNG_USERNAME
   const password = credentials.password || process.env.VTUNG_PASSWORD
@@ -111,9 +131,34 @@ function buildBody(req: VtuPurchaseRequest): Record<string, unknown> {
         service_id: req.networkOrBiller,
         amount: req.amountKobo / 100,
       }
+    case "epin":
+      return {
+        request_id: requestId,
+        service_id: req.networkOrBiller.toLowerCase(),
+        value: Number(req.planCode),
+        quantity: req.quantity && req.quantity > 0 ? req.quantity : 1,
+      }
     default:
       return { request_id: requestId }
   }
+}
+
+// epins responses carry a `data.epins` array of
+// { amount, pin, serial, instruction } once completed (null while
+// still processing) — separate shape from the token/units extraction
+// used for electricity, so it's its own helper rather than overloading
+// extractDeliveredData above.
+function extractEpinData(json: any): VtuDeliveredData | undefined {
+  const epins = json?.data?.epins
+  if (Array.isArray(epins) && epins.length > 0) {
+    return {
+      pins: epins.map((e: any) => ({
+        pin: e.pin ?? e.Pin,
+        serialNumber: e.serial ?? e.Serial,
+      })),
+    }
+  }
+  return undefined
 }
 
 // VTU.ng's electricity response docs aren't public enough to pin an
@@ -133,7 +178,7 @@ function extractDeliveredData(json: any): VtuDeliveredData | undefined {
 export const vtungAdapter: IVtuProviderAdapter = {
   key: "vtung",
   label: "VTU.ng",
-  supportsServices: ["airtime", "data", "cable", "electricity", "betting"],
+  supportsServices: ["airtime", "data", "cable", "electricity", "betting", "epin"],
 
   async purchase(req: VtuPurchaseRequest, credentials: VtuProviderCredentials): Promise<VtuPurchaseResult> {
     const baseUrl = credentials.baseUrl || process.env.VTUNG_BASE_URL || "https://vtu.ng/wp-json"
@@ -141,6 +186,12 @@ export const vtungAdapter: IVtuProviderAdapter = {
 
     if (!endpoint) {
       return { success: false, message: `VTU.ng does not support service type: ${req.serviceType}` }
+    }
+    if (req.serviceType === "epin" && !VALID_EPIN_VALUES.has(String(req.planCode))) {
+      return {
+        success: false,
+        message: `VTU.ng ePINs only support denominations of ₦100, ₦200, or ₦500 (got "${req.planCode}")`,
+      }
     }
 
     const token = await getToken(baseUrl, credentials)
@@ -179,7 +230,12 @@ export const vtungAdapter: IVtuProviderAdapter = {
           success: true,
           providerReference: data?.request_id ?? req.internalReference,
           message: json?.message ?? "Purchase successful via VTU.ng",
-          deliveredData: req.serviceType === "electricity" ? extractDeliveredData(json) : undefined,
+          deliveredData:
+            req.serviceType === "electricity"
+              ? extractDeliveredData(json)
+              : req.serviceType === "epin"
+                ? extractEpinData(json)
+                : undefined,
           raw: json,
         }
       }
@@ -226,7 +282,12 @@ export const vtungAdapter: IVtuProviderAdapter = {
           : raw === "refunded" || raw === "cancelled" || raw === "failed"
             ? "failed"
             : "pending"
-      return { status, message: json?.message ?? "", deliveredData: extractDeliveredData(json), raw: json }
+      // checkStatus only gets the reference, not the original
+      // serviceType, so — same pattern as vtpass.ts's checkStatus —
+      // try both extraction shapes; the fields (token/units vs pins)
+      // don't collide, so this is safe.
+      const deliveredData = extractDeliveredData(json) ?? extractEpinData(json)
+      return { status, message: json?.message ?? "", deliveredData, raw: json }
     } catch (err) {
       return { status: "failed", message: err instanceof Error ? err.message : "Status check failed" }
     }

@@ -88,7 +88,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     sets.push("updated_at = datetime('now')")
     values.push(id)
 
-    await d1Query(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`, values)
+    try {
+      await d1Query(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`, values)
+    } catch (dbErr) {
+      // Same UNIQUE(phone) constraint signup relies on — surface it as
+      // a friendly message instead of a raw SQLite error string.
+      const message =
+        dbErr instanceof Error && dbErr.message.includes("UNIQUE constraint failed: users.phone")
+          ? "This phone number is already registered to another account."
+          : "Update failed"
+      return NextResponse.json({ error: message }, { status: 409 })
+    }
 
     return NextResponse.json({ success: true })
   } catch (err) {

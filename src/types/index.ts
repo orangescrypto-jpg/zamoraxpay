@@ -62,7 +62,8 @@ export type VtuServiceType =
   | "data"
   | "cable"
   | "electricity"
-  | "exam_pin"
+  | "exam_pin" // WAEC/NECO/NABTEB-style exam checker/registration PINs
+  | "epin" // network recharge-card PINs (MTN/Glo/Airtel/9mobile) — distinct product from exam_pin
   | "betting"
 
 export interface VtuOrder {

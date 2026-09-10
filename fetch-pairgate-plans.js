@@ -6,11 +6,10 @@
 // providers — and prints clean tables so you can copy straight into
 // the Provider Plan Mappings admin page.
 //
-// v2: every failed call now prints WHY (status code + response body)
-// instead of silently vanishing, requests are spaced further apart
-// to avoid rate-limiting, and a couple of endpoint path variants are
-// tried for cable/electricity/exam-pins in case the first guess is
-// wrong for your account tier.
+// v3: retries on 429 with increasing backoff instead of giving up —
+// v2 showed Pairgate's rate limit needs ~4s+ between calls and, once
+// tripped, blocks at the Cloudflare level for a stretch. This version
+// waits it out and retries rather than losing the request.
 
 const API_KEY = process.env.PAIRGATE_API_KEY
 if (!API_KEY) {
@@ -29,18 +28,23 @@ const HEADERS = {
   "Cache-Control": "no-cache",
 }
 
-// Slower pacing than v1 — Pairgate's rate limit silently dropped most
-// of the previous run's requests. 1.2s between calls is conservative
-// but reliable.
-const DELAY_MS = 1200
+// Baseline delay between successful calls. Pairgate's own 429 message
+// asked for as little as 1s, but the Cloudflare-level block that
+// follows repeated hits needs much more room — so this is deliberately
+// conservative. The whole run will take several minutes; that's fine,
+// it's a one-time catalog pull.
+const DELAY_MS = 4000
+const MAX_RETRIES = 5
 
 async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-// Returns { ok, data, status, raw } instead of just data-or-null, so
-// callers can print the actual failure reason instead of nothing.
-async function getJSON(path) {
+// Returns { ok, data, status, raw }. On a 429, retries with growing
+// backoff (10s, 20s, 30s...) up to MAX_RETRIES before giving up on
+// that one request — so a transient rate-limit doesn't lose data
+// the way it did in v2.
+async function getJSON(path, attempt = 1) {
   try {
     const res = await fetch(`${BASE}${path}`, { headers: HEADERS })
     const text = await res.text()
@@ -48,7 +52,17 @@ async function getJSON(path) {
     try {
       json = JSON.parse(text)
     } catch {
-      // response wasn't JSON at all (e.g. an HTML error page)
+      // response wasn't JSON at all (e.g. Cloudflare's HTML block page)
+    }
+
+    if (res.status === 429) {
+      if (attempt >= MAX_RETRIES) {
+        return { ok: false, status: 429, raw: "gave up after max retries" }
+      }
+      const backoff = 10000 * attempt // 10s, 20s, 30s, 40s
+      console.log(`    (rate limited, waiting ${backoff / 1000}s before retry ${attempt + 1}/${MAX_RETRIES}...)`)
+      await sleep(backoff)
+      return getJSON(path, attempt + 1)
     }
 
     if (!res.ok) {

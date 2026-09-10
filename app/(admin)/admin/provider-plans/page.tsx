@@ -24,7 +24,15 @@ interface PlanMapping {
 const NETWORKS_OR_BILLERS: Record<string, string[]> = {
   data: ["MTN", "Airtel", "Glo", "9mobile"],
   cable: ["DSTV", "GOtv", "StarTimes"],
+  exam_pin: ["WAEC", "NECO", "JAMB", "NABTEB"],
 }
+
+// exam_pin's "plan code" isn't admin-free-text like data bundles — it's a
+// fixed two-value enum ("registration" | "result_checker") that the
+// buy-flow page (app/(dashboard)/services/exam-pin/page.tsx) and the
+// pricing rule must match exactly. Offer it as a picker instead of free
+// text for this service type to prevent typos silently breaking routing.
+const EXAM_PIN_PLAN_CODES = ["registration", "result_checker"]
 
 const EMPTY_FORM = {
   serviceType: "data",
@@ -135,12 +143,18 @@ export default function ProviderPlanMappingsPage() {
               onChange={(e) => {
                 const serviceType = e.target.value
                 const options = NETWORKS_OR_BILLERS[serviceType] ?? []
-                setForm({ ...form, serviceType, networkOrBiller: options[0] ?? "" })
+                setForm({
+                  ...form,
+                  serviceType,
+                  networkOrBiller: options[0] ?? "",
+                  planCode: serviceType === "exam_pin" ? EXAM_PIN_PLAN_CODES[0] : "",
+                })
               }}
               className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm"
             >
               <option value="data">Data</option>
               <option value="cable">Cable</option>
+              <option value="exam_pin">Exam PIN</option>
             </select>
           </label>
           <label className="text-xs text-muted-foreground">
@@ -170,21 +184,45 @@ export default function ProviderPlanMappingsPage() {
           </label>
           <label className="text-xs text-muted-foreground">
             OUR plan code (matches Pricing Rules)
-            <input
-              value={form.planCode}
-              onChange={(e) => setForm({ ...form, planCode: e.target.value })}
-              className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm"
-              placeholder="mtn-200mb-1day"
-            />
+            {form.serviceType === "exam_pin" ? (
+              <select
+                value={form.planCode}
+                onChange={(e) => setForm({ ...form, planCode: e.target.value })}
+                className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm"
+              >
+                {EXAM_PIN_PLAN_CODES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={form.planCode}
+                onChange={(e) => setForm({ ...form, planCode: e.target.value })}
+                className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm"
+                placeholder="mtn-200mb-1day"
+              />
+            )}
           </label>
           <label className="text-xs text-muted-foreground">
-            Provider's plan ID / variation ID
+            Provider's plan ID / variation ID / provider_id
             <input
               value={form.providerPlanId}
               onChange={(e) => setForm({ ...form, providerPlanId: e.target.value })}
               className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm"
-              placeholder="e.g. 45 (Pairgate plan_id)"
+              placeholder={
+                form.serviceType === "exam_pin"
+                  ? "VTpass/CheapDataHub: variation_code or product_id (e.g. waec-3). Pairgate: full provider_id (e.g. waec-result-checker)"
+                  : "e.g. 45 (Pairgate plan_id)"
+              }
             />
+            {form.serviceType === "exam_pin" && (
+              <span className="mt-1 block text-[11px] text-muted-foreground/80">
+                For Pairgate, whose /education/purchase has no separate plan field, this value
+                overrides the exam body sent as provider_id (e.g. "waec-registration" vs
+                "waec-result-checker") — not the plan code. For VTpass/CheapDataHub it overrides
+                their plan/variation/product ID as usual.
+              </span>
+            )}
           </label>
           <label className="text-xs text-muted-foreground">
             Provider's cost (₦)

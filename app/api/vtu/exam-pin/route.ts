@@ -8,17 +8,23 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.error
 
   try {
-    const { examBody, quantity, transactionPin } = await req.json()
-    if (!examBody || !quantity || !transactionPin) {
-      return NextResponse.json({ error: "examBody, quantity, and transactionPin are required" }, { status: 400 })
+    const { examBody, pinType, quantity, transactionPin } = await req.json()
+    if (!examBody || !pinType || !quantity || !transactionPin) {
+      return NextResponse.json(
+        { error: "examBody, pinType, quantity, and transactionPin are required" },
+        { status: 400 },
+      )
+    }
+    if (pinType !== "registration" && pinType !== "result_checker") {
+      return NextResponse.json({ error: "pinType must be 'registration' or 'result_checker'" }, { status: 400 })
     }
 
     const result = await runPurchaseFlow({
       userId: auth.uid,
       serviceType: "exam_pin",
       networkOrBiller: examBody, // 'WAEC' | 'NECO' | 'JAMB' | 'NABTEB'
-      recipient: `${quantity}x`, // no per-user recipient number for PINs; quantity is the "recipient" field
-      planCode: String(quantity), // carried through to provider adapters as quantity — NOT used for pricing, see purchaseFlow.ts
+      recipient: "self", // no per-user recipient number for PINs
+      planCode: pinType, // "registration" | "result_checker" — real plan code now, drives pricing + provider plan mapping
       quantity,
       transactionPin,
     })

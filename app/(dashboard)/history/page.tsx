@@ -52,6 +52,7 @@ const WALLET_TYPE_LABELS: Record<string, string> = {
   referral_bonus: "Referral Bonus",
   reseller_upgrade: "Reseller Upgrade",
   admin_adjustment: "Adjustment",
+  deposit_bonus: "Deposit Bonus",
 }
 
 function statusColor(status: string) {

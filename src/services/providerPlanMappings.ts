@@ -77,6 +77,27 @@ export async function listPlanMappings(
   return (result.results ?? []).map(rowToMapping)
 }
 
+// Look up a mapping by its natural key (the same 4 columns the
+// UNIQUE constraint covers) — used to detect, before writing, whether
+// a save/upload is about to overwrite an existing row rather than
+// create a new one, so the UI can tell the admin which happened.
+export async function findMappingByNaturalKey(
+  serviceType: VtuServiceType,
+  networkOrBiller: string,
+  planCode: string,
+  providerKey: string,
+  nativeDB?: any,
+): Promise<ProviderPlanMapping | null> {
+  const result = await d1Query(
+    `SELECT * FROM provider_plan_mappings
+     WHERE service_type = ? AND network_or_biller = ? AND plan_code = ? AND provider_key = ?`,
+    [serviceType, networkOrBiller, planCode, providerKey],
+    nativeDB,
+  )
+  const row = (result.results ?? [])[0]
+  return row ? rowToMapping(row) : null
+}
+
 export async function upsertPlanMapping(
   params: {
     id?: string

@@ -63,6 +63,8 @@ export default function ProviderPlanMappingsPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const [csvText, setCsvText] = useState("")
   const [uploadingCsv, setUploadingCsv] = useState(false)
@@ -211,6 +213,44 @@ export default function ProviderPlanMappingsPage() {
     if (!confirm(`Remove ${m.providerKey} mapping for ${m.networkOrBiller} ${m.planCode}?`)) return
     const headers = await getAuthHeader()
     await fetch(`/api/admin/provider-plan-mappings?id=${m.id}`, { method: "DELETE", headers })
+    load()
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllInGroup(group: PlanMapping[]) {
+    const groupIds = group.map((m) => m.id)
+    const allSelected = groupIds.every((id) => selectedIds.has(id))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        groupIds.forEach((id) => next.delete(id))
+      } else {
+        groupIds.forEach((id) => next.add(id))
+      }
+      return next
+    })
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Remove ${selectedIds.size} selected mapping${selectedIds.size === 1 ? "" : "s"}? This cannot be undone.`)) return
+    setBulkDeleting(true)
+    const headers = await getAuthHeader()
+    await fetch("/api/admin/provider-plan-mappings", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    })
+    setBulkDeleting(false)
+    setSelectedIds(new Set())
     load()
   }
 
@@ -438,13 +478,41 @@ export default function ProviderPlanMappingsPage() {
         <p className="text-sm text-muted-foreground">No plan mappings yet.</p>
       ) : (
         <div className="max-w-3xl space-y-4">
+          {selectedIds.size > 0 && (
+            <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border border-primary bg-primary/5 px-4 py-2 text-sm">
+              <span className="font-medium text-secondary">{selectedIds.size} selected</span>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setSelectedIds(new Set())} className="text-xs text-muted-foreground hover:underline">
+                  Clear
+                </button>
+                <button
+                  onClick={bulkDelete}
+                  disabled={bulkDeleting}
+                  className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                >
+                  {bulkDeleting ? "Deleting..." : "Delete selected"}
+                </button>
+              </div>
+            </div>
+          )}
           {Object.entries(grouped).map(([key, group]) => {
             const [serviceType, networkOrBiller, planCode] = key.split("|")
+            const groupIds = group.map((m) => m.id)
+            const allSelected = groupIds.every((id) => selectedIds.has(id))
             return (
               <div key={key} className="rounded-lg border border-border bg-white p-4">
-                <p className="mb-2 text-sm font-medium text-secondary">
-                  {serviceType} · {networkOrBiller} · {planCode}
-                </p>
+                <div className="mb-2 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() => toggleSelectAllInGroup(group)}
+                    className="h-4 w-4 rounded border-border"
+                    aria-label={`Select all mappings for ${serviceType} ${networkOrBiller} ${planCode}`}
+                  />
+                  <p className="text-sm font-medium text-secondary">
+                    {serviceType} · {networkOrBiller} · {planCode}
+                  </p>
+                </div>
                 <div className="space-y-1">
                   {group
                     .slice()
@@ -454,7 +522,13 @@ export default function ProviderPlanMappingsPage() {
                         key={m.id}
                         className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-sm"
                       >
-                        <span>
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(m.id)}
+                            onChange={() => toggleSelected(m.id)}
+                            className="h-4 w-4 rounded border-border"
+                          />
                           {idx === 0 && <span className="mr-1 text-accent">★ cheapest</span>}
                           {m.providerKey}
                           {m.serviceType === "electricity" ? "" : ` — plan id ${m.providerPlanId}`}

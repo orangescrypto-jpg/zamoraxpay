@@ -26,6 +26,17 @@ const GROUPS: { title: string; keys: string[] }[] = [
   },
   { title: "WhatsApp Support", keys: ["whatsapp_support_enabled", "whatsapp_support_number"] },
   { title: "Signup Bonus", keys: ["signup_bonus_amount_kobo"] },
+  {
+    title: "Deposit Bonus",
+    keys: [
+      "deposit_bonus_enabled",
+      "deposit_bonus_min_amount_kobo",
+      "deposit_bonus_type",
+      "deposit_bonus_percentage",
+      "deposit_bonus_flat_amount_kobo",
+      "deposit_bonus_max_amount_kobo",
+    ],
+  },
   { title: "Weekend Bonus", keys: ["weekend_bonus_amount_kobo", "weekend_bonus_days"] },
   {
     title: "Airtime to Cash",
@@ -393,7 +404,7 @@ function SettingField({
           <option value="true">On</option>
           <option value="false">Off</option>
         </select>
-      ) : setting.key === "cashback_type" ? (
+      ) : setting.key === "cashback_type" || setting.key === "deposit_bonus_type" ? (
         <select
           value={value}
           onChange={(e) => setValue(e.target.value)}

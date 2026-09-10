@@ -17,6 +17,7 @@ import { korapayAdapter } from "@/src/services/providers/payment/korapay"
 import { getPaymentProviderCredentials } from "@/src/services/config"
 import { creditWallet } from "@/src/services/wallet"
 import { recordFundingSource, extractKorapayFundingSource } from "@/src/services/fundingSource"
+import { awardDepositBonusForFunding } from "@/src/services/depositBonus"
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req)
@@ -61,6 +62,12 @@ export async function GET(req: NextRequest) {
   recordFundingSource(auth.uid, "korapay", fundingSource).catch((err) =>
     console.error("[wallet/fund/verify] Funding source recording failed:", err),
   )
+
+  awardDepositBonusForFunding({
+    userId: auth.uid,
+    depositAmountKobo: result.amountKobo,
+    fundingReference: eventReference,
+  }).catch((err) => console.error("[wallet/fund/verify] Deposit bonus award failed:", err))
 
   return NextResponse.json({ status: "success", newBalanceKobo })
 }

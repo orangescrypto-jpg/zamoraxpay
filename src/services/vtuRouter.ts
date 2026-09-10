@@ -83,6 +83,10 @@ async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promi
   // actually have a planCode to look up:
   //   - data, cable: admin-defined bundle/package codes
   //   - exam_pin: pin type ("registration" / "result_checker")
+  //   - epin: recharge-card denomination ("100" / "200" / "500") —
+  //     same neutral treatment as exam_pin: whichever enabled provider
+  //     has the cheapest mapped cost for that denomination wins, with
+  //     no epin-specific branching anywhere in this file.
   //   - electricity: meter type ("prepaid" / "postpaid") — optional;
   //     most admins leave this unset and electricity falls through to
   //     the priority-order fallback below, same as before.
@@ -91,6 +95,7 @@ async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promi
     (req.serviceType === "data" ||
       req.serviceType === "cable" ||
       req.serviceType === "exam_pin" ||
+      req.serviceType === "epin" ||
       req.serviceType === "electricity")
   ) {
     const options = await getPlanProviderOptions(req.serviceType, req.networkOrBiller, req.planCode, nativeDB)

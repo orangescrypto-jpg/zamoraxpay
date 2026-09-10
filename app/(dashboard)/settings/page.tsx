@@ -8,6 +8,7 @@ import { AuthService } from "@/src/services/auth"
 export default function SettingsPage() {
   const { user } = useAuth()
   const [fullName, setFullName] = useState(user?.fullName ?? "")
+  const [phone, setPhone] = useState(user?.phone ?? "")
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileMessage, setProfileMessage] = useState<string | null>(null)
 
@@ -20,7 +21,7 @@ export default function SettingsPage() {
     setSavingProfile(true)
     setProfileMessage(null)
     try {
-      await AuthService.updateProfile(user.id, { fullName })
+      await AuthService.updateProfile(user.id, { fullName, phone })
       setProfileMessage("Profile updated")
     } catch (err) {
       setProfileMessage(err instanceof Error ? err.message : "Update failed")
@@ -58,7 +59,14 @@ export default function SettingsPage() {
           onChange={(e) => setFullName(e.target.value)}
           className="mb-3 w-full rounded-md border border-border px-3 py-2 text-sm"
         />
-        <p className="mb-3 text-xs text-muted-foreground">Phone: {user?.phone}</p>
+        <label className="mb-1 block text-sm font-medium text-secondary">Phone number</label>
+        <input
+          type="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="08012345678"
+          className="mb-3 w-full rounded-md border border-border px-3 py-2 text-sm"
+        />
         <button
           onClick={handleSaveProfile}
           disabled={savingProfile}

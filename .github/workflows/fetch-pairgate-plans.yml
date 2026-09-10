@@ -8,6 +8,9 @@ on:
 jobs:
   fetch-plans:
     runs-on: ubuntu-latest
+    # v3 of the script retries on rate limits with backoff, so a full
+    # run can take several minutes — give it plenty of room.
+    timeout-minutes: 20
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4

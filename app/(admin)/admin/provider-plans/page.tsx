@@ -25,14 +25,26 @@ const NETWORKS_OR_BILLERS: Record<string, string[]> = {
   data: ["MTN", "Airtel", "Glo", "9mobile"],
   cable: ["DSTV", "GOtv", "StarTimes"],
   exam_pin: ["WAEC", "NECO", "JAMB", "NABTEB"],
+  electricity: ["IKEDC", "EKEDC", "AEDC", "PHEDC", "IBEDC", "KEDCO"],
 }
 
-// exam_pin's "plan code" isn't admin-free-text like data bundles — it's a
-// fixed two-value enum ("registration" | "result_checker") that the
-// buy-flow page (app/(dashboard)/services/exam-pin/page.tsx) and the
-// pricing rule must match exactly. Offer it as a picker instead of free
-// text for this service type to prevent typos silently breaking routing.
-const EXAM_PIN_PLAN_CODES = ["registration", "result_checker"]
+// Some services have a fixed, small set of valid plan_code values
+// rather than admin-free-text plan codes (like data bundle codes). For
+// these, offer a picker instead of free text — must match
+// app/(admin)/admin/pricing/page.tsx's FIXED_PLAN_CODES exactly, since
+// this is the same value a pricing rule and the router's
+// getPlanProviderOptions lookup key on.
+const FIXED_PLAN_CODES: Record<string, string[]> = {
+  exam_pin: ["registration", "result_checker"],
+  electricity: ["prepaid", "postpaid"],
+}
+
+const PLAN_CODE_LABELS: Record<string, string> = {
+  registration: "Registration PIN",
+  result_checker: "Result Checker PIN",
+  prepaid: "Prepaid",
+  postpaid: "Postpaid",
+}
 
 const EMPTY_FORM = {
   serviceType: "data",
@@ -143,11 +155,12 @@ export default function ProviderPlanMappingsPage() {
               onChange={(e) => {
                 const serviceType = e.target.value
                 const options = NETWORKS_OR_BILLERS[serviceType] ?? []
+                const fixedCodes = FIXED_PLAN_CODES[serviceType]
                 setForm({
                   ...form,
                   serviceType,
                   networkOrBiller: options[0] ?? "",
-                  planCode: serviceType === "exam_pin" ? EXAM_PIN_PLAN_CODES[0] : "",
+                  planCode: fixedCodes ? fixedCodes[0] : "",
                 })
               }}
               className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm"
@@ -155,6 +168,7 @@ export default function ProviderPlanMappingsPage() {
               <option value="data">Data</option>
               <option value="cable">Cable</option>
               <option value="exam_pin">Exam PIN</option>
+              <option value="electricity">Electricity</option>
             </select>
           </label>
           <label className="text-xs text-muted-foreground">
@@ -184,14 +198,14 @@ export default function ProviderPlanMappingsPage() {
           </label>
           <label className="text-xs text-muted-foreground">
             OUR plan code (matches Pricing Rules)
-            {form.serviceType === "exam_pin" ? (
+            {FIXED_PLAN_CODES[form.serviceType] ? (
               <select
                 value={form.planCode}
                 onChange={(e) => setForm({ ...form, planCode: e.target.value })}
                 className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm"
               >
-                {EXAM_PIN_PLAN_CODES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                {FIXED_PLAN_CODES[form.serviceType].map((c) => (
+                  <option key={c} value={c}>{PLAN_CODE_LABELS[c] ?? c}</option>
                 ))}
               </select>
             ) : (
@@ -204,7 +218,9 @@ export default function ProviderPlanMappingsPage() {
             )}
           </label>
           <label className="text-xs text-muted-foreground">
-            Provider's plan ID / variation ID / provider_id
+            {form.serviceType === "electricity"
+              ? "Provider priority marker (cost-ranking only)"
+              : "Provider's plan ID / variation ID / provider_id"}
             <input
               value={form.providerPlanId}
               onChange={(e) => setForm({ ...form, providerPlanId: e.target.value })}
@@ -212,7 +228,9 @@ export default function ProviderPlanMappingsPage() {
               placeholder={
                 form.serviceType === "exam_pin"
                   ? "VTpass/CheapDataHub: variation_code or product_id (e.g. waec-3). Pairgate: full provider_id (e.g. waec-result-checker)"
-                  : "e.g. 45 (Pairgate plan_id)"
+                  : form.serviceType === "electricity"
+                    ? "e.g. ikedc-prepaid-pairgate (any label — never sent to the provider)"
+                    : "e.g. 45 (Pairgate plan_id)"
               }
             />
             {form.serviceType === "exam_pin" && (
@@ -221,6 +239,14 @@ export default function ProviderPlanMappingsPage() {
                 overrides the exam body sent as provider_id (e.g. "waec-registration" vs
                 "waec-result-checker") — not the plan code. For VTpass/CheapDataHub it overrides
                 their plan/variation/product ID as usual.
+              </span>
+            )}
+            {form.serviceType === "electricity" && (
+              <span className="mt-1 block text-[11px] text-muted-foreground/80">
+                Every provider already takes "prepaid"/"postpaid" directly — there's no
+                provider-specific code to map. This value is only used to pick and cost-rank the
+                cheapest provider for this biller + meter type; put anything meaningful to you
+                (it's never sent to the provider).
               </span>
             )}
           </label>
@@ -277,7 +303,9 @@ export default function ProviderPlanMappingsPage() {
                       >
                         <span>
                           {idx === 0 && <span className="mr-1 text-accent">★ cheapest</span>}
-                          {m.providerKey} — plan id {m.providerPlanId} — ₦{(m.providerCostKobo / 100).toLocaleString()}
+                          {m.providerKey}
+                          {m.serviceType === "electricity" ? "" : ` — plan id ${m.providerPlanId}`}
+                          {" "}— ₦{(m.providerCostKobo / 100).toLocaleString()}
                           {m.providerPlanLabel ? ` (${m.providerPlanLabel})` : ""}
                           {!m.isActive && <span className="ml-2 text-muted-foreground">(inactive)</span>}
                         </span>

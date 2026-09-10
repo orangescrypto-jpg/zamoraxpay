@@ -57,16 +57,31 @@ interface RouteCandidate {
   // provider-specific code anyway and admins are expected to add a
   // mapping once they notice a mismatch).
   planCodeOverride?: string
+  // Some providers don't have a distinct plan-id field at all and
+  // instead encode "our plan" into their biller/service identifier
+  // (e.g. Pairgate's exam_pin has no plan_id — the registration vs.
+  // result-checker distinction has to be baked into provider_id
+  // itself, like "waec-result-checker" vs "waec-registration"). For
+  // those providers, providerPlanId from provider_plan_mappings is
+  // used to override networkOrBiller instead of planCode.
+  networkOrBillerOverride?: string
 }
+
+// Providers whose plan-mapping override target is networkOrBiller
+// (their biller/provider-id field) rather than planCode, for exam_pin
+// specifically — because their purchase endpoint has no separate
+// plan/product-id field to carry the pin type.
+const EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS = new Set(["pairgate"])
 
 async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promise<RouteCandidate[]> {
   const activeProviders = await getActiveVtuProviders(req.serviceType, nativeDB)
   const activeProviderKeys = new Set<string>(activeProviders.map((p) => p.providerKey))
 
-  // Cost-based routing only applies to plan-coded services where we
-  // actually have a planCode to look up (data, cable — exam_pin's
-  // planCode is a quantity, not a plan, so it's excluded).
-  if (req.planCode && (req.serviceType === "data" || req.serviceType === "cable")) {
+  // Cost-based routing applies to plan-coded services where we
+  // actually have a planCode to look up (data, cable, and now
+  // exam_pin — whose planCode is the pin type "registration" /
+  // "result_checker").
+  if (req.planCode && (req.serviceType === "data" || req.serviceType === "cable" || req.serviceType === "exam_pin")) {
     const options = await getPlanProviderOptions(req.serviceType, req.networkOrBiller, req.planCode, nativeDB)
     const enabledOptions = options.filter((o) => activeProviderKeys.has(o.providerKey))
 
@@ -80,7 +95,11 @@ async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promi
       const unmapped = activeProviders.filter((p) => !mappedKeys.has(p.providerKey))
 
       return [
-        ...enabledOptions.map((o) => ({ providerKey: o.providerKey, planCodeOverride: o.providerPlanId })),
+        ...enabledOptions.map((o) =>
+          req.serviceType === "exam_pin" && EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS.has(o.providerKey)
+            ? { providerKey: o.providerKey, networkOrBillerOverride: o.providerPlanId }
+            : { providerKey: o.providerKey, planCodeOverride: o.providerPlanId },
+        ),
         ...unmapped.map((p) => ({ providerKey: p.providerKey })),
       ]
     }
@@ -121,9 +140,11 @@ export async function executeVtuPurchase(
     }
 
     const credentials = await getVtuProviderCredentials(candidate.providerKey, nativeDB)
-    const candidateReq: VtuPurchaseRequest = candidate.planCodeOverride
-      ? { ...req, planCode: candidate.planCodeOverride }
-      : req
+    const candidateReq: VtuPurchaseRequest = {
+      ...req,
+      ...(candidate.planCodeOverride ? { planCode: candidate.planCodeOverride } : {}),
+      ...(candidate.networkOrBillerOverride ? { networkOrBiller: candidate.networkOrBillerOverride } : {}),
+    }
 
     let result: VtuPurchaseResult
     try {

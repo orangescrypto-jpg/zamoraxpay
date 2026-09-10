@@ -108,6 +108,22 @@ export async function DELETE(req: NextRequest) {
     const auth = await requireAdmin(req)
     if (!auth.ok) return auth.error
 
+    // Bulk delete: POST-style body with an array of ids, for the
+    // admin UI's "select several rows, delete at once" checkbox flow.
+    // Falls back to the original single-id query-param delete below
+    // when no body is sent, so the existing single "Remove" button
+    // keeps working unchanged.
+    const contentLength = req.headers.get("content-length")
+    if (contentLength && contentLength !== "0") {
+      const body = await req.json().catch(() => null)
+      if (body?.ids && Array.isArray(body.ids) && body.ids.length > 0) {
+        for (const id of body.ids) {
+          await deletePlanMapping(id)
+        }
+        return NextResponse.json({ success: true, deletedCount: body.ids.length })
+      }
+    }
+
     const id = req.nextUrl.searchParams.get("id")
     if (!id) return NextResponse.json({ error: "id query param is required" }, { status: 400 })
 

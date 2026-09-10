@@ -31,6 +31,26 @@ const NETWORKS_OR_BILLERS: Record<string, string[]> = {
   betting: ["Bet9ja", "SportyBet", "NairaBet", "BetKing", "1xBet"],
 }
 
+// Some services have a fixed, small set of valid plan_code values
+// rather than admin-free-text plan codes (like data bundle codes,
+// which vary per admin and per provider). For these, plan_code must
+// match exactly what the buy-flow page and provider plan mappings use,
+// so a dropdown prevents a typo from silently making a pricing rule
+// never match. exam_pin: pin type. electricity: meter type (only
+// matters if an admin wants a different fee for prepaid vs postpaid —
+// leave blank to price both the same via the flexible-amount fallback).
+const FIXED_PLAN_CODES: Record<string, string[]> = {
+  exam_pin: ["registration", "result_checker"],
+  electricity: ["prepaid", "postpaid"],
+}
+
+const PLAN_CODE_LABELS: Record<string, string> = {
+  registration: "Registration PIN",
+  result_checker: "Result Checker PIN",
+  prepaid: "Prepaid",
+  postpaid: "Postpaid",
+}
+
 export default function AdminPricingPage() {
   const [rules, setRules] = useState<PricingRule[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,7 +92,17 @@ export default function AdminPricingPage() {
 
   function handleServiceTypeChange(serviceType: string) {
     const options = NETWORKS_OR_BILLERS[serviceType] ?? []
-    setDraft({ ...draft, serviceType, networkOrBiller: options[0] ?? "" })
+    const fixedCodes = FIXED_PLAN_CODES[serviceType]
+    setDraft({
+      ...draft,
+      serviceType,
+      networkOrBiller: options[0] ?? "",
+      // exam_pin requires a pin type to price correctly, so default to
+      // the first option. electricity's plan_code is optional (blank
+      // means "same price regardless of meter type"), so leave it blank
+      // rather than force-picking prepaid/postpaid.
+      planCode: serviceType === "exam_pin" ? fixedCodes[0] : "",
+    })
   }
 
   function startEdit(rule: PricingRule) {
@@ -163,13 +193,35 @@ export default function AdminPricingPage() {
             </div>
           </div>
           <div className="mb-3">
-            <label className="mb-1 block text-xs font-medium text-secondary">Plan code (leave blank for flexible-amount services)</label>
-            <input
-              value={draft.planCode}
-              onChange={(e) => setDraft({ ...draft, planCode: e.target.value })}
-              placeholder="1GB_30D"
-              className="w-full rounded-md border border-border px-3 py-2 text-sm"
-            />
+            <label className="mb-1 block text-xs font-medium text-secondary">
+              {draft.serviceType === "exam_pin"
+                ? "Pin type"
+                : draft.serviceType === "electricity"
+                  ? "Meter type (leave blank to price prepaid & postpaid the same)"
+                  : "Plan code (leave blank for flexible-amount services)"}
+            </label>
+            {FIXED_PLAN_CODES[draft.serviceType] ? (
+              <select
+                value={draft.planCode}
+                onChange={(e) => setDraft({ ...draft, planCode: e.target.value })}
+                className="w-full rounded-md border border-border px-3 py-2 text-sm"
+              >
+                {draft.serviceType === "electricity" && <option value="">— Any meter type —</option>}
+                {FIXED_PLAN_CODES[draft.serviceType].map((c) => (
+                  <option key={c} value={c}>{PLAN_CODE_LABELS[c] ?? c}</option>
+                ))}
+                {draft.planCode && !FIXED_PLAN_CODES[draft.serviceType].includes(draft.planCode) && (
+                  <option value={draft.planCode}>{draft.planCode} (legacy value — pick a valid one above and save)</option>
+                )}
+              </select>
+            ) : (
+              <input
+                value={draft.planCode}
+                onChange={(e) => setDraft({ ...draft, planCode: e.target.value })}
+                placeholder="1GB_30D"
+                className="w-full rounded-md border border-border px-3 py-2 text-sm"
+              />
+            )}
           </div>
           <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>

@@ -34,7 +34,7 @@ export interface IAuthService {
 
   verifyTransactionPin(pin: string): Promise<boolean>
 
-  updateProfile(uid: string, updates: Partial<{ fullName: string; email: string }>): Promise<void>
+  updateProfile(uid: string, updates: Partial<{ fullName: string; email: string; phone: string }>): Promise<void>
 
   onAuthStateChanged(callback: (user: User | null) => void): () => void
 }

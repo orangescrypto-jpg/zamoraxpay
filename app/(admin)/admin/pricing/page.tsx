@@ -60,6 +60,8 @@ export default function AdminPricingPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [search, setSearch] = useState("")
+  const [filterServiceType, setFilterServiceType] = useState("all")
   const [draft, setDraft] = useState({
     serviceType: "data",
     networkOrBiller: NETWORKS_OR_BILLERS["data"][0],
@@ -172,9 +174,17 @@ export default function AdminPricingPage() {
   }
 
   function toggleSelectAll() {
-    const allIds = rules.map((r) => r.id)
-    const allSelected = allIds.every((id) => selectedIds.has(id))
-    setSelectedIds(allSelected ? new Set() : new Set(allIds))
+    const allIds = filteredRules.map((r) => r.id)
+    const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        allIds.forEach((id) => next.delete(id))
+      } else {
+        allIds.forEach((id) => next.add(id))
+      }
+      return next
+    })
   }
 
   async function bulkDelete() {
@@ -227,6 +237,16 @@ export default function AdminPricingPage() {
     reader.onload = () => setCsvText(String(reader.result ?? ""))
     reader.readAsText(file)
   }
+
+  // Client-side only — the full rule set is already loaded, so
+  // filtering here avoids a round trip and keeps the checkbox
+  // selection state (Set<id>) working the same either way.
+  const filteredRules = rules.filter((r) => {
+    if (filterServiceType !== "all" && r.service_type !== filterServiceType) return false
+    if (!search.trim()) return true
+    const haystack = `${r.network_or_biller} ${r.plan_code ?? ""}`.toLowerCase()
+    return haystack.includes(search.trim().toLowerCase())
+  })
 
   return (
     <div className="p-4 sm:p-6">
@@ -399,11 +419,37 @@ export default function AdminPricingPage() {
         )}
       </div>
 
+      {rules.length > 0 && (
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:max-w-2xl">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search network, biller, or plan code..."
+            className="flex-1 rounded-md border border-border px-3 py-2 text-sm"
+          />
+          <select
+            value={filterServiceType}
+            onChange={(e) => setFilterServiceType(e.target.value)}
+            className="rounded-md border border-border px-3 py-2 text-sm sm:w-48"
+          >
+            <option value="all">All service types</option>
+            {SERVICE_TYPES.map((s) => (
+              <option key={s} value={s}>{s.replace("_", " ")}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
       ) : rules.length === 0 ? (
         <div className="rounded-lg border border-border p-8 text-center text-sm text-muted-foreground">
           No pricing rules yet. Flexible-amount services (airtime, electricity, betting) work without a rule.
+        </div>
+      ) : filteredRules.length === 0 ? (
+        <div className="rounded-lg border border-border p-8 text-center text-sm text-muted-foreground">
+          No rules match your search.
         </div>
       ) : (
         <>
@@ -426,7 +472,7 @@ export default function AdminPricingPage() {
           )}
           {/* Mobile: stacked cards. Hidden from sm and up, where the table takes over. */}
           <div className="space-y-3 sm:hidden">
-            {rules.map((r) => (
+            {filteredRules.map((r) => (
               <div key={r.id} className="rounded-lg border border-border bg-white p-4">
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2">
@@ -504,7 +550,7 @@ export default function AdminPricingPage() {
                   <th className="px-4 py-3">
                     <input
                       type="checkbox"
-                      checked={rules.length > 0 && rules.every((r) => selectedIds.has(r.id))}
+                      checked={filteredRules.length > 0 && filteredRules.every((r) => selectedIds.has(r.id))}
                       onChange={toggleSelectAll}
                       className="h-4 w-4 rounded border-border"
                       aria-label="Select all rules"
@@ -520,7 +566,7 @@ export default function AdminPricingPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {rules.map((r) => (
+                {filteredRules.map((r) => (
                   <tr key={r.id}>
                     <td className="px-4 py-3">
                       <input

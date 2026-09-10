@@ -125,7 +125,7 @@ export const AuthService: IAuthService = {
     return res.ok && json.valid === true
   },
 
-  async updateProfile(uid: string, updates: Partial<{ fullName: string; email: string }>) {
+  async updateProfile(uid: string, updates: Partial<{ fullName: string; email: string; phone: string }>) {
     const res = await fetch(`/api/db/users/${uid}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

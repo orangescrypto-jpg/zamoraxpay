@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS wallets (
 CREATE TABLE IF NOT EXISTS wallet_transactions (
   id                TEXT PRIMARY KEY,
   user_id           TEXT NOT NULL REFERENCES users(id),
-  type              TEXT NOT NULL,   -- 'funding' | 'purchase' | 'refund' | 'cashback' | 'referral_bonus' | 'reseller_upgrade' | 'admin_adjustment'
+  type              TEXT NOT NULL,   -- 'funding' | 'purchase' | 'refund' | 'cashback' | 'referral_bonus' | 'reseller_upgrade' | 'admin_adjustment' | 'signup_bonus' | 'weekend_bonus' | 'daily_streak' | 'deposit_bonus'
   direction         TEXT NOT NULL,   -- 'credit' | 'debit'
   amount_kobo       INTEGER NOT NULL,
   balance_after_kobo INTEGER NOT NULL,
@@ -588,6 +588,7 @@ INSERT OR IGNORE INTO feature_flags (key, label, description, is_enabled) VALUES
   ('service_betting',      'Betting Wallet Funding',  'Allow users to fund sportsbook wallets',              1),
   ('auto_reload',          'Auto-Reload',             'Allow users to schedule recurring purchases',         1),
   ('cashback',             'Cashback Rewards',        'Credit a % of each successful purchase back to wallet', 1),
+  ('deposit_bonus',        'Deposit Bonus',           'Credit a bonus to wallet when a user funds their wallet', 1),
   ('referral_program',     'Referral Program',        'Reward users for referring new signups',              1),
   ('reseller_upgrade',     'Reseller/Wholesale Upgrade', 'Allow users to upgrade to wholesale pricing tier', 1),
   ('bvn_verification',     'BVN Verification',        'Require BVN confirmation for higher reseller limits', 1),
@@ -609,6 +610,12 @@ INSERT OR IGNORE INTO site_settings (key, label, description, value, value_type)
   ('cashback_percentage', 'Cashback: Percentage Rate', 'Percentage of the purchase amount credited back as cashback, when cashback_type is "percentage" (e.g. 2 = 2%)', '2', 'number'),
   ('cashback_flat_amount_kobo', 'Cashback: Flat Amount', 'Flat kobo amount credited back as cashback, when cashback_type is "flat" (e.g. 10000 = ₦100 flat)', '10000', 'number'),
   ('cashback_max_amount_kobo', 'Cashback: Maximum Cap Per Purchase', 'Upper limit on cashback earned from a single purchase, in kobo — prevents runaway percentage cashback on large purchases (0 = no cap)', '50000', 'number'),
+  ('deposit_bonus_enabled', 'Deposit Bonus Enabled', 'Master on/off switch for deposit bonus (also gated by the deposit_bonus feature flag)', 'false', 'boolean'),
+  ('deposit_bonus_min_amount_kobo', 'Deposit Bonus: Minimum Deposit Amount', 'Minimum wallet funding amount (in kobo) required to earn a deposit bonus', '0', 'number'),
+  ('deposit_bonus_type', 'Deposit Bonus: Calculation Type', 'Either "percentage" or "flat" — which of the two values below is used', 'percentage', 'text'),
+  ('deposit_bonus_percentage', 'Deposit Bonus: Percentage Rate', 'Percentage of the deposit amount credited as a bonus, when deposit_bonus_type is "percentage" (e.g. 2 = 2%)', '0', 'number'),
+  ('deposit_bonus_flat_amount_kobo', 'Deposit Bonus: Flat Amount', 'Flat kobo amount credited as a bonus, when deposit_bonus_type is "flat"', '0', 'number'),
+  ('deposit_bonus_max_amount_kobo', 'Deposit Bonus: Maximum Cap Per Deposit', 'Upper limit on the bonus earned from a single deposit, in kobo (0 = no cap)', '0', 'number'),
   ('withdrawal_min_amount_kobo', 'Withdrawal: Minimum Amount', 'Minimum amount a user can request to withdraw, in kobo (e.g. 100000 = ₦1,000)', '100000', 'number'),
   ('withdrawal_fee_kobo', 'Withdrawal: Flat Fee', 'Flat fee deducted from every withdrawal payout, in kobo', '5000', 'number'),
   ('withdrawal_payout_method', 'Withdrawal: Payout Method', 'Either "manual" (admin sends transfer by hand) or "automatic" (admin approval triggers a Korapay/Paystack transfer)', 'manual', 'text'),

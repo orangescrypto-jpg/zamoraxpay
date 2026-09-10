@@ -26,6 +26,7 @@ const NETWORKS_OR_BILLERS: Record<string, string[]> = {
   data: ["MTN", "Airtel", "Glo", "9mobile"],
   cable: ["DSTV", "GOtv", "StarTimes"],
   exam_pin: ["WAEC", "NECO", "JAMB", "NABTEB"],
+  epin: ["MTN", "Airtel", "Glo", "9mobile"],
   electricity: ["IKEDC", "EKEDC", "AEDC", "PHEDC", "IBEDC", "KEDCO"],
 }
 
@@ -37,6 +38,7 @@ const NETWORKS_OR_BILLERS: Record<string, string[]> = {
 // getPlanProviderOptions lookup key on.
 const FIXED_PLAN_CODES: Record<string, string[]> = {
   exam_pin: ["registration", "result_checker"],
+  epin: ["100", "200", "500"], // VTU.ng-enforced denominations (see vtung.ts's VALID_EPIN_VALUES)
   electricity: ["prepaid", "postpaid"],
 }
 
@@ -45,6 +47,9 @@ const PLAN_CODE_LABELS: Record<string, string> = {
   result_checker: "Result Checker PIN",
   prepaid: "Prepaid",
   postpaid: "Postpaid",
+  "100": "₦100 ePIN",
+  "200": "₦200 ePIN",
+  "500": "₦500 ePIN",
 }
 
 const EMPTY_FORM = {
@@ -307,6 +312,7 @@ export default function ProviderPlanMappingsPage() {
               <option value="data">Data</option>
               <option value="cable">Cable</option>
               <option value="exam_pin">Exam PIN</option>
+              <option value="epin">ePIN (Recharge Card)</option>
               <option value="electricity">Electricity</option>
             </select>
           </label>
@@ -367,9 +373,11 @@ export default function ProviderPlanMappingsPage() {
               placeholder={
                 form.serviceType === "exam_pin"
                   ? "VTpass/CheapDataHub: variation_code or product_id (e.g. waec-3). Pairgate: full provider_id (e.g. waec-result-checker)"
-                  : form.serviceType === "electricity"
-                    ? "e.g. ikedc-prepaid-pairgate (any label — never sent to the provider)"
-                    : "e.g. 45 (Pairgate plan_id)"
+                  : form.serviceType === "epin"
+                    ? "e.g. 500 (VTU.ng's /api/v2/epins 'value' field — same as the plan code today)"
+                    : form.serviceType === "electricity"
+                      ? "e.g. ikedc-prepaid-pairgate (any label — never sent to the provider)"
+                      : "e.g. 45 (Pairgate plan_id)"
               }
             />
             {form.serviceType === "exam_pin" && (
@@ -378,6 +386,13 @@ export default function ProviderPlanMappingsPage() {
                 overrides the exam body sent as provider_id (e.g. "waec-registration" vs
                 "waec-result-checker") — not the plan code. For VTpass/CheapDataHub it overrides
                 their plan/variation/product ID as usual.
+              </span>
+            )}
+            {form.serviceType === "epin" && (
+              <span className="mt-1 block text-[11px] text-muted-foreground/80">
+                Only VTU.ng implements ePINs today. Its /api/v2/epins endpoint takes the
+                denomination directly as "value" — no separate provider-plan ID exists, so this
+                is used only to cost-rank providers if a second one is added later.
               </span>
             )}
             {form.serviceType === "electricity" && (

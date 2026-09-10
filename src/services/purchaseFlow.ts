@@ -24,8 +24,8 @@ export interface PurchaseFlowParams {
   serviceType: VtuServiceType
   networkOrBiller: string
   recipient: string
-  planCode?: string | null
-  quantity?: number // exam_pin only — planCode is repurposed to carry quantity through to the provider adapters (see pairgate.ts/cheapdatahub.ts), so pricing needs its own copy to multiply the per-unit price by
+  planCode?: string | null // exam_pin: pin type ("registration" | "result_checker")
+  quantity?: number // exam_pin only — number of PINs to purchase
   requestedAmountKobo?: number // for flexible-amount services (airtime, electricity, betting)
   transactionPin: string
   isAutoReload?: boolean
@@ -64,20 +64,13 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
 
   // 3. Resolve price (admin-configured, tier-aware).
   //
-  // exam_pin is priced per-unit with a null plan_code in pricing_rules
-  // (see admin/pricing page — "leave blank for flexible-amount
-  // services"... exam_pin isn't flexible-amount, but it likewise has
-  // no plan_code concept, just a flat per-PIN price per exam body).
-  // params.planCode for exam_pin actually carries the *quantity*
-  // through to the provider adapters, not a real plan code — so it
-  // must NOT be passed to lookupPrice here, or the query
-  // (plan_code = '3') will never match the admin's (plan_code IS NULL)
-  // rule and every exam PIN purchase fails with "No price configured."
-  const pricingPlanCode = params.serviceType === "exam_pin" ? null : params.planCode ?? null
+  // exam_pin is now plan-coded like data/cable: plan_code carries the
+  // pin type ("registration" | "result_checker"), priced per-unit per
+  // exam body + pin type via pricing_rules.
   const pricing = await lookupPrice(
     params.serviceType,
     params.networkOrBiller,
-    pricingPlanCode,
+    params.planCode ?? null,
     user.tier,
     params.requestedAmountKobo,
   )
@@ -135,6 +128,7 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     networkOrBiller: params.networkOrBiller,
     recipient: params.recipient,
     planCode: params.planCode ?? undefined,
+    quantity: params.serviceType === "exam_pin" ? quantity : undefined,
     amountKobo: pricing.baseAmountKobo,
     internalReference: debitReference,
   })

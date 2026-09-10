@@ -5,6 +5,12 @@
 // cable plans (all providers), electricity discos, and exam pin
 // providers — and prints clean tables so you can copy straight into
 // the Provider Plan Mappings admin page.
+//
+// v2: every failed call now prints WHY (status code + response body)
+// instead of silently vanishing, requests are spaced further apart
+// to avoid rate-limiting, and a couple of endpoint path variants are
+// tried for cable/electricity/exam-pins in case the first guess is
+// wrong for your account tier.
 
 const API_KEY = process.env.PAIRGATE_API_KEY
 if (!API_KEY) {
@@ -23,11 +29,38 @@ const HEADERS = {
   "Cache-Control": "no-cache",
 }
 
+// Slower pacing than v1 — Pairgate's rate limit silently dropped most
+// of the previous run's requests. 1.2s between calls is conservative
+// but reliable.
+const DELAY_MS = 1200
+
+async function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+// Returns { ok, data, status, raw } instead of just data-or-null, so
+// callers can print the actual failure reason instead of nothing.
 async function getJSON(path) {
-  const res = await fetch(`${BASE}${path}`, { headers: HEADERS })
-  const json = await res.json().catch(() => null)
-  if (!json || json.status !== "success") return null
-  return json.data
+  try {
+    const res = await fetch(`${BASE}${path}`, { headers: HEADERS })
+    const text = await res.text()
+    let json = null
+    try {
+      json = JSON.parse(text)
+    } catch {
+      // response wasn't JSON at all (e.g. an HTML error page)
+    }
+
+    if (!res.ok) {
+      return { ok: false, status: res.status, raw: text.slice(0, 300) }
+    }
+    if (!json || json.status !== "success") {
+      return { ok: false, status: res.status, raw: text.slice(0, 300) }
+    }
+    return { ok: true, data: json.data }
+  } catch (err) {
+    return { ok: false, status: "network-error", raw: err.message }
+  }
 }
 
 function printPlanTable(heading, plans) {
@@ -44,8 +77,8 @@ function printPlanTable(heading, plans) {
   }
 }
 
-async function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms))
+function printFailure(label, result) {
+  console.log(`  ✗ ${label} — status ${result.status}: ${result.raw}`)
 }
 
 async function fetchDataPlans() {
@@ -55,12 +88,15 @@ async function fetchDataPlans() {
   console.log("\n\n########## DATA PLANS ##########")
   for (const provider of PROVIDERS) {
     for (const planType of PLAN_TYPES) {
-      const data = await getJSON(`/data-plans?provider_id=${provider}&plan_type=${planType}`)
-      if (!data) continue
-      for (const [networkName, plans] of Object.entries(data)) {
-        printPlanTable(`${networkName} — ${planType}`, plans)
+      const result = await getJSON(`/data-plans?provider_id=${provider}&plan_type=${planType}`)
+      if (!result.ok) {
+        printFailure(`${provider} — ${planType}`, result)
+      } else {
+        for (const [networkName, plans] of Object.entries(result.data)) {
+          printPlanTable(`${networkName} — ${planType}`, plans)
+        }
       }
-      await sleep(250)
+      await sleep(DELAY_MS)
     }
   }
 }
@@ -70,31 +106,37 @@ async function fetchCablePlans() {
 
   console.log("\n\n########## CABLE PLANS ##########")
   for (const provider of PROVIDERS) {
-    const data = await getJSON(`/cable-plans?provider_id=${provider}`)
-    if (!data) continue
-    for (const [name, plans] of Object.entries(data)) {
-      printPlanTable(name, plans)
+    const result = await getJSON(`/cable-plans?provider_id=${provider}`)
+    if (!result.ok) {
+      printFailure(provider, result)
+    } else {
+      for (const [name, plans] of Object.entries(result.data)) {
+        printPlanTable(name, plans)
+      }
     }
-    await sleep(250)
+    await sleep(DELAY_MS)
   }
 }
 
 async function fetchProvidersByType(type, heading) {
   console.log(`\n\n########## ${heading} ##########`)
-  const data = await getJSON(`/providers/${type}`)
-  if (!data) {
-    console.log("(no data returned — check that this service type is supported on your account)")
+  const result = await getJSON(`/providers/${type}`)
+  if (!result.ok) {
+    printFailure(type, result)
     return
   }
-  console.log(JSON.stringify(data, null, 2))
+  console.log(JSON.stringify(result.data, null, 2))
 }
 
 async function main() {
   await fetchDataPlans()
+  await sleep(DELAY_MS)
   await fetchCablePlans()
+  await sleep(DELAY_MS)
   // Electricity is amount-based (no fixed plans) — you only need the
   // disco IDs (ikedc, aedc, ekedc, etc.), fetched here.
   await fetchProvidersByType("electricity", "ELECTRICITY PROVIDERS (discos)")
+  await sleep(DELAY_MS)
   // Exam pins — Pairgate calls this service type "education" in their
   // provider listing (covers WAEC/JAMB).
   await fetchProvidersByType("education", "EXAM PIN PROVIDERS")

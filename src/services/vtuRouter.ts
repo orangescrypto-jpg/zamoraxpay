@@ -2,18 +2,20 @@
 // Service abstraction layer — the neutral VTU fallback router.
 //
 // This is the piece that fulfills "don't hardcode any VTU API." It:
-//   1. For plan-coded services (data, cable) where the SAME plan has
-//      been mapped to more than one provider (see
-//      providerPlanMappings.ts), tries the CHEAPEST enabled provider
-//      for that specific plan first, falling through to the next
-//      cheapest on failure. This is what lets "MTN 200MB/1-Day is
-//      ₦92 on Pairgate vs ₦100 on CheapDataHub" resolve to Pairgate
-//      automatically, without the admin having to hand-pick a global
-//      priority order that fits every plan at once.
+//   1. For plan-coded services (data, cable, exam_pin, and optionally
+//      electricity by meter type) where the SAME plan has been mapped
+//      to more than one provider (see providerPlanMappings.ts), tries
+//      the CHEAPEST enabled provider for that specific plan first,
+//      falling through to the next cheapest on failure. This is what
+//      lets "MTN 200MB/1-Day is ₦92 on Pairgate vs ₦100 on
+//      CheapDataHub" resolve to Pairgate automatically, without the
+//      admin having to hand-pick a global priority order that fits
+//      every plan at once.
 //   2. For anything without plan-specific cost mappings (airtime,
-//      electricity, exam pins, betting, or a data/cable plan nobody
-//      has mapped across providers yet), falls back to the admin's
-//      configured priority order from config.ts — unchanged behavior.
+//      betting, an electricity biller with no meter-type mapping, or a
+//      data/cable/exam_pin plan nobody has mapped across providers
+//      yet), falls back to the admin's configured priority order from
+//      config.ts — unchanged behavior.
 //   3. Either way, providers are tried SEQUENTIALLY, never in
 //      parallel (parallel would risk double-charging the float
 //      wallet on two providers for one purchase).
@@ -78,10 +80,19 @@ async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promi
   const activeProviderKeys = new Set<string>(activeProviders.map((p) => p.providerKey))
 
   // Cost-based routing applies to plan-coded services where we
-  // actually have a planCode to look up (data, cable, and now
-  // exam_pin — whose planCode is the pin type "registration" /
-  // "result_checker").
-  if (req.planCode && (req.serviceType === "data" || req.serviceType === "cable" || req.serviceType === "exam_pin")) {
+  // actually have a planCode to look up:
+  //   - data, cable: admin-defined bundle/package codes
+  //   - exam_pin: pin type ("registration" / "result_checker")
+  //   - electricity: meter type ("prepaid" / "postpaid") — optional;
+  //     most admins leave this unset and electricity falls through to
+  //     the priority-order fallback below, same as before.
+  if (
+    req.planCode &&
+    (req.serviceType === "data" ||
+      req.serviceType === "cable" ||
+      req.serviceType === "exam_pin" ||
+      req.serviceType === "electricity")
+  ) {
     const options = await getPlanProviderOptions(req.serviceType, req.networkOrBiller, req.planCode, nativeDB)
     const enabledOptions = options.filter((o) => activeProviderKeys.has(o.providerKey))
 
@@ -95,11 +106,21 @@ async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promi
       const unmapped = activeProviders.filter((p) => !mappedKeys.has(p.providerKey))
 
       return [
-        ...enabledOptions.map((o) =>
-          req.serviceType === "exam_pin" && EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS.has(o.providerKey)
+        ...enabledOptions.map((o) => {
+          if (req.serviceType === "electricity") {
+            // meter_type/variation_id is already a universal
+            // "prepaid"/"postpaid" string every adapter reads straight
+            // from req.meterType — there's no provider-specific code
+            // to substitute in, unlike data/cable plan IDs or
+            // exam_pin's provider_id. providerPlanId here is used only
+            // to pick and cost-rank the provider; it's never sent to
+            // the adapter as an override.
+            return { providerKey: o.providerKey }
+          }
+          return req.serviceType === "exam_pin" && EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS.has(o.providerKey)
             ? { providerKey: o.providerKey, networkOrBillerOverride: o.providerPlanId }
-            : { providerKey: o.providerKey, planCodeOverride: o.providerPlanId },
-        ),
+            : { providerKey: o.providerKey, planCodeOverride: o.providerPlanId }
+        }),
         ...unmapped.map((p) => ({ providerKey: p.providerKey })),
       ]
     }

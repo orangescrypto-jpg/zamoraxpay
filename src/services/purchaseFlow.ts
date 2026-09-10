@@ -1,9 +1,9 @@
 // src/services/purchaseFlow.ts
 // One shared orchestration function for every VTU service route
-// (airtime, data, cable, electricity, exam_pin, betting). Each route
-// just validates its own input shape and calls this — so the
+// (airtime, data, cable, electricity, exam_pin, epin, betting). Each
+// route just validates its own input shape and calls this — so the
 // debit → route → refund-on-failure → email logic lives in exactly
-// one place instead of being copy-pasted six times.
+// one place instead of being copy-pasted seven times.
 
 import { randomUUID } from "crypto"
 import { lookupPrice } from "@/src/services/pricing"
@@ -24,8 +24,8 @@ export interface PurchaseFlowParams {
   serviceType: VtuServiceType
   networkOrBiller: string
   recipient: string
-  planCode?: string | null // exam_pin: pin type ("registration" | "result_checker")
-  quantity?: number // exam_pin only — number of PINs to purchase
+  planCode?: string | null // exam_pin: pin type ("registration" | "result_checker") / epin: denomination ("100" | "200" | "500")
+  quantity?: number // exam_pin and epin only — number of PINs to purchase
   requestedAmountKobo?: number // for flexible-amount services (airtime, electricity, betting)
   transactionPin: string
   isAutoReload?: boolean
@@ -64,9 +64,10 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
 
   // 3. Resolve price (admin-configured, tier-aware).
   //
-  // exam_pin is now plan-coded like data/cable: plan_code carries the
-  // pin type ("registration" | "result_checker"), priced per-unit per
-  // exam body + pin type via pricing_rules.
+  // exam_pin and epin are both plan-coded like data/cable: plan_code
+  // carries the pin type ("registration" | "result_checker") for
+  // exam_pin, or the denomination ("100" | "200" | "500") for epin —
+  // priced per-unit per network/exam-body + plan_code via pricing_rules.
   const pricing = await lookupPrice(
     params.serviceType,
     params.networkOrBiller,
@@ -78,7 +79,8 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     return { success: false, message: "No price configured for this selection. Please contact support." }
   }
 
-  const quantity = params.serviceType === "exam_pin" ? Math.max(1, params.quantity ?? 1) : 1
+  const isQuantityService = params.serviceType === "exam_pin" || params.serviceType === "epin"
+  const quantity = isQuantityService ? Math.max(1, params.quantity ?? 1) : 1
   if (quantity > 1) {
     pricing.baseAmountKobo *= quantity
     pricing.chargeAmountKobo *= quantity
@@ -128,7 +130,7 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     networkOrBiller: params.networkOrBiller,
     recipient: params.recipient,
     planCode: params.planCode ?? undefined,
-    quantity: params.serviceType === "exam_pin" ? quantity : undefined,
+    quantity: isQuantityService ? quantity : undefined,
     amountKobo: pricing.baseAmountKobo,
     internalReference: debitReference,
   })

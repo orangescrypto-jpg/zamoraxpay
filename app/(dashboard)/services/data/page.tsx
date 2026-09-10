@@ -29,6 +29,13 @@ export default function DataPage() {
   const { user } = useAuth()
   const [network, setNetwork] = useState(NETWORKS[0])
   const [phone, setPhone] = useState("")
+  // Pre-fill with the user's own registered number for the common case
+  // (buying for self) — still a plain editable input, so switching to
+  // someone else's number just means typing over it.
+  useEffect(() => {
+    if (user?.phone && phone === "") setPhone(user.phone)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.phone])
   const [plans, setPlans] = useState<Plan[]>([])
   const [plansLoading, setPlansLoading] = useState(true)
   const [plansError, setPlansError] = useState<string | null>(null)
@@ -131,9 +138,23 @@ export default function DataPage() {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary">Phone number</label>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="text-sm font-medium text-secondary">Phone number</label>
+            {user?.phone && phone !== user.phone && (
+              <button
+                type="button"
+                onClick={() => setPhone(user.phone!)}
+                className="text-xs font-medium text-primary underline"
+              >
+                Use my number
+              </button>
+            )}
+          </div>
           <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08012345678"
             className={`w-full rounded-md border px-3 py-2 text-sm ${networkMismatch ? "border-destructive" : "border-border"}`} />
+          {user?.phone && phone === user.phone && (
+            <p className="mt-1 text-xs text-muted-foreground">Buying for yourself. Edit the number above to buy for someone else.</p>
+          )}
           {networkMismatch ? (
             <p className="mt-1 text-xs text-destructive">
               This looks like a {detected} number, but you selected {network}. Double-check before you pay.

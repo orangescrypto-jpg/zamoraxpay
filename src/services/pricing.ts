@@ -9,6 +9,7 @@
 import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
+import { getActiveVtuProviders } from "@/src/services/config"
 
 export interface PricingLookupResult {
   found: boolean
@@ -75,6 +76,20 @@ export interface CustomerPlan {
 // caller's tier. Unlike listPricingRules (admin-only, full rows), this
 // only returns what a buy-data/buy-cable page needs, and never exposes
 // wholesale price, provider cost basis, or admin metadata.
+//
+// A plan only shows here if BOTH are true:
+//   1. pricing_rules.is_active = 1 (the admin's manual visibility toggle)
+//   2. At least one provider_plan_mappings row for this exact plan is
+//      is_active = 1 AND that provider is currently enabled in
+//      vtu_provider_configs.
+//
+// Without (2), disabling a provider that was the ONLY one fulfilling a
+// plan would leave that plan visible and purchasable on the buy page
+// with zero working route underneath — the user pays, the router finds
+// no enabled candidate, and the order fails after the wallet's already
+// been debited. This makes visibility track provider status live,
+// instead of relying on an admin remembering to flip pricing_rules
+// off by hand every time they disable a provider.
 export async function listPlans(
   serviceType: VtuServiceType,
   networkOrBiller: string,
@@ -91,12 +106,46 @@ export async function listPlans(
   )
 
   const rows = result.results ?? []
+  if (rows.length === 0) return []
+
+  const activeProviders = await getActiveVtuProviders(serviceType, nativeDB)
+  const activeProviderKeys = new Set(activeProviders.map((p) => p.providerKey))
+
+  // Services without plan-coded provider mappings at all (airtime,
+  // electricity/betting with no meter-type mapping) never had rows in
+  // provider_plan_mappings to begin with — for those, provider
+  // liveness is already covered by getActiveVtuProviders alone at
+  // purchase time, so skip the extra join and keep prior behavior.
+  const planCodes = rows.map((r: any) => r.plan_code)
+  const placeholders = planCodes.map(() => "?").join(",")
+  const mappingResult = await d1Query(
+    `SELECT DISTINCT plan_code, provider_key FROM provider_plan_mappings
+     WHERE service_type = ? AND network_or_biller = ? AND is_active = 1
+       AND plan_code IN (${placeholders})`,
+    [serviceType, networkOrBiller, ...planCodes],
+    nativeDB,
+  )
+  const mappingRows = mappingResult.results ?? []
+
+  // Only plan_codes that have NO mappings at all skip the liveness
+  // check (nothing to check — same as before). Plan codes WITH
+  // mappings must have at least one mapped provider currently enabled.
+  const planCodesWithMappings = new Set(mappingRows.map((r: any) => r.plan_code))
+  const planCodesWithLiveProvider = new Set(
+    mappingRows.filter((r: any) => activeProviderKeys.has(r.provider_key)).map((r: any) => r.plan_code),
+  )
+
   const wholesale = userTier === "reseller"
 
-  return rows.map((row: any) => ({
-    planCode: row.plan_code,
-    priceKobo: (wholesale ? row.wholesale_price_kobo : row.retail_price_kobo) + row.convenience_fee_kobo,
-  }))
+  return rows
+    .filter((row: any) => {
+      if (!planCodesWithMappings.has(row.plan_code)) return true // unmapped plan — no liveness signal to check
+      return planCodesWithLiveProvider.has(row.plan_code)
+    })
+    .map((row: any) => ({
+      planCode: row.plan_code,
+      priceKobo: (wholesale ? row.wholesale_price_kobo : row.retail_price_kobo) + row.convenience_fee_kobo,
+    }))
 }
 
 export async function listPricingRules(serviceType?: VtuServiceType, nativeDB?: any) {

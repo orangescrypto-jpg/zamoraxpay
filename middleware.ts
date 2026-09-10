@@ -10,6 +10,7 @@ import { createMiddlewareClient } from "@/src/services/providers/supabase/middle
 
 const PROTECTED_PREFIXES = ["/dashboard", "/wallet", "/services", "/reseller", "/history", "/beneficiaries", "/settings", "/withdraw"]
 const ADMIN_PREFIX = "/admin"
+const AUTH_PREFIXES = ["/login", "/signup"]
 
 export async function middleware(request: NextRequest) {
   const { supabase, supabaseResponse } = createMiddlewareClient(request)
@@ -34,6 +35,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
+  // A user who's already logged in should never see the login/signup
+  // forms again — send them straight to their dashboard until they
+  // explicitly sign out.
+  const isAuthPage = AUTH_PREFIXES.some((p) => pathname.startsWith(p))
+  if (isAuthPage && user) {
+    return NextResponse.redirect(new URL("/dashboard", request.url))
+  }
+
   return supabaseResponse
 }
 
@@ -49,5 +58,7 @@ export const config = {
     "/settings/:path*",
     "/withdraw/:path*",
     "/admin/:path*",
+    "/login",
+    "/signup",
   ],
 }

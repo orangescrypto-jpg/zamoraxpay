@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import type { ChangeEvent } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 
@@ -57,6 +58,8 @@ export default function AdminPricingPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [draft, setDraft] = useState({
     serviceType: "data",
     networkOrBiller: NETWORKS_OR_BILLERS["data"][0],
@@ -65,6 +68,15 @@ export default function AdminPricingPage() {
     wholesalePrice: "",
     convenienceFee: "",
   })
+
+  const [csvText, setCsvText] = useState("")
+  const [uploadingCsv, setUploadingCsv] = useState(false)
+  const [csvResult, setCsvResult] = useState<{
+    createdCount: number
+    updatedCount: number
+    errorCount: number
+    results: { row: number; status: "created" | "updated" | "error"; message?: string }[]
+  } | null>(null)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -148,6 +160,72 @@ export default function AdminPricingPage() {
     }
     setDeletingId(null)
     load()
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    const allIds = rules.map((r) => r.id)
+    const allSelected = allIds.every((id) => selectedIds.has(id))
+    setSelectedIds(allSelected ? new Set() : new Set(allIds))
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Delete ${selectedIds.size} selected rule${selectedIds.size === 1 ? "" : "s"}? This cannot be undone.`)) return
+    setBulkDeleting(true)
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/admin/pricing", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    })
+    setBulkDeleting(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error ?? "Bulk delete failed")
+      return
+    }
+    setSelectedIds(new Set())
+    load()
+  }
+
+  async function bulkUploadCsv() {
+    if (!csvText.trim()) {
+      alert("Paste CSV text first")
+      return
+    }
+    setUploadingCsv(true)
+    setCsvResult(null)
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/admin/pricing/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ csv: csvText }),
+    })
+    const data = await res.json()
+    setUploadingCsv(false)
+    if (!res.ok) {
+      alert(data.error ?? "Bulk upload failed")
+      return
+    }
+    setCsvResult(data)
+    if (data.createdCount + data.updatedCount > 0) load()
+  }
+
+  function handleCsvFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setCsvText(String(reader.result ?? ""))
+    reader.readAsText(file)
   }
 
   return (
@@ -262,6 +340,65 @@ export default function AdminPricingPage() {
         </div>
       )}
 
+      <div className="mb-6 rounded-lg border border-border bg-white p-4 sm:max-w-2xl">
+        <h2 className="mb-1 text-sm font-semibold text-secondary">Bulk upload (CSV)</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Columns required: service_type, network_or_biller, retail_price_naira, wholesale_price_naira. Optional:
+          plan_code (leave blank for flexible-amount services like airtime), convenience_fee_naira. Each row
+          checks for an existing rule on the same service/network/plan first, so re-uploading a file updates
+          the matching rules instead of duplicating them.
+        </p>
+        <input type="file" accept=".csv,text/csv" onChange={handleCsvFile} className="mb-3 block text-sm" />
+        <textarea
+          value={csvText}
+          onChange={(e) => setCsvText(e.target.value)}
+          placeholder={
+            "service_type,network_or_biller,plan_code,retail_price_naira,wholesale_price_naira,convenience_fee_naira\n" +
+            "data,MTN,MTN/1GB/30days,600,570,0"
+          }
+          rows={6}
+          className="mb-3 w-full rounded-md border border-border px-3 py-2 font-mono text-xs"
+        />
+        <button
+          onClick={bulkUploadCsv}
+          disabled={uploadingCsv}
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {uploadingCsv ? "Uploading..." : "Upload CSV"}
+        </button>
+
+        {csvResult && (
+          <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+            <p className="mb-2 font-medium text-secondary">
+              {csvResult.createdCount} new, {csvResult.updatedCount} duplicate{csvResult.updatedCount === 1 ? "" : "s"} updated
+              {csvResult.errorCount > 0 && `, ${csvResult.errorCount} failed`}
+            </p>
+            {csvResult.updatedCount > 0 && (
+              <ul className="mb-2 space-y-1 text-xs text-secondary">
+                {csvResult.results
+                  .filter((r) => r.status === "updated")
+                  .map((r) => (
+                    <li key={r.row}>
+                      Row {r.row}: {r.message}
+                    </li>
+                  ))}
+              </ul>
+            )}
+            {csvResult.errorCount > 0 && (
+              <ul className="space-y-1 text-xs text-destructive">
+                {csvResult.results
+                  .filter((r) => r.status === "error")
+                  .map((r) => (
+                    <li key={r.row}>
+                      Row {r.row}: {r.message}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
       ) : rules.length === 0 ? (
@@ -270,16 +407,41 @@ export default function AdminPricingPage() {
         </div>
       ) : (
         <>
+          {selectedIds.size > 0 && (
+            <div className="sticky top-0 z-10 mb-3 flex items-center justify-between rounded-lg border border-primary bg-primary/5 px-4 py-2 text-sm">
+              <span className="font-medium text-secondary">{selectedIds.size} selected</span>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setSelectedIds(new Set())} className="text-xs text-muted-foreground hover:underline">
+                  Clear
+                </button>
+                <button
+                  onClick={bulkDelete}
+                  disabled={bulkDeleting}
+                  className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                >
+                  {bulkDeleting ? "Deleting..." : "Delete selected"}
+                </button>
+              </div>
+            </div>
+          )}
           {/* Mobile: stacked cards. Hidden from sm and up, where the table takes over. */}
           <div className="space-y-3 sm:hidden">
             {rules.map((r) => (
               <div key={r.id} className="rounded-lg border border-border bg-white p-4">
                 <div className="mb-2 flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold capitalize text-secondary">
-                      {r.service_type.replace("_", " ")} · {r.network_or_biller}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{r.plan_code ?? "No plan code"}</p>
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelected(r.id)}
+                      className="mt-1 h-4 w-4 rounded border-border"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold capitalize text-secondary">
+                        {r.service_type.replace("_", " ")} · {r.network_or_biller}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{r.plan_code ?? "No plan code"}</p>
+                    </div>
                   </div>
                 </div>
 
@@ -339,6 +501,15 @@ export default function AdminPricingPage() {
             <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
                 <tr>
+                  <th className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={rules.length > 0 && rules.every((r) => selectedIds.has(r.id))}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 rounded border-border"
+                      aria-label="Select all rules"
+                    />
+                  </th>
                   <th className="px-4 py-3">Service</th>
                   <th className="px-4 py-3">Network/Biller</th>
                   <th className="px-4 py-3">Plan</th>
@@ -351,6 +522,14 @@ export default function AdminPricingPage() {
               <tbody className="divide-y divide-border">
                 {rules.map((r) => (
                   <tr key={r.id}>
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(r.id)}
+                        onChange={() => toggleSelected(r.id)}
+                        className="h-4 w-4 rounded border-border"
+                      />
+                    </td>
                     <td className="px-4 py-3 capitalize">{r.service_type.replace("_", " ")}</td>
                     <td className="px-4 py-3">{r.network_or_biller}</td>
                     <td className="px-4 py-3 text-muted-foreground">{r.plan_code ?? "—"}</td>

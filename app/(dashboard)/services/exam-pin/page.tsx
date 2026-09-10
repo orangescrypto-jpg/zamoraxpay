@@ -7,6 +7,18 @@ import { formatNaira } from "@/lib/utils"
 
 const EXAM_BODIES = ["WAEC", "NECO", "JAMB", "NABTEB"]
 
+type PinType = "registration" | "result_checker"
+
+const PIN_TYPE_LABELS: Record<PinType, string> = {
+  registration: "Registration PIN",
+  result_checker: "Result Checker PIN",
+}
+
+interface Plan {
+  planCode: string
+  priceKobo: number
+}
+
 interface DeliveredPin {
   pin: string
   serialNumber?: string
@@ -19,56 +31,56 @@ interface DeliveredData {
 
 export default function ExamPinPage() {
   const [examBody, setExamBody] = useState(EXAM_BODIES[0])
+  const [pinType, setPinType] = useState<PinType>("result_checker")
   const [quantity, setQuantity] = useState("1")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [deliveredData, setDeliveredData] = useState<DeliveredData | null>(null)
-  const [unitPriceKobo, setUnitPriceKobo] = useState<number | null>(null)
-  const [priceLoading, setPriceLoading] = useState(true)
-  const [priceError, setPriceError] = useState<string | null>(null)
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [plansLoading, setPlansLoading] = useState(true)
+  const [plansError, setPlansError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
-    async function loadPrice() {
-      setPriceLoading(true)
-      setPriceError(null)
-      setUnitPriceKobo(null)
+    async function loadPlans() {
+      setPlansLoading(true)
+      setPlansError(null)
+      setPlans([])
 
       try {
         const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
 
         const res = await fetch(
-          `/api/pricing?serviceType=exam_pin&networkOrBiller=${encodeURIComponent(examBody)}&flat=1`,
+          `/api/pricing?serviceType=exam_pin&networkOrBiller=${encodeURIComponent(examBody)}`,
           { headers: { Authorization: `Bearer ${session?.access_token}` } },
         )
         const data = await res.json()
         if (cancelled) return
 
         if (!res.ok) {
-          setPriceError(data.error ?? "Could not load price")
+          setPlansError(data.error ?? "Could not load price")
           return
         }
-        if (data.priceKobo == null) {
-          setPriceError(`No price configured for ${examBody} yet.`)
-          return
-        }
-        setUnitPriceKobo(data.priceKobo)
+        setPlans(data.plans ?? [])
       } catch {
-        if (!cancelled) setPriceError("Could not load price")
+        if (!cancelled) setPlansError("Could not load price")
       } finally {
-        if (!cancelled) setPriceLoading(false)
+        if (!cancelled) setPlansLoading(false)
       }
     }
 
-    loadPrice()
+    loadPlans()
     return () => { cancelled = true }
   }, [examBody])
 
+  const selectedPlan = plans.find((p) => p.planCode === pinType)
+  const unitPriceKobo = selectedPlan?.priceKobo ?? null
   const parsedQuantity = Math.max(1, parseInt(quantity, 10) || 1)
   const totalPriceKobo = unitPriceKobo != null ? unitPriceKobo * parsedQuantity : null
+  const priceError = plansError ?? (!plansLoading && !selectedPlan ? `No ${PIN_TYPE_LABELS[pinType]} price configured for ${examBody} yet.` : null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,7 +94,7 @@ export default function ExamPinPage() {
     const res = await fetch("/api/vtu/exam-pin", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ examBody, quantity: parseInt(quantity, 10), transactionPin: pin }),
+      body: JSON.stringify({ examBody, pinType, quantity: parsedQuantity, transactionPin: pin }),
     })
     const data = await res.json()
     setLoading(false)
@@ -153,13 +165,30 @@ export default function ExamPinPage() {
         </div>
 
         <div>
+          <label className="mb-1 block text-sm font-medium text-secondary">PIN type</label>
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.keys(PIN_TYPE_LABELS) as PinType[]).map((t) => (
+              <button type="button" key={t} onClick={() => setPinType(t)}
+                className={`rounded-md border py-2 text-sm font-medium ${pinType === t ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"}`}>
+                {PIN_TYPE_LABELS[t]}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-secondary/70">
+            {pinType === "registration"
+              ? "Used to register for the exam, before it's written."
+              : "Used to check your result, after it's released."}
+          </p>
+        </div>
+
+        <div>
           <label className="mb-1 block text-sm font-medium text-secondary">Quantity</label>
           <input required type="number" min={1} max={10} value={quantity} onChange={(e) => setQuantity(e.target.value)}
             className="w-full rounded-md border border-border px-3 py-2 text-sm" />
         </div>
 
         <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-          {priceLoading ? (
+          {plansLoading ? (
             <span className="text-secondary/60">Loading price…</span>
           ) : priceError ? (
             <span className="text-destructive">{priceError}</span>
@@ -179,7 +208,7 @@ export default function ExamPinPage() {
             className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest" />
         </div>
 
-        <button type="submit" disabled={loading || priceLoading || unitPriceKobo == null}
+        <button type="submit" disabled={loading || plansLoading || unitPriceKobo == null}
           className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
           {loading ? "Processing..." : "Buy PIN"}
         </button>

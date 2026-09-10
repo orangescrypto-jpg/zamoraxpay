@@ -1,15 +1,24 @@
 // app/(dashboard)/services/airtime/page.tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
 import { detectNetwork, matchesSelectedNetwork, type NetworkName } from "@/lib/networkDetect"
 
 const NETWORKS: NetworkName[] = ["MTN", "Airtel", "Glo", "9mobile"]
 
 export default function AirtimePage() {
+  const { user } = useAuth()
   const [network, setNetwork] = useState(NETWORKS[0])
   const [phone, setPhone] = useState("")
+  // Pre-fill with the user's own registered number for the common case
+  // (buying for self) — still a plain editable input, so switching to
+  // someone else's number just means typing over it.
+  useEffect(() => {
+    if (user?.phone && phone === "") setPhone(user.phone)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.phone])
   const [amount, setAmount] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
@@ -84,7 +93,18 @@ export default function AirtimePage() {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary">Phone number</label>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="text-sm font-medium text-secondary">Phone number</label>
+            {user?.phone && phone !== user.phone && (
+              <button
+                type="button"
+                onClick={() => setPhone(user.phone!)}
+                className="text-xs font-medium text-primary underline"
+              >
+                Use my number
+              </button>
+            )}
+          </div>
           <input
             required
             type="tel"
@@ -95,6 +115,9 @@ export default function AirtimePage() {
               networkMismatch ? "border-destructive" : "border-border"
             }`}
           />
+          {user?.phone && phone === user.phone && (
+            <p className="mt-1 text-xs text-muted-foreground">Buying for yourself. Edit the number above to buy for someone else.</p>
+          )}
           {networkMismatch ? (
             <p className="mt-1 text-xs text-destructive">
               This looks like a {detected} number, but you selected {network}. Double-check before you pay.

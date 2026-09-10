@@ -16,8 +16,7 @@
 
 const BASE_URL = process.env.VTPASS_BASE_URL || "https://sandbox.vtpass.com/api"
 const API_KEY = process.env.VTPASS_API_KEY
-const SECRET_KEY = process.env.VTPASS_SECRET_KEY
-const PUBLIC_KEY = process.env.VTPASS_PUBLIC_KEY // GET requests use public-key, not secret-key
+const PUBLIC_KEY = process.env.VTPASS_PUBLIC_KEY // required for GET requests per VTpass docs — secret-key is NOT a valid substitute here
 
 // Add/remove serviceIDs here as needed. These are VTpass's own
 // serviceID strings (confirm exact spelling against your VTpass
@@ -32,7 +31,8 @@ const SERVICE_IDS = [
   "startimes",
   "ikeja-electric",
   "eko-electric",
-  "waec",
+  "waec-registration",
+  "waec-result-checker",
   "jamb",
 ]
 
@@ -41,7 +41,7 @@ async function fetchVariations(serviceID) {
   const res = await fetch(url, {
     headers: {
       "api-key": API_KEY,
-      "public-key": PUBLIC_KEY || SECRET_KEY, // some VTpass envs accept secret-key here too
+      "public-key": PUBLIC_KEY,
     },
   })
   const json = await res.json()
@@ -53,12 +53,20 @@ async function main() {
     console.error("Missing VTPASS_API_KEY env var.")
     process.exit(1)
   }
+  if (!PUBLIC_KEY) {
+    console.error("Missing VTPASS_PUBLIC_KEY env var. GET requests need api-key + public-key, not secret-key.")
+    process.exit(1)
+  }
 
   for (const serviceID of SERVICE_IDS) {
     console.log(`\n=== ${serviceID} ===`)
     try {
       const json = await fetchVariations(serviceID)
-      const variations = json?.content?.varations ?? json?.content?.variations ?? []
+      // VTpass's own docs show "variations" as the correct key; a
+      // couple of older service docs (e.g. third-party insurance)
+      // also include a misspelled "varations" duplicate for backward
+      // compatibility — check the correct spelling first.
+      const variations = json?.content?.variations ?? json?.content?.varations ?? []
       if (!Array.isArray(variations) || variations.length === 0) {
         console.log("  (no variations returned — check serviceID spelling, or this service has no plans, e.g. airtime)")
         console.log("  raw:", JSON.stringify(json).slice(0, 300))

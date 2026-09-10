@@ -16,7 +16,7 @@ interface PricingRule {
   convenience_fee_kobo: number
 }
 
-const SERVICE_TYPES = ["airtime", "data", "cable", "electricity", "exam_pin", "betting"]
+const SERVICE_TYPES = ["airtime", "data", "cable", "electricity", "exam_pin", "epin", "betting"]
 
 // Must exactly match the network/biller values each buy-flow page sends
 // (see app/(dashboard)/services/*/page.tsx). Pricing lookups are an exact
@@ -29,6 +29,7 @@ const NETWORKS_OR_BILLERS: Record<string, string[]> = {
   cable: ["DSTV", "GOtv", "StarTimes"],
   electricity: ["IKEDC", "EKEDC", "AEDC", "PHEDC", "IBEDC", "KEDCO"],
   exam_pin: ["WAEC", "NECO", "JAMB", "NABTEB"],
+  epin: ["MTN", "Airtel", "Glo", "9mobile"],
   betting: ["Bet9ja", "SportyBet", "NairaBet", "BetKing", "1xBet"],
 }
 
@@ -37,11 +38,14 @@ const NETWORKS_OR_BILLERS: Record<string, string[]> = {
 // which vary per admin and per provider). For these, plan_code must
 // match exactly what the buy-flow page and provider plan mappings use,
 // so a dropdown prevents a typo from silently making a pricing rule
-// never match. exam_pin: pin type. electricity: meter type (only
-// matters if an admin wants a different fee for prepaid vs postpaid —
-// leave blank to price both the same via the flexible-amount fallback).
+// never match. exam_pin: pin type. epin: recharge-card denomination
+// (VTU.ng only accepts 100/200/500 — see vtung.ts). electricity: meter
+// type (only matters if an admin wants a different fee for prepaid vs
+// postpaid — leave blank to price both the same via the
+// flexible-amount fallback).
 const FIXED_PLAN_CODES: Record<string, string[]> = {
   exam_pin: ["registration", "result_checker"],
+  epin: ["100", "200", "500"],
   electricity: ["prepaid", "postpaid"],
 }
 
@@ -50,6 +54,9 @@ const PLAN_CODE_LABELS: Record<string, string> = {
   result_checker: "Result Checker PIN",
   prepaid: "Prepaid",
   postpaid: "Postpaid",
+  "100": "₦100 ePIN",
+  "200": "₦200 ePIN",
+  "500": "₦500 ePIN",
 }
 
 export default function AdminPricingPage() {
@@ -111,11 +118,12 @@ export default function AdminPricingPage() {
       ...draft,
       serviceType,
       networkOrBiller: options[0] ?? "",
-      // exam_pin requires a pin type to price correctly, so default to
-      // the first option. electricity's plan_code is optional (blank
-      // means "same price regardless of meter type"), so leave it blank
-      // rather than force-picking prepaid/postpaid.
-      planCode: serviceType === "exam_pin" ? fixedCodes[0] : "",
+      // exam_pin and epin both require a plan code to price correctly
+      // (pin type / denomination), so default to the first option.
+      // electricity's plan_code is optional (blank means "same price
+      // regardless of meter type"), so leave it blank rather than
+      // force-picking prepaid/postpaid.
+      planCode: serviceType === "exam_pin" || serviceType === "epin" ? fixedCodes[0] : "",
     })
   }
 
@@ -294,9 +302,11 @@ export default function AdminPricingPage() {
             <label className="mb-1 block text-xs font-medium text-secondary">
               {draft.serviceType === "exam_pin"
                 ? "Pin type"
-                : draft.serviceType === "electricity"
-                  ? "Meter type (leave blank to price prepaid & postpaid the same)"
-                  : "Plan code (leave blank for flexible-amount services)"}
+                : draft.serviceType === "epin"
+                  ? "Denomination"
+                  : draft.serviceType === "electricity"
+                    ? "Meter type (leave blank to price prepaid & postpaid the same)"
+                    : "Plan code (leave blank for flexible-amount services)"}
             </label>
             {FIXED_PLAN_CODES[draft.serviceType] ? (
               <select

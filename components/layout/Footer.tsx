@@ -55,6 +55,8 @@ export function Footer() {
               <li><Link href="/services/data" className="hover:text-white">Data</Link></li>
               <li><Link href="/services/cable" className="hover:text-white">Cable TV</Link></li>
               <li><Link href="/services/electricity" className="hover:text-white">Electricity</Link></li>
+              <li><Link href="/services/exam-pin" className="hover:text-white">Exam Pins</Link></li>
+              <li><Link href="/rewards" className="hover:text-white">Rewards</Link></li>
             </ul>
           </div>
           <div>

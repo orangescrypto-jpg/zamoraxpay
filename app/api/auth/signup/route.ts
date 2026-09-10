@@ -127,6 +127,24 @@ export async function POST(req: NextRequest) {
     // just a friendly product welcome note.
     sendWelcomeEmail(email, fullName).catch((err: unknown) => console.error("[signup] Welcome email failed:", err))
 
+    // IMPORTANT: supabase.auth.admin.createUser() never sends a
+    // confirmation email itself, no matter what the project's "Confirm
+    // email" setting is — Supabase's own docs say so explicitly (the
+    // admin API is meant for backend-created accounts; use
+    // inviteUserByEmail() or resend() to actually trigger mail). Since
+    // this route uses createUser(), we have to trigger the send
+    // ourselves here, the same way the "Resend confirmation" button
+    // does — otherwise the very first confirmation email a user is
+    // supposed to get on signup never goes out, and the account only
+    // becomes reachable once they notice and click Resend.
+    if (!authData.user.email_confirmed_at) {
+      await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/login` },
+      }).catch((err: unknown) => console.error("[signup] Confirmation email send failed:", err))
+    }
+
     return NextResponse.json({
       user: {
         id: uid,

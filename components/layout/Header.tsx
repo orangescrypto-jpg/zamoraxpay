@@ -130,7 +130,7 @@ export function Header() {
           <Link href="/blog" className="text-sm font-medium text-secondary hover:text-primary">
             Blog
           </Link>
-          <Link href="/reseller" className="text-sm font-medium text-secondary hover:text-primary">
+          <Link href="/reseller" prefetch={false} className="text-sm font-medium text-secondary hover:text-primary">
             Become a Reseller
           </Link>
           {isAdmin && (
@@ -233,6 +233,7 @@ export function Header() {
             </Link>
             <Link
               href="/reseller"
+              prefetch={false}
               onClick={() => setMenuOpen(false)}
               className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
             >

@@ -26,6 +26,12 @@ function LoginForm() {
     setLoading(true)
     try {
       await AuthService.login(identifier, password)
+      // A full refresh clears any Router Cache entries fetched before
+      // login (e.g. a prefetched /reseller that resolved to a login
+      // redirect while logged out) so the very next navigation always
+      // re-runs middleware against the fresh, now-authenticated cookie
+      // instead of serving a stale cached response.
+      router.refresh()
       router.push(searchParams.get("redirect") || "/dashboard")
     } catch (err) {
       const authErr = err as Error & { requiresConfirmation?: boolean; email?: string }

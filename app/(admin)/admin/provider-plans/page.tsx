@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import type { ChangeEvent } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 
 interface PlanMapping {
@@ -61,6 +62,16 @@ export default function ProviderPlanMappingsPage() {
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  const [csvText, setCsvText] = useState("")
+  const [uploadingCsv, setUploadingCsv] = useState(false)
+  const [csvResult, setCsvResult] = useState<{
+    createdCount: number
+    updatedCount: number
+    errorCount: number
+    results: { row: number; status: "created" | "updated" | "error"; message?: string }[]
+  } | null>(null)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -86,12 +97,36 @@ export default function ProviderPlanMappingsPage() {
       alert("Fill in network/biller, plan code, provider plan ID, and cost")
       return
     }
+
+    // Same natural key the UNIQUE(service_type, network_or_biller, plan_code,
+    // provider_key) constraint covers — if a row already exists there and
+    // we're not already editing it, saving will silently overwrite it.
+    // Warn first so the admin knows before it happens.
+    if (!editingId) {
+      const duplicate = mappings.find(
+        (m) =>
+          m.serviceType === form.serviceType &&
+          m.networkOrBiller === form.networkOrBiller &&
+          m.planCode === form.planCode &&
+          m.providerKey === form.providerKey,
+      )
+      if (duplicate) {
+        const confirmed = confirm(
+          `A mapping already exists for ${form.providerKey} on ${form.networkOrBiller} ${form.planCode} ` +
+            `(plan id ${duplicate.providerPlanId}, ₦${(duplicate.providerCostKobo / 100).toLocaleString()}). ` +
+            `Saving will overwrite it with the new values. Continue?`,
+        )
+        if (!confirmed) return
+      }
+    }
+
     setSaving(true)
     const headers = await getAuthHeader()
     const res = await fetch("/api/admin/provider-plan-mappings", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({
+        id: editingId ?? undefined,
         serviceType: form.serviceType,
         networkOrBiller: form.networkOrBiller,
         planCode: form.planCode,
@@ -108,7 +143,58 @@ export default function ProviderPlanMappingsPage() {
       return
     }
     setForm(EMPTY_FORM)
+    setEditingId(null)
     load()
+  }
+
+  function startEdit(m: PlanMapping) {
+    setEditingId(m.id)
+    setForm({
+      serviceType: m.serviceType,
+      networkOrBiller: m.networkOrBiller,
+      planCode: m.planCode,
+      providerKey: m.providerKey,
+      providerPlanId: m.providerPlanId,
+      providerCostNaira: String(m.providerCostKobo / 100),
+      providerPlanLabel: m.providerPlanLabel ?? "",
+    })
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setForm(EMPTY_FORM)
+  }
+
+  async function bulkUploadCsv() {
+    if (!csvText.trim()) {
+      alert("Paste CSV text first")
+      return
+    }
+    setUploadingCsv(true)
+    setCsvResult(null)
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/admin/provider-plan-mappings/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ csv: csvText }),
+    })
+    const data = await res.json()
+    setUploadingCsv(false)
+    if (!res.ok) {
+      alert(data.error ?? "Bulk upload failed")
+      return
+    }
+    setCsvResult(data)
+    if (data.createdCount + data.updatedCount > 0) load()
+  }
+
+  function handleCsvFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setCsvText(String(reader.result ?? ""))
+    reader.readAsText(file)
   }
 
   async function toggleActive(m: PlanMapping) {
@@ -146,7 +232,9 @@ export default function ProviderPlanMappingsPage() {
       </p>
 
       <div className="mb-8 max-w-2xl rounded-lg border border-border bg-white p-4">
-        <h2 className="mb-3 font-heading font-semibold text-secondary">Add / update a mapping</h2>
+        <h2 className="mb-3 font-heading font-semibold text-secondary">
+          {editingId ? "Edit mapping" : "Add / update a mapping"}
+        </h2>
         <div className="grid grid-cols-2 gap-3">
           <label className="text-xs text-muted-foreground">
             Service type
@@ -270,13 +358,78 @@ export default function ProviderPlanMappingsPage() {
             />
           </label>
         </div>
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={saveMapping}
+            disabled={saving}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {saving ? "Saving..." : editingId ? "Update mapping" : "Save mapping"}
+          </button>
+          {editingId && (
+            <button onClick={cancelEdit} className="text-sm text-muted-foreground hover:underline">
+              Cancel edit
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-8 max-w-2xl rounded-lg border border-border bg-white p-4">
+        <h2 className="mb-1 font-heading font-semibold text-secondary">Bulk upload (CSV)</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Columns required: service_type, network_or_biller, plan_code, provider_key, provider_plan_id,
+          provider_cost_naira. Optional: provider_plan_label. Each row upserts the same way the form above
+          does, so re-uploading a file just updates the matching rows instead of duplicating them.
+        </p>
+        <input type="file" accept=".csv,text/csv" onChange={handleCsvFile} className="mb-3 block text-sm" />
+        <textarea
+          value={csvText}
+          onChange={(e) => setCsvText(e.target.value)}
+          placeholder={
+            "service_type,network_or_biller,plan_code,provider_key,provider_plan_id,provider_cost_naira,provider_plan_label\n" +
+            "data,MTN,mtn-1gb-30days,cheapdatahub,88,350,MTN 1GB Monthly"
+          }
+          rows={6}
+          className="mb-3 w-full rounded-md border border-border px-3 py-2 font-mono text-xs"
+        />
         <button
-          onClick={saveMapping}
-          disabled={saving}
-          className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          onClick={bulkUploadCsv}
+          disabled={uploadingCsv}
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
-          {saving ? "Saving..." : "Save mapping"}
+          {uploadingCsv ? "Uploading..." : "Upload CSV"}
         </button>
+
+        {csvResult && (
+          <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+            <p className="mb-2 font-medium text-secondary">
+              {csvResult.createdCount} new, {csvResult.updatedCount} duplicate{csvResult.updatedCount === 1 ? "" : "s"} updated
+              {csvResult.errorCount > 0 && `, ${csvResult.errorCount} failed`}
+            </p>
+            {csvResult.updatedCount > 0 && (
+              <ul className="mb-2 space-y-1 text-xs text-secondary">
+                {csvResult.results
+                  .filter((r) => r.status === "updated")
+                  .map((r) => (
+                    <li key={r.row}>
+                      Row {r.row}: {r.message}
+                    </li>
+                  ))}
+              </ul>
+            )}
+            {csvResult.errorCount > 0 && (
+              <ul className="space-y-1 text-xs text-destructive">
+                {csvResult.results
+                  .filter((r) => r.status === "error")
+                  .map((r) => (
+                    <li key={r.row}>
+                      Row {r.row}: {r.message}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -310,6 +463,9 @@ export default function ProviderPlanMappingsPage() {
                           {!m.isActive && <span className="ml-2 text-muted-foreground">(inactive)</span>}
                         </span>
                         <span className="flex gap-3">
+                          <button onClick={() => startEdit(m)} className="text-xs text-primary hover:underline">
+                            Edit
+                          </button>
                           <button onClick={() => toggleActive(m)} className="text-xs text-primary hover:underline">
                             {m.isActive ? "Disable" : "Enable"}
                           </button>

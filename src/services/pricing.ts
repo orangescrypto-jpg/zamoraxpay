@@ -107,6 +107,28 @@ export async function listPricingRules(serviceType?: VtuServiceType, nativeDB?: 
   return result.results ?? []
 }
 
+// Look up a rule by its natural key (service_type + network_or_biller +
+// plan_code — this table has no UNIQUE constraint, so unlike
+// provider_plan_mappings there's no DB-level upsert to lean on; the
+// bulk CSV uploader uses this to decide INSERT vs UPDATE itself, and
+// to tell the admin which one happened.
+export async function findPricingRuleByNaturalKey(
+  serviceType: VtuServiceType,
+  networkOrBiller: string,
+  planCode: string | null,
+  nativeDB?: any,
+) {
+  const result = await d1Query(
+    `SELECT * FROM pricing_rules
+     WHERE service_type = ? AND network_or_biller = ?
+       AND (plan_code = ? OR (plan_code IS NULL AND ? IS NULL))
+     LIMIT 1`,
+    [serviceType, networkOrBiller, planCode, planCode],
+    nativeDB,
+  )
+  return result.results?.[0] ?? null
+}
+
 export async function upsertPricingRule(
   params: {
     id?: string

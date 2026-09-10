@@ -16,8 +16,8 @@ export interface VtuPurchaseRequest {
   serviceType: VtuServiceType
   networkOrBiller: string // e.g. 'MTN', 'DSTV', 'IKEDC', 'WAEC'
   recipient: string // phone / meter / smartcard / betting account ID
-  planCode?: string // data bundle code / cable package code / exam_pin pin-type ("registration" | "result_checker")
-  quantity?: number // exam_pin only — number of PINs to purchase. A real field now; no longer smuggled via planCode/recipient.
+  planCode?: string // data bundle code / cable package code / exam_pin pin-type ("registration" | "result_checker") / epin denomination ("100" | "200" | "500")
+  quantity?: number // exam_pin and epin only — number of PINs to purchase. A real field now; no longer smuggled via planCode/recipient.
   amountKobo: number // amount to send to the provider (base cost, not the retail price charged to user)
   internalReference: string // our own idempotent reference, passed through so we can reconcile
   meterType?: "prepaid" | "postpaid" // electricity only; defaults to "prepaid" in adapters if omitted
@@ -27,7 +27,7 @@ export interface VtuPurchaseRequest {
 /**
  * Data the provider hands back that the CUSTOMER needs to see or keep —
  * as opposed to `raw`, which is for our own audit/debugging and is
- * never shown to the user. Only exam_pin and electricity (token)
+ * never shown to the user. exam_pin, epin, and electricity (token)
  * purchases populate this today; every field is optional because
  * providers vary in what they return, and some (see Pairgate) deliver
  * this asynchronously via webhook rather than in the purchase response
@@ -35,7 +35,7 @@ export interface VtuPurchaseRequest {
  * (see checkStatus / a future webhook receiver) fills it in.
  */
 export interface VtuDeliveredData {
-  /** Exam PIN(s) — a purchase can be for more than one (quantity). */
+  /** Exam PIN(s) or recharge-card ePIN(s) — a purchase can be for more than one (quantity). */
   pins?: { pin: string; serialNumber?: string }[]
   /** Electricity prepaid token, plus optional units/receipt metadata some discos return. */
   token?: string

@@ -12,7 +12,10 @@
 //   /airtime/purchase        { provider_id, amount, recipient, reference }
 //   /cable/purchase          { provider_id, plan_id, smartcard, recipient_name?, reference }
 //   /electricity/purchase    { provider_id, amount, meter_number, meter_type (1|2), recipient_name?, reference }
-//   /education/purchase      { provider_id, quantity, reference }  (WAEC/NECO/NABTEB exam pins)
+//   /education/purchase      { provider_id, quantity, reference }  (WAEC/NECO/NABTEB exam pins —
+//                             no plan/product-id field; provider_id itself must distinguish
+//                             registration vs. result-checker pins, e.g. "waec-registration" vs
+//                             "waec-result-checker", set via a provider_plan_mappings override)
 //   /bet/purchase             { provider_id, amount, customer_id, recipient_name?, reference }
 //   GET /transaction/status?reference_code=...
 // Betting funding uses a DIFFERENT path segment ("bet") than our
@@ -74,9 +77,18 @@ function buildBody(req: VtuPurchaseRequest): Record<string, unknown> {
         reference: req.internalReference,
       }
     case "exam_pin":
+      // No plan/product-id field exists on this endpoint — the
+      // registration-vs-result-checker distinction is baked into
+      // provider_id itself (e.g. "waec-result-checker" vs
+      // "waec-registration"), set via a provider_plan_mappings
+      // networkOrBiller override at the router level (see
+      // vtuRouter.ts EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS). If no
+      // mapping exists yet, this falls back to the bare exam body,
+      // which Pairgate will reject or mis-fulfill — an admin must add
+      // a mapping before enabling Pairgate for exam_pin.
       return {
         provider_id: req.networkOrBiller.toLowerCase(),
-        quantity: req.planCode ? Number(req.planCode) || 1 : 1,
+        quantity: req.quantity && req.quantity > 0 ? req.quantity : 1,
         reference: req.internalReference,
       }
     case "betting":

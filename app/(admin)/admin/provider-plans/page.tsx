@@ -65,6 +65,8 @@ export default function ProviderPlanMappingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [search, setSearch] = useState("")
+  const [filterServiceType, setFilterServiceType] = useState("all")
 
   const [csvText, setCsvText] = useState("")
   const [uploadingCsv, setUploadingCsv] = useState(false)
@@ -256,7 +258,16 @@ export default function ProviderPlanMappingsPage() {
 
   // Group by our plan (service+network+planCode) so the cheapest-first
   // ordering the router will actually use is obvious at a glance.
-  const grouped = mappings.reduce<Record<string, PlanMapping[]>>((acc, m) => {
+  // Client-side filter is applied before grouping, so a search hides
+  // whole groups that don't match rather than leaving empty ones.
+  const filteredMappings = mappings.filter((m) => {
+    if (filterServiceType !== "all" && m.serviceType !== filterServiceType) return false
+    if (!search.trim()) return true
+    const haystack = `${m.networkOrBiller} ${m.planCode} ${m.providerKey} ${m.providerPlanId} ${m.providerPlanLabel ?? ""}`.toLowerCase()
+    return haystack.includes(search.trim().toLowerCase())
+  })
+
+  const grouped = filteredMappings.reduce<Record<string, PlanMapping[]>>((acc, m) => {
     const key = `${m.serviceType}|${m.networkOrBiller}|${m.planCode}`
     acc[key] = acc[key] ? [...acc[key], m] : [m]
     return acc
@@ -472,10 +483,34 @@ export default function ProviderPlanMappingsPage() {
         )}
       </div>
 
+      {mappings.length > 0 && (
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:max-w-2xl">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search network, plan code, provider..."
+            className="flex-1 rounded-md border border-border px-3 py-2 text-sm"
+          />
+          <select
+            value={filterServiceType}
+            onChange={(e) => setFilterServiceType(e.target.value)}
+            className="rounded-md border border-border px-3 py-2 text-sm sm:w-48"
+          >
+            <option value="all">All service types</option>
+            {Object.keys(NETWORKS_OR_BILLERS).map((s) => (
+              <option key={s} value={s}>{s.replace("_", " ")}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
-      ) : Object.keys(grouped).length === 0 ? (
+      ) : mappings.length === 0 ? (
         <p className="text-sm text-muted-foreground">No plan mappings yet.</p>
+      ) : Object.keys(grouped).length === 0 ? (
+        <p className="text-sm text-muted-foreground">No mappings match your search.</p>
       ) : (
         <div className="max-w-3xl space-y-4">
           {selectedIds.size > 0 && (

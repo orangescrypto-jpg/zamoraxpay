@@ -9,6 +9,7 @@ import { getPaymentProviderCredentials } from "@/src/services/config"
 import { creditWallet } from "@/src/services/wallet"
 import { sendWalletFundedEmail } from "@/src/services/email"
 import { recordFundingSource, extractPaystackFundingSource } from "@/src/services/fundingSource"
+import { awardDepositBonusForFunding } from "@/src/services/depositBonus"
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
@@ -70,6 +71,12 @@ export async function POST(req: NextRequest) {
       recordFundingSource(userId, "paystack", fundingSource).catch((err) =>
         console.error("[paystack webhook] Funding source recording failed:", err),
       )
+
+      awardDepositBonusForFunding({
+        userId,
+        depositAmountKobo: amountKobo,
+        fundingReference: `ZPWF-PAYSTACK-${eventId}`,
+      }).catch((err) => console.error("[paystack webhook] Deposit bonus award failed:", err))
 
       const userResult = await d1Query("SELECT email, phone FROM users WHERE id = ?", [userId])
       const user = userResult.results?.[0]

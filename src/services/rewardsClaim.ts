@@ -58,12 +58,19 @@ export async function getUnclaimedSummary(userId: string, nativeDB?: any): Promi
 
 /** Claims all unclaimed cashback awards for a user in one credit. */
 export async function claimCashback(userId: string, nativeDB?: any): Promise<ClaimResult> {
-  const unclaimedResult = await d1Query(
-    "SELECT id, amount_kobo FROM cashback_awards WHERE user_id = ? AND claimed = 0",
+  // Claim-and-lock in one atomic statement: the WHERE claimed = 0 means
+  // only one concurrent call can ever flip a given row to claimed = 1,
+  // so RETURNING tells us exactly (and only) what THIS call won. A
+  // second, racing call sees zero rows returned and safely no-ops
+  // instead of crediting the wallet a second time.
+  const claimedResult = await d1Query(
+    `UPDATE cashback_awards SET claimed = 1, claimed_at = datetime('now')
+     WHERE user_id = ? AND claimed = 0
+     RETURNING id, amount_kobo`,
     [userId],
     nativeDB,
   )
-  const rows = unclaimedResult.results ?? []
+  const rows = claimedResult.results ?? []
   if (rows.length === 0) {
     return { success: false, message: "No cashback available to claim" }
   }
@@ -86,24 +93,22 @@ export async function claimCashback(userId: string, nativeDB?: any): Promise<Cla
     nativeDB,
   )
 
-  await d1Query(
-    `UPDATE cashback_awards SET claimed = 1, claimed_at = datetime('now')
-     WHERE user_id = ? AND claimed = 0`,
-    [userId],
-    nativeDB,
-  )
-
   return { success: true, message: "Cashback claimed to your wallet", amountKobo: totalKobo }
 }
 
 /** Claims all unclaimed, qualified referral bonuses for a user in one credit. */
 export async function claimReferralBonus(userId: string, nativeDB?: any): Promise<ClaimResult> {
-  const unclaimedResult = await d1Query(
-    "SELECT id, bonus_kobo FROM referrals WHERE referrer_user_id = ? AND bonus_awarded = 1 AND claimed = 0",
+  // Same atomic claim-and-lock pattern as claimCashback: the UPDATE's
+  // WHERE claimed = 0 is what prevents a double credit from a racing
+  // second call, and RETURNING tells us exactly what THIS call claimed.
+  const claimedResult = await d1Query(
+    `UPDATE referrals SET claimed = 1, claimed_at = datetime('now')
+     WHERE referrer_user_id = ? AND bonus_awarded = 1 AND claimed = 0
+     RETURNING id, bonus_kobo`,
     [userId],
     nativeDB,
   )
-  const rows = unclaimedResult.results ?? []
+  const rows = claimedResult.results ?? []
   if (rows.length === 0) {
     return { success: false, message: "No referral bonus available to claim" }
   }
@@ -126,24 +131,20 @@ export async function claimReferralBonus(userId: string, nativeDB?: any): Promis
     nativeDB,
   )
 
-  await d1Query(
-    `UPDATE referrals SET claimed = 1, claimed_at = datetime('now')
-     WHERE referrer_user_id = ? AND bonus_awarded = 1 AND claimed = 0`,
-    [userId],
-    nativeDB,
-  )
-
   return { success: true, message: "Referral bonus claimed to your wallet", amountKobo: totalKobo }
 }
 
 /** Claims all unclaimed daily streak check-in rewards for a user in one credit. */
 export async function claimStreakReward(userId: string, nativeDB?: any): Promise<ClaimResult> {
-  const unclaimedResult = await d1Query(
-    "SELECT id, amount_kobo FROM daily_streak_checkins WHERE user_id = ? AND claimed = 0",
+  // Same atomic claim-and-lock pattern as claimCashback/claimReferralBonus.
+  const claimedResult = await d1Query(
+    `UPDATE daily_streak_checkins SET claimed = 1, claimed_at = datetime('now')
+     WHERE user_id = ? AND claimed = 0
+     RETURNING id, amount_kobo`,
     [userId],
     nativeDB,
   )
-  const rows = unclaimedResult.results ?? []
+  const rows = claimedResult.results ?? []
   if (rows.length === 0) {
     return { success: false, message: "No check-in reward available to claim" }
   }
@@ -163,13 +164,6 @@ export async function claimStreakReward(userId: string, nativeDB?: any): Promise
       reference: claimReference,
       metadata: { kind: "streak_claim", checkinIds: rows.map((r: any) => r.id) },
     },
-    nativeDB,
-  )
-
-  await d1Query(
-    `UPDATE daily_streak_checkins SET claimed = 1, claimed_at = datetime('now')
-     WHERE user_id = ? AND claimed = 0`,
-    [userId],
     nativeDB,
   )
 

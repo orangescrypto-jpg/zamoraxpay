@@ -79,13 +79,13 @@ export function DashboardAnnouncement() {
   // as a gradient caption, same treatment as the header BannerSlider,
   // so admins can use image-only, text-only, or both.
   const slide = (
-    <div className="relative h-40 w-full overflow-hidden rounded-2xl bg-secondary shadow-[0_2px_10px_-6px_rgba(15,30,77,0.15)] sm:h-48">
+    <div className="relative aspect-[3/1] w-full overflow-hidden rounded-2xl bg-secondary shadow-[0_2px_10px_-6px_rgba(15,30,77,0.15)]">
       {current.imageUrl ? (
         <img
           key={current.id}
           src={current.imageUrl}
           alt={current.text ?? "Announcement"}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
         />
       ) : (
         <div className="flex h-full w-full items-center bg-[#0F1E4D] px-4">

@@ -81,7 +81,7 @@ export default function ElectricityPage() {
         return
       }
 
-      setScheduleNote({ success: true, message: `Scheduled — this bill will now run ${frequency}.` })
+      setScheduleNote({ success: true, message: `Scheduled. This bill will now run ${frequency}.` })
     } catch {
       setScheduleNote({ success: false, message: "Could not set up the schedule" })
     }

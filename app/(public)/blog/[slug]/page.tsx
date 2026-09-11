@@ -6,7 +6,6 @@ import { getPostBySlug, getRelatedPosts } from "@/src/services/blog"
 import { getSettingNumber } from "@/src/services/siteSettings"
 import { MarkdownContent } from "@/components/shared/MarkdownContent"
 import { ShareButton } from "@/components/shared/ShareButton"
-import { formatDate } from "@/lib/utils"
 
 export const revalidate = 3600
 
@@ -49,12 +48,6 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             {post.authorName && <span>{post.authorName}</span>}
-            {post.publishedAt && (
-              <>
-                <span>·</span>
-                <span>{formatDate(post.publishedAt)}</span>
-              </>
-            )}
           </div>
           <ShareButton
             title={post.title}

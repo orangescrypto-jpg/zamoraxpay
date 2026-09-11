@@ -130,7 +130,7 @@ export default function ScheduledBillsPage() {
               <div className="mb-2 flex items-start justify-between">
                 <div>
                   <p className="text-sm font-semibold text-secondary">
-                    {serviceLabel(rule.service_type)} — {rule.network_or_biller}
+                    {serviceLabel(rule.service_type)} - {rule.network_or_biller}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {rule.nickname ? `${rule.nickname} · ` : ""}

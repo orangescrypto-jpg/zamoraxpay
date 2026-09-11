@@ -31,6 +31,11 @@ export default function AirtimePage() {
     e.preventDefault()
     setResult(null)
 
+    if (parseFloat(amount) < 50) {
+      setResult({ success: false, message: "Minimum airtime purchase is ₦50" })
+      return
+    }
+
     if (networkMismatch) {
       const proceed = window.confirm(
         `This number looks like it's on ${detected}, not ${network}. Buy anyway?`,
@@ -136,10 +141,12 @@ export default function AirtimePage() {
           <input
             required
             type="number"
+            min={50}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="w-full rounded-md border border-border px-3 py-2 text-sm"
           />
+          <p className="mt-1 text-xs text-muted-foreground">Minimum airtime purchase is ₦50.</p>
         </div>
 
         <div>

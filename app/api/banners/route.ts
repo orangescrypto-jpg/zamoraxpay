@@ -5,6 +5,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { d1Query } from "@/lib/db"
 
+// D1 returns raw snake_case columns; the client-side Banner type (and
+// every consumer of this route) expects camelCase. Map explicitly here
+// rather than relying on callers to know the DB's column names.
+function mapBannerRow(row: any) {
+  return {
+    id: row.id,
+    placement: row.placement,
+    title: row.title,
+    imageUrl: row.image_url,
+    linkUrl: row.link_url,
+    sortOrder: row.sort_order,
+  }
+}
+
 export async function GET(req: NextRequest) {
   const placement = req.nextUrl.searchParams.get("placement") // 'header_slider' | 'footer'
 
@@ -24,5 +38,6 @@ export async function GET(req: NextRequest) {
   const params = placement ? [placement, now, now] : [now, now]
   const result = await d1Query(sql, params)
 
-  return NextResponse.json({ banners: result.results ?? [] })
+  const banners = (result.results ?? []).map(mapBannerRow)
+  return NextResponse.json({ banners })
 }

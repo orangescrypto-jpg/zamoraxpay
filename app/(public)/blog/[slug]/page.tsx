@@ -6,7 +6,6 @@ import { getPostBySlug, getRelatedPosts } from "@/src/services/blog"
 import { getSettingNumber } from "@/src/services/siteSettings"
 import { MarkdownContent } from "@/components/shared/MarkdownContent"
 import { ShareButton } from "@/components/shared/ShareButton"
-import { EditPostButton } from "@/components/shared/EditPostButton"
 import { formatDate } from "@/lib/utils"
 
 export const revalidate = 3600
@@ -57,14 +56,11 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
               </>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <EditPostButton postId={post.id} />
-            <ShareButton
-              title={post.title}
-              text={post.excerpt ?? undefined}
-              url={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/blog/${post.slug}`}
-            />
-          </div>
+          <ShareButton
+            title={post.title}
+            text={post.excerpt ?? undefined}
+            url={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/blog/${post.slug}`}
+          />
         </div>
 
         {post.coverImageUrl && (

@@ -52,20 +52,20 @@ export default function AdminBlogListPage() {
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">Title</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {posts.map((post) => (
                 <tr key={post.id}>
-                  <td className="px-4 py-3 font-medium">{post.title}</td>
+                  <td className="max-w-[220px] px-4 py-3 font-medium">{post.title}</td>
                   <td className="px-4 py-3 text-muted-foreground">{post.category ?? "—"}</td>
                   <td className="px-4 py-3">
                     <span
@@ -76,8 +76,11 @@ export default function AdminBlogListPage() {
                       {post.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/admin/blog/${post.id}/edit`} className="mr-3 text-primary hover:underline">
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                    <Link
+                      href={`/admin/blog/${post.id}/edit`}
+                      className="mr-3 inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-primary hover:bg-muted"
+                    >
                       Edit
                     </Link>
                     <button onClick={() => deletePost(post.id)} className="text-destructive hover:underline">

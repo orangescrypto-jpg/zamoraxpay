@@ -15,7 +15,7 @@
 // S3Client directly, so the binding path is always used when present.
 // ─────────────────────────────────────────────────────────────────
 
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3"
 import { NodeHttpHandler } from "@smithy/node-http-handler"
 
 // Minimal shape of the Cloudflare R2 binding (avoids a hard dependency
@@ -24,6 +24,11 @@ import { NodeHttpHandler } from "@smithy/node-http-handler"
 interface R2Bucket {
   put(key: string, value: ArrayBuffer | Uint8Array | string, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>
   get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>
+  list(options?: { prefix?: string; limit?: number; cursor?: string }): Promise<{
+    objects: { key: string; uploaded: Date; size: number }[]
+    truncated: boolean
+    cursor?: string
+  }>
 }
 
 // ── Native binding path ─────────────────────────────────────────────
@@ -125,4 +130,43 @@ export async function r2Get(
   const body = result.Body as any
   if (!body) return null
   return await body.transformToByteArray()
+}
+
+// Lists previously uploaded files under a prefix (e.g. "banners/") so
+// admin UIs can offer "reuse an existing image" instead of forcing a
+// fresh upload every time. Returns newest first, capped at `limit`
+// (default 100 — plenty for a picker grid, keeps the response small).
+export async function r2List(
+  prefix: string,
+  nativeBucket?: unknown,
+  limit = 100,
+): Promise<{ key: string; url: string; uploadedAt: string | null; size: number }[]> {
+  const bucket = getNativeBucket(nativeBucket)
+  const baseUrl = R2_PUBLIC_URL()
+
+  if (bucket) {
+    const result = await bucket.list({ prefix, limit })
+    return result.objects
+      .sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
+      .map((obj) => ({
+        key: obj.key,
+        url: `${baseUrl}/${obj.key}`,
+        uploadedAt: obj.uploaded ? new Date(obj.uploaded).toISOString() : null,
+        size: obj.size,
+      }))
+  }
+
+  // Fallback: AWS SDK
+  const result = await r2Client().send(
+    new ListObjectsV2Command({ Bucket: R2_BUCKET(), Prefix: prefix, MaxKeys: limit }),
+  )
+  return (result.Contents ?? [])
+    .filter((obj): obj is typeof obj & { Key: string } => !!obj.Key)
+    .sort((a, b) => (b.LastModified?.getTime() ?? 0) - (a.LastModified?.getTime() ?? 0))
+    .map((obj) => ({
+      key: obj.Key,
+      url: `${baseUrl}/${obj.Key}`,
+      uploadedAt: obj.LastModified ? obj.LastModified.toISOString() : null,
+      size: obj.Size ?? 0,
+    }))
 }

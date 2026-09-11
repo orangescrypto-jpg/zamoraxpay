@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SimpleBlogEditor } from "@/components/admin/SimpleBlogEditor"
+import { ImagePicker } from "@/components/admin/ImagePicker"
 import { createClient } from "@/src/services/providers/supabase/client"
 
 function slugify(title: string): string {
@@ -146,13 +147,7 @@ export function BlogPostForm({ postId, initial }: BlogPostFormProps) {
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-secondary">Cover Image URL</label>
-        <input
-          value={coverImageUrl}
-          onChange={(e) => setCoverImageUrl(e.target.value)}
-          className="w-full rounded-md border border-border px-3 py-2 text-sm"
-          placeholder="https://... (upload via Banners page, then paste URL here)"
-        />
+        <ImagePicker value={coverImageUrl} onChange={setCoverImageUrl} folder="blog" label="Cover Image" />
       </div>
 
       <div>

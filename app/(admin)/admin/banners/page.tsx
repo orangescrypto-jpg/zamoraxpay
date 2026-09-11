@@ -3,9 +3,10 @@
 
 export const dynamic = "force-dynamic"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { cn } from "@/lib/utils"
+import { ImagePicker } from "@/components/admin/ImagePicker"
 
 interface AdminBanner {
   id: string
@@ -21,11 +22,9 @@ export default function AdminBannersPage() {
   const [tab, setTab] = useState<"header_slider" | "footer">("header_slider")
   const [banners, setBanners] = useState<AdminBanner[]>([])
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
   const [draftTitle, setDraftTitle] = useState("")
   const [draftLink, setDraftLink] = useState("")
   const [draftImageUrl, setDraftImageUrl] = useState("")
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -46,23 +45,6 @@ export default function AdminBannersPage() {
     loadBanners()
   }, [])
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setUploading(true)
-    const headers = await getAuthHeader()
-    const formData = new FormData()
-    formData.append("file", file)
-
-    const res = await fetch("/api/admin/upload", { method: "POST", headers, body: formData })
-    const data = await res.json()
-    setUploading(false)
-
-    if (res.ok) setDraftImageUrl(data.url)
-    else alert(data.error ?? "Upload failed")
-  }
-
   async function handleAdd() {
     if (!draftImageUrl) return alert("Please upload an image first")
 
@@ -82,7 +64,6 @@ export default function AdminBannersPage() {
     setDraftTitle("")
     setDraftLink("")
     setDraftImageUrl("")
-    if (fileInputRef.current) fileInputRef.current.value = ""
     loadBanners()
   }
 
@@ -135,12 +116,7 @@ export default function AdminBannersPage() {
         <h2 className="mb-3 text-sm font-semibold text-secondary">Add New Banner</h2>
 
         <div className="mb-3">
-          <label className="mb-1 block text-sm font-medium text-secondary">Image</label>
-          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="text-sm" />
-          {uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading...</p>}
-          {draftImageUrl && (
-            <img src={draftImageUrl} alt="Preview" className="mt-2 h-24 rounded-md object-cover" />
-          )}
+          <ImagePicker value={draftImageUrl} onChange={setDraftImageUrl} folder="banners" label="Image" />
         </div>
 
         <div className="mb-3 grid grid-cols-2 gap-3">

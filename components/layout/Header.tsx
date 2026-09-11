@@ -104,11 +104,11 @@ export function Header() {
   const [bannerVisible, setBannerVisible] = useState(true)
   const isAdmin = !!user?.adminRole
 
-  // Header banner slider: only on the blog, and only for logged-out
-  // visitors elsewhere. Never show it on the dashboard / other
-  // authenticated pages. (Footer banners are unaffected.)
+  // Header banner slider: logged-out visitors see it on every page.
+  // Logged-in users only see it on the blog. (Footer banners are
+  // unaffected.)
   const isBlogPage = pathname?.startsWith("/blog")
-  const showHeaderBanner = isBlogPage || (!loading && !isAuthenticated)
+  const showHeaderBanner = loading ? false : isAuthenticated ? isBlogPage : true
 
   // Scrolling down hides the banner strip immediately (nav bar itself
   // stays put). It only reappears once the page is scrolled all the

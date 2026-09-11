@@ -26,7 +26,6 @@ import {
 import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
-import { DashboardAnnouncement } from "@/components/dashboard/DashboardAnnouncement"
 
 interface Order {
   id: string
@@ -242,7 +241,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <DashboardAnnouncement />
 
       <div className="mt-9">
         <h2 className="text-[15px] font-semibold text-primary">Quick actions</h2>

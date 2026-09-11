@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import type { Banner } from "@/src/types"
@@ -99,8 +99,15 @@ function BannerSlider() {
 export function Header() {
   const { user, isAuthenticated, signOut } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
   const isAdmin = !!user?.adminRole
+
+  // Header banner slider: only on the blog, and only for logged-out
+  // visitors elsewhere. Never show it on the dashboard / other
+  // authenticated pages. (Footer banners are unaffected.)
+  const isBlogPage = pathname?.startsWith("/blog")
+  const showHeaderBanner = isBlogPage || !isAuthenticated
 
   // Full sign-out: clear the session, then hard-navigate home so no
   // stale client-side router cache or component state can show the
@@ -290,9 +297,11 @@ export function Header() {
         </nav>
       )}
 
-      <div className="container pb-3">
-        <BannerSlider />
-      </div>
+      {showHeaderBanner && (
+        <div className="container pb-3">
+          <BannerSlider />
+        </div>
+      )}
     </header>
   )
 }

@@ -110,22 +110,21 @@ export function Header() {
   const isBlogPage = pathname?.startsWith("/blog")
   const showHeaderBanner = isBlogPage || (!loading && !isAuthenticated)
 
-  // Scrolling down hides the banner strip (nav bar itself stays put);
-  // scrolling back up brings it back immediately. Hiding only kicks in
-  // after a short sustained downward scroll, so small jitters or a
-  // quick flick don't collapse it right away.
+  // Scrolling down hides the banner strip immediately (nav bar itself
+  // stays put). Scrolling back up brings it back, but only after a
+  // short delay so quick jitters don't flicker it back on.
   useEffect(() => {
     if (!showHeaderBanner) return
     let lastY = window.scrollY
-    let downwardAccum = 0
-    let hideTimer: ReturnType<typeof setTimeout> | null = null
-    const HIDE_DELAY_MS = 350
-    const HIDE_DISTANCE_PX = 60
+    let upwardAccum = 0
+    let showTimer: ReturnType<typeof setTimeout> | null = null
+    const SHOW_DELAY_MS = 350
+    const SHOW_DISTANCE_PX = 40
 
-    const clearHideTimer = () => {
-      if (hideTimer) {
-        clearTimeout(hideTimer)
-        hideTimer = null
+    const clearShowTimer = () => {
+      if (showTimer) {
+        clearTimeout(showTimer)
+        showTimer = null
       }
     }
 
@@ -134,18 +133,20 @@ export function Header() {
       const delta = currentY - lastY
 
       if (currentY <= 0) {
-        downwardAccum = 0
-        clearHideTimer()
+        upwardAccum = 0
+        clearShowTimer()
         setBannerVisible(true)
       } else if (delta > 0) {
-        downwardAccum += delta
-        if (downwardAccum > HIDE_DISTANCE_PX && !hideTimer) {
-          hideTimer = setTimeout(() => setBannerVisible(false), HIDE_DELAY_MS)
+        // Scrolling down: hide right away.
+        upwardAccum = 0
+        clearShowTimer()
+        setBannerVisible(false)
+      } else if (delta < 0) {
+        // Scrolling up: only show again after sustained upward scroll.
+        upwardAccum += -delta
+        if (upwardAccum > SHOW_DISTANCE_PX && !showTimer) {
+          showTimer = setTimeout(() => setBannerVisible(true), SHOW_DELAY_MS)
         }
-      } else if (delta < -4) {
-        downwardAccum = 0
-        clearHideTimer()
-        setBannerVisible(true)
       }
 
       lastY = currentY
@@ -154,7 +155,7 @@ export function Header() {
     window.addEventListener("scroll", handleScroll, { passive: true })
     return () => {
       window.removeEventListener("scroll", handleScroll)
-      clearHideTimer()
+      clearShowTimer()
     }
   }, [showHeaderBanner])
 

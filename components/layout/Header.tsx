@@ -111,20 +111,40 @@ export function Header() {
   const showHeaderBanner = isBlogPage || (!loading && !isAuthenticated)
 
   // Scrolling down hides the banner strip (nav bar itself stays put);
-  // scrolling back up brings it back. Ignores tiny jitters near the top.
+  // scrolling back up brings it back immediately. Hiding only kicks in
+  // after a short sustained downward scroll, so small jitters or a
+  // quick flick don't collapse it right away.
   useEffect(() => {
     if (!showHeaderBanner) return
     let lastY = window.scrollY
+    let downwardAccum = 0
+    let hideTimer: ReturnType<typeof setTimeout> | null = null
+    const HIDE_DELAY_MS = 350
+    const HIDE_DISTANCE_PX = 60
+
+    const clearHideTimer = () => {
+      if (hideTimer) {
+        clearTimeout(hideTimer)
+        hideTimer = null
+      }
+    }
 
     const handleScroll = () => {
       const currentY = window.scrollY
       const delta = currentY - lastY
 
       if (currentY <= 0) {
+        downwardAccum = 0
+        clearHideTimer()
         setBannerVisible(true)
-      } else if (delta > 4) {
-        setBannerVisible(false)
+      } else if (delta > 0) {
+        downwardAccum += delta
+        if (downwardAccum > HIDE_DISTANCE_PX && !hideTimer) {
+          hideTimer = setTimeout(() => setBannerVisible(false), HIDE_DELAY_MS)
+        }
       } else if (delta < -4) {
+        downwardAccum = 0
+        clearHideTimer()
         setBannerVisible(true)
       }
 
@@ -132,7 +152,10 @@ export function Header() {
     }
 
     window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+      clearHideTimer()
+    }
   }, [showHeaderBanner])
 
   // Full sign-out: clear the session, then hard-navigate home so no

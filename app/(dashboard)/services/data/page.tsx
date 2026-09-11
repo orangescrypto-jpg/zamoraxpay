@@ -162,7 +162,7 @@ export default function DataPage() {
           ) : (
             phone.length >= 4 && (
               <p className="mt-1 text-xs text-muted-foreground">
-                {detected ? `Detected network: ${detected}` : "Network not recognized from this prefix — you can still proceed"}
+                {detected ? `Detected network: ${detected}` : "Network not recognized from this prefix. You can still proceed"}
               </p>
             )
           )}
@@ -183,7 +183,7 @@ export default function DataPage() {
               className="w-full rounded-md border border-border px-3 py-2 text-sm">
               {plans.map((p) => (
                 <option key={p.planCode} value={p.planCode}>
-                  {labelFromPlanCode(p.planCode)} — {formatNaira(p.priceKobo)}
+                  {labelFromPlanCode(p.planCode)} - {formatNaira(p.priceKobo)}
                 </option>
               ))}
             </select>

@@ -146,6 +146,7 @@ function BulkAirtimeForm() {
             <label className="mb-1 block text-sm font-medium text-secondary">Amount per number (₦)</label>
             <input required type="number" min={50} value={amountNaira} onChange={(e) => setAmountNaira(e.target.value)}
               className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+            <p className="mt-1 text-xs text-muted-foreground">Minimum airtime purchase is ₦50 per number.</p>
             {selectedBatch && amountKobo > 0 && (
               <p className="mt-1 text-sm font-medium text-secondary">
                 {formatNaira(amountKobo)} × {selectedBatch.numberCount} = You'll pay {formatNaira(totalEstimateKobo)}

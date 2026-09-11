@@ -101,6 +101,7 @@ export function Header() {
   const router = useRouter()
   const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [bannerVisible, setBannerVisible] = useState(true)
   const isAdmin = !!user?.adminRole
 
   // Header banner slider: only on the blog, and only for logged-out
@@ -108,6 +109,31 @@ export function Header() {
   // authenticated pages. (Footer banners are unaffected.)
   const isBlogPage = pathname?.startsWith("/blog")
   const showHeaderBanner = isBlogPage || (!loading && !isAuthenticated)
+
+  // Scrolling down hides the banner strip (nav bar itself stays put);
+  // scrolling back up brings it back. Ignores tiny jitters near the top.
+  useEffect(() => {
+    if (!showHeaderBanner) return
+    let lastY = window.scrollY
+
+    const handleScroll = () => {
+      const currentY = window.scrollY
+      const delta = currentY - lastY
+
+      if (currentY <= 0) {
+        setBannerVisible(true)
+      } else if (delta > 4) {
+        setBannerVisible(false)
+      } else if (delta < -4) {
+        setBannerVisible(true)
+      }
+
+      lastY = currentY
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [showHeaderBanner])
 
   // Full sign-out: clear the session, then hard-navigate home so no
   // stale client-side router cache or component state can show the
@@ -298,8 +324,15 @@ export function Header() {
       )}
 
       {showHeaderBanner && (
-        <div className="container pb-3">
-          <BannerSlider />
+        <div
+          className={cn(
+            "overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out",
+            bannerVisible ? "max-h-[220px] opacity-100" : "max-h-0 opacity-0",
+          )}
+        >
+          <div className="container pb-3 pt-3">
+            <BannerSlider />
+          </div>
         </div>
       )}
     </header>

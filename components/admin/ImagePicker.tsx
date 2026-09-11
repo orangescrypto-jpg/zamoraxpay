@@ -114,7 +114,7 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
             {loadingPrevious ? (
               <p className="text-sm text-muted-foreground">Loading...</p>
             ) : previous.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No previous uploads yet — upload a new image first.</p>
+              <p className="text-sm text-muted-foreground">No previous uploads yet. Upload a new image first.</p>
             ) : (
               <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
                 {previous.map((file) => (

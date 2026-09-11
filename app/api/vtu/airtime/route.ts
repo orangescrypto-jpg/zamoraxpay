@@ -13,6 +13,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "network, phone, amountKobo, and transactionPin are required" }, { status: 400 })
     }
 
+    const MIN_AIRTIME_KOBO = 5000 // ₦50 minimum
+    if (amountKobo < MIN_AIRTIME_KOBO) {
+      return NextResponse.json({ error: "Minimum airtime purchase is ₦50" }, { status: 400 })
+    }
+
     const result = await runPurchaseFlow({
       userId: auth.uid,
       serviceType: "airtime",

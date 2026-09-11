@@ -146,7 +146,7 @@ function BulkDataForm() {
     <div className="container max-w-md py-8">
       <h1 className="mb-1 text-2xl font-heading font-bold text-secondary">Bulk Data</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Send the same data plan to everyone in a saved group. All numbers must be on the selected network — numbers detected on a different network are skipped.
+        Send the same data plan to everyone in a saved group. All numbers must be on the selected network. Numbers detected on a different network are skipped.
       </p>
 
       {error && (
@@ -156,7 +156,7 @@ function BulkDataForm() {
       {result && (
         <div className="mb-4 space-y-2 rounded-md border border-border p-4">
           <p className="text-sm font-semibold text-secondary">
-            {result.successCount} succeeded, {result.failureCount} failed — {formatNaira(result.totalChargedKobo)} total charged
+            {result.successCount} succeeded, {result.failureCount} failed. {formatNaira(result.totalChargedKobo)} total charged
           </p>
           <div className="max-h-64 space-y-1 overflow-y-auto text-xs">
             {result.items.map((item, i) => (
@@ -221,7 +221,7 @@ function BulkDataForm() {
                 className="w-full rounded-md border border-border px-3 py-2 text-sm">
                 {plans.map((p) => (
                   <option key={p.planCode} value={p.planCode}>
-                    {labelFromPlanCode(p.planCode)} — {formatNaira(p.priceKobo)}
+                    {labelFromPlanCode(p.planCode)} - {formatNaira(p.priceKobo)}
                   </option>
                 ))}
               </select>

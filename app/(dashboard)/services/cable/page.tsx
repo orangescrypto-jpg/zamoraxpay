@@ -136,7 +136,7 @@ export default function CablePage() {
               className="w-full rounded-md border border-border px-3 py-2 text-sm">
               {plans.map((p) => (
                 <option key={p.planCode} value={p.planCode}>
-                  {labelFromPlanCode(p.planCode, biller)} — {formatNaira(p.priceKobo)}
+                  {labelFromPlanCode(p.planCode, biller)} - {formatNaira(p.priceKobo)}
                 </option>
               ))}
             </select>

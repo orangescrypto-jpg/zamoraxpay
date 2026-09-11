@@ -97,7 +97,7 @@ function BannerSlider() {
 }
 
 export function Header() {
-  const { user, isAuthenticated, signOut } = useAuth()
+  const { user, isAuthenticated, signOut, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -107,7 +107,7 @@ export function Header() {
   // visitors elsewhere. Never show it on the dashboard / other
   // authenticated pages. (Footer banners are unaffected.)
   const isBlogPage = pathname?.startsWith("/blog")
-  const showHeaderBanner = isBlogPage || !isAuthenticated
+  const showHeaderBanner = isBlogPage || (!loading && !isAuthenticated)
 
   // Full sign-out: clear the session, then hard-navigate home so no
   // stale client-side router cache or component state can show the

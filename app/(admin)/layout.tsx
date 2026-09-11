@@ -113,7 +113,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </nav>
       </aside>
 
-      <div className="flex-1 bg-bg lg:ml-0">
+      <div className="min-w-0 flex-1 bg-bg lg:ml-0">
         <div className="sticky top-0 z-20 flex items-center border-b border-border bg-white p-3 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}

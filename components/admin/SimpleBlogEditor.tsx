@@ -102,8 +102,8 @@ export function SimpleBlogEditor({ value, onChange, minHeight = 400 }: SimpleBlo
               ? `<h1>Heading</h1>\n\n<p>Write your article here using raw HTML.</p>\n\n<h2>Sub-heading</h2>\n\n<ul>\n  <li>Point one</li>\n  <li>Point two</li>\n</ul>\n\n<a href="https://example.com">A link</a>`
               : `# Heading\n\nWrite your article here using Markdown.\n\n## Sub-heading\n\n- Point one\n- Point two\n\n[A link](https://example.com)`
           }
-          style={{ minHeight }}
-          className="w-full resize-y p-4 font-mono text-sm text-secondary outline-none placeholder:text-muted-foreground"
+          style={{ minHeight, overflowWrap: "break-word", whiteSpace: "pre-wrap" }}
+          className="w-full resize-y break-words p-4 font-mono text-sm text-secondary outline-none placeholder:text-muted-foreground"
         />
       ) : (
         <div style={{ minHeight }} className="p-4">

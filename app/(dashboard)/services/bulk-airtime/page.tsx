@@ -104,7 +104,7 @@ function BulkAirtimeForm() {
       {result && (
         <div className="mb-4 space-y-2 rounded-md border border-border p-4">
           <p className="text-sm font-semibold text-secondary">
-            {result.successCount} succeeded, {result.failureCount} failed — {formatNaira(result.totalChargedKobo)} total charged
+            {result.successCount} succeeded, {result.failureCount} failed. {formatNaira(result.totalChargedKobo)} total charged
           </p>
           <div className="max-h-64 space-y-1 overflow-y-auto text-xs">
             {result.items.map((item, i) => (

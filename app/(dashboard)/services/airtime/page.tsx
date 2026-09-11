@@ -130,7 +130,7 @@ export default function AirtimePage() {
           ) : (
             phone.length >= 4 && (
               <p className="mt-1 text-xs text-muted-foreground">
-                {detected ? `Detected network: ${detected}` : "Network not recognized from this prefix — you can still proceed"}
+                {detected ? `Detected network: ${detected}` : "Network not recognized from this prefix. You can still proceed"}
               </p>
             )
           )}

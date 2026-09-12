@@ -43,6 +43,7 @@ export type WalletTransactionType =
   | "weekend_bonus"
   | "daily_streak"
   | "deposit_bonus"
+  | "korapay_charge"
 
 export interface WalletTransaction {
   id: string

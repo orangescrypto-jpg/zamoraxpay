@@ -137,7 +137,7 @@ export async function listPlans(
 
   const wholesale = userTier === "reseller"
 
-  const finalPlans = rows
+  const finalPlans: CustomerPlan[] = rows
     .filter((row: any) => {
       if (!planCodesWithMappings.has(row.plan_code)) return true // unmapped plan — no liveness signal to check
       return planCodesWithLiveProvider.has(row.plan_code)

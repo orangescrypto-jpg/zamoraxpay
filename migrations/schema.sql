@@ -602,6 +602,10 @@ INSERT OR IGNORE INTO feature_flags (key, label, description, is_enabled) VALUES
 -- =====================================================================
 
 INSERT OR IGNORE INTO site_settings (key, label, description, value, value_type) VALUES
+  ('adsense_enabled', 'Google AdSense Enabled', 'Master on/off switch for Google AdSense ad units', 'false', 'boolean'),
+  ('adsense_client_id', 'Google AdSense Publisher ID', 'Your AdSense publisher ID, e.g. ca-pub-8830559839401006 (used for site verification and to load the AdSense script)', '', 'text'),
+  ('adsense_homepage_footer_slot', 'AdSense Slot: Homepage Footer', 'Ad unit slot ID shown at the bottom of the homepage, above the footer', '', 'text'),
+  ('adsense_blog_post_slot', 'AdSense Slot: Blog Post', 'Ad unit slot ID shown inside blog posts, below the article content', '', 'text'),
   ('homepage_post_count', 'Homepage: Latest Posts to Show', 'How many latest blog posts appear on the homepage', '6', 'number'),
   ('related_post_count',  'Blog: Related Posts to Show', 'How many related posts appear at the bottom of a blog post', '4', 'number'),
   ('cashback_enabled',    'Cashback Enabled', 'Master on/off switch for cashback (also gated by the cashback feature flag)', 'true', 'boolean'),

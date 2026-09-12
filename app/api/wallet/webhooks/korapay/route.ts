@@ -12,6 +12,7 @@ import { creditWallet } from "@/src/services/wallet"
 import { sendWalletFundedEmail } from "@/src/services/email"
 import { recordFundingSource, extractKorapayFundingSource } from "@/src/services/fundingSource"
 import { awardDepositBonusForFunding } from "@/src/services/depositBonus"
+import { applyKorapayChargeForFunding } from "@/src/services/korapayCharge"
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
@@ -80,6 +81,12 @@ export async function POST(req: NextRequest) {
         depositAmountKobo: amountKobo,
         fundingReference: `ZPWF-KORAPAY-${eventId}`,
       }).catch((err) => console.error("[korapay webhook] Deposit bonus award failed:", err))
+
+      applyKorapayChargeForFunding({
+        userId,
+        depositAmountKobo: amountKobo,
+        fundingReference: `ZPWF-KORAPAY-${eventId}`,
+      }).catch((err) => console.error("[korapay webhook] Korapay charge deduction failed:", err))
 
       const userResult = await d1Query("SELECT email, phone FROM users WHERE id = ?", [userId])
       const user = userResult.results?.[0]

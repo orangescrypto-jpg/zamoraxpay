@@ -18,6 +18,7 @@ import { getPaymentProviderCredentials } from "@/src/services/config"
 import { creditWallet } from "@/src/services/wallet"
 import { recordFundingSource, extractKorapayFundingSource } from "@/src/services/fundingSource"
 import { awardDepositBonusForFunding } from "@/src/services/depositBonus"
+import { applyKorapayChargeForFunding } from "@/src/services/korapayCharge"
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req)
@@ -68,6 +69,12 @@ export async function GET(req: NextRequest) {
     depositAmountKobo: result.amountKobo,
     fundingReference: eventReference,
   }).catch((err) => console.error("[wallet/fund/verify] Deposit bonus award failed:", err))
+
+  applyKorapayChargeForFunding({
+    userId: auth.uid,
+    depositAmountKobo: result.amountKobo,
+    fundingReference: eventReference,
+  }).catch((err) => console.error("[wallet/fund/verify] Korapay charge deduction failed:", err))
 
   return NextResponse.json({ status: "success", newBalanceKobo })
 }

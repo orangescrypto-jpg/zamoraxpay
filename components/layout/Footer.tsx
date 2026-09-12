@@ -2,8 +2,10 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { usePathname } from "next/navigation"
 import Link from "next/link"
 import type { Banner } from "@/src/types"
+import { AdSenseSlot } from "@/components/shared/AdSenseSlot"
 
 const FOOTER_AUTO_SLIDE_INTERVAL_MS = 5000
 
@@ -95,8 +97,35 @@ function FooterBanner() {
   )
 }
 
+// Same route list AdSenseLoader uses to decide "is this a logged-in
+// app screen" — the footer is rendered site-wide from the root layout,
+// so it needs its own check to keep the ad out of the dashboard/admin
+// even though the Footer component itself doesn't know about auth.
+const DASHBOARD_PATHS = [
+  "/dashboard",
+  "/wallet",
+  "/services",
+  "/history",
+  "/referrals",
+  "/rewards",
+  "/reseller",
+  "/settings",
+  "/beneficiaries",
+  "/daily-streak",
+  "/cashback",
+  "/refund",
+]
+
+function isDashboardOrAdminPath(pathname: string | null) {
+  if (!pathname) return false
+  if (pathname.startsWith("/admin")) return true
+  return DASHBOARD_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
+
 export function Footer() {
+  const pathname = usePathname()
   const marketplaceUrl = "https://zamorax.com"
+  const showAd = !isDashboardOrAdminPath(pathname)
 
   return (
     <footer className="border-t border-border bg-secondary text-white">
@@ -142,6 +171,8 @@ export function Footer() {
             </p>
           </div>
         </div>
+
+        {showAd && <AdSenseSlot slotKey="homepage_footer" className="mt-8" />}
 
         <div className="mt-8 border-t border-white/10 pt-6 text-center text-xs text-white/50">
           <p>ZamoraxPay by Zamorax Enterprises Limited. RC9678731</p>

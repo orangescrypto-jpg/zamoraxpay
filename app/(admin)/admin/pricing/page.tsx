@@ -256,6 +256,79 @@ export default function AdminPricingPage() {
     return haystack.includes(search.trim().toLowerCase())
   })
 
+  // Strip everything except letters/digits and lowercase, so plan
+  // codes that only differ in formatting ("230mb-1day-gifting" vs
+  // "MTN/230MB/1Day" vs "230MB_1D") normalize to something comparable.
+  // This is a heuristic, not a guarantee — it exists to surface
+  // candidates for a human to review, not to auto-merge anything.
+  function normalizedPlanCode(planCode: string | null): string {
+    return (planCode ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")
+  }
+
+  interface DuplicateGroup {
+    key: string
+    reason: "same price" | "similar plan code"
+    rules: PricingRule[]
+  }
+
+  // Two independent groupings, each surfacing a different kind of
+  // likely duplicate — this is exactly what happens when the same
+  // real-world plan gets added twice from different providers, once
+  // per provider instead of once with two provider_plan_mappings rows:
+  //  1. Same service + network + final price (what the customer pays)
+  //  2. Same service + network + a near-identical plan code
+  // A group only matters if it has 2+ rows.
+  const duplicateGroups: DuplicateGroup[] = (() => {
+    const priceGroups = new Map<string, PricingRule[]>()
+    const codeGroups = new Map<string, PricingRule[]>()
+
+    for (const r of rules) {
+      if (!r.plan_code) continue // flexible-amount rules (airtime etc.) have no plan_code to compare
+
+      const finalPrice = r.retail_price_kobo + r.convenience_fee_kobo
+      const priceKey = `${r.service_type}|${r.network_or_biller}|${finalPrice}`
+      if (!priceGroups.has(priceKey)) priceGroups.set(priceKey, [])
+      priceGroups.get(priceKey)!.push(r)
+
+      const normalized = normalizedPlanCode(r.plan_code)
+      if (normalized) {
+        const codeKey = `${r.service_type}|${r.network_or_biller}|${normalized}`
+        if (!codeGroups.has(codeKey)) codeGroups.set(codeKey, [])
+        codeGroups.get(codeKey)!.push(r)
+      }
+    }
+
+    const groups: DuplicateGroup[] = []
+    const seenRuleIdSets = new Set<string>()
+
+    function addGroup(key: string, reason: DuplicateGroup["reason"], groupRules: PricingRule[]) {
+      if (groupRules.length < 2) return
+      // Avoid showing the same exact set of rule IDs twice (a group
+      // that matched on both same price AND similar plan code).
+      const idSetKey = groupRules.map((r) => r.id).sort().join(",")
+      if (seenRuleIdSets.has(idSetKey)) return
+      seenRuleIdSets.add(idSetKey)
+      groups.push({ key, reason, rules: groupRules })
+    }
+
+    for (const [key, groupRules] of priceGroups) addGroup(key, "same price", groupRules)
+    for (const [key, groupRules] of codeGroups) addGroup(key, "similar plan code", groupRules)
+
+    return groups
+  })()
+
+  function selectAllButOneInGroup(group: DuplicateGroup) {
+    // Keeps the first row (usually the oldest / originally-entered
+    // one) unselected, selects the rest — admin can review the
+    // selection before hitting "Delete selected", and can freely
+    // adjust which one is kept by checking/unchecking rows.
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      group.rules.slice(1).forEach((r) => next.add(r.id))
+      return next
+    })
+  }
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -267,6 +340,54 @@ export default function AdminPricingPage() {
           {showAdd ? "Cancel" : "Add rule"}
         </button>
       </div>
+
+      {duplicateGroups.length > 0 && (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <h2 className="mb-1 text-sm font-semibold text-amber-900">
+            {duplicateGroups.length} possible duplicate {duplicateGroups.length === 1 ? "group" : "groups"}
+          </h2>
+          <p className="mb-3 text-xs text-amber-800">
+            These look like the same real-world plan added more than once — often from adding a second
+            provider as its own rule instead of a second row in Provider Plan Mappings for the same plan.
+            Review each group below: keep one rule, then either delete the rest here or move to Provider
+            Plan Mappings and add the extra rows there for the SAME plan code before deleting the duplicate.
+          </p>
+          <div className="space-y-3">
+            {duplicateGroups.map((group) => (
+              <div key={group.key} className="rounded-md border border-amber-200 bg-white p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-amber-900">
+                    {group.rules[0].service_type.replace("_", " ")} · {group.rules[0].network_or_biller} ·{" "}
+                    {group.reason === "same price"
+                      ? `same price (${formatNaira(group.rules[0].retail_price_kobo + group.rules[0].convenience_fee_kobo)})`
+                      : "similar plan code"}
+                  </span>
+                  <button
+                    onClick={() => selectAllButOneInGroup(group)}
+                    className="whitespace-nowrap text-xs font-medium text-primary hover:underline"
+                  >
+                    Select all but one
+                  </button>
+                </div>
+                <ul className="space-y-1">
+                  {group.rules.map((r) => (
+                    <li key={r.id} className="flex items-center gap-2 text-xs text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(r.id)}
+                        onChange={() => toggleSelected(r.id)}
+                        className="h-3.5 w-3.5 rounded border-border"
+                      />
+                      <span className="font-mono text-muted-foreground">{r.plan_code}</span>
+                      <span>— {formatNaira(r.retail_price_kobo + r.convenience_fee_kobo)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showAdd && (
         <div className="mb-6 rounded-lg border border-border bg-white p-4 sm:max-w-2xl">

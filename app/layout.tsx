@@ -9,6 +9,7 @@ import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner"
 import PWARegistrar from "@/components/shared/PWARegistrar"
 import PWAInstallBanner from "@/components/shared/PWAInstallBanner"
 import WhatsAppSupportButton from "@/components/shared/WhatsAppSupportButton"
+import { AdSenseLoader } from "@/components/shared/AdSenseLoader"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" })
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-body`}>
+        <AdSenseLoader />
         <PWARegistrar />
         <PWAInstallBanner />
         <Header />

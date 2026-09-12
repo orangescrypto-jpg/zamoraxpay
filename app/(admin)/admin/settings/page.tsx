@@ -8,6 +8,10 @@ import type { SiteSetting } from "@/src/services/siteSettings"
 
 const GROUPS: { title: string; keys: string[] }[] = [
   { title: "Homepage & Blog", keys: ["homepage_post_count", "related_post_count"] },
+  {
+    title: "Google AdSense",
+    keys: ["adsense_enabled", "adsense_client_id", "adsense_homepage_footer_slot", "adsense_blog_post_slot"],
+  },
   { title: "Reseller", keys: ["reseller_upgrade_fee_kobo"] },
   {
     title: "Withdrawal",

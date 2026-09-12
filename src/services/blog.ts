@@ -42,6 +42,45 @@ export async function listPublishedPosts(category?: string, nativeDB?: any): Pro
   return (result.results ?? []).map(mapRow)
 }
 
+export interface PaginatedPosts {
+  posts: BlogPost[]
+  totalCount: number
+  totalPages: number
+  page: number
+  pageSize: number
+}
+
+export async function listPublishedPostsPaginated(
+  category?: string,
+  page: number = 1,
+  pageSize: number = 30,
+  nativeDB?: any,
+): Promise<PaginatedPosts> {
+  const safePage = Math.max(1, page)
+  const offset = (safePage - 1) * pageSize
+
+  const countSql = category
+    ? "SELECT COUNT(*) as count FROM blog_posts WHERE status = 'published' AND category = ?"
+    : "SELECT COUNT(*) as count FROM blog_posts WHERE status = 'published'"
+  const countResult = await d1Query(countSql, category ? [category] : [], nativeDB)
+  const totalCount = Number(countResult.results?.[0]?.count ?? 0)
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+
+  const sql = category
+    ? "SELECT * FROM blog_posts WHERE status = 'published' AND category = ? ORDER BY published_at DESC LIMIT ? OFFSET ?"
+    : "SELECT * FROM blog_posts WHERE status = 'published' ORDER BY published_at DESC LIMIT ? OFFSET ?"
+  const params = category ? [category, pageSize, offset] : [pageSize, offset]
+  const result = await d1Query(sql, params, nativeDB)
+
+  return {
+    posts: (result.results ?? []).map(mapRow),
+    totalCount,
+    totalPages,
+    page: safePage,
+    pageSize,
+  }
+}
+
 export async function getPostBySlug(slug: string, nativeDB?: any): Promise<BlogPost | null> {
   const result = await d1Query("SELECT * FROM blog_posts WHERE slug = ? AND status = 'published'", [slug], nativeDB)
   const row = result.results?.[0]

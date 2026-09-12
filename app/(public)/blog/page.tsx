@@ -1,9 +1,11 @@
 // app/(public)/blog/page.tsx
 import Link from "next/link"
 import type { Metadata } from "next"
-import { listPublishedPosts } from "@/src/services/blog"
+import { listPublishedPostsPaginated } from "@/src/services/blog"
 import { d1Query } from "@/lib/db"
 import { formatDate, cn } from "@/lib/utils"
+
+const POSTS_PER_PAGE = 30
 
 export const metadata: Metadata = {
   title: "Blog — ZamoraxPay",
@@ -15,16 +17,25 @@ export const revalidate = 3600
 export default async function BlogListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string }>
+  searchParams: Promise<{ category?: string; page?: string }>
 }) {
-  const { category } = await searchParams
+  const { category, page: pageParam } = await searchParams
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1)
 
-  const [posts, categoriesResult] = await Promise.all([
-    listPublishedPosts(category),
+  const [{ posts, totalPages }, categoriesResult] = await Promise.all([
+    listPublishedPostsPaginated(category, page, POSTS_PER_PAGE),
     d1Query("SELECT * FROM blog_categories ORDER BY sort_order"),
   ])
   const categories = categoriesResult.results ?? []
   const activeLabel = categories.find((c: any) => c.slug === category)?.label
+
+  const buildPageHref = (p: number) => {
+    const params = new URLSearchParams()
+    if (category) params.set("category", category)
+    if (p > 1) params.set("page", String(p))
+    const qs = params.toString()
+    return qs ? `/blog?${qs}` : "/blog"
+  }
 
   return (
     <div className="container py-12">
@@ -86,6 +97,44 @@ export default async function BlogListPage({
 
         {posts.length === 0 && <p className="text-muted-foreground">No posts in this category yet.</p>}
       </div>
+
+      {totalPages > 1 && (
+        <nav aria-label="Blog pagination" className="mt-10 flex flex-wrap items-center justify-center gap-2">
+          {page > 1 && (
+            <Link
+              href={buildPageHref(page - 1)}
+              className="rounded-md border border-border bg-white px-3 py-1.5 text-sm font-medium text-secondary hover:border-primary"
+            >
+              Previous
+            </Link>
+          )}
+
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <Link
+              key={p}
+              href={buildPageHref(p)}
+              aria-current={p === page ? "page" : undefined}
+              className={cn(
+                "rounded-md border px-3 py-1.5 text-sm font-medium",
+                p === page
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-white text-secondary hover:border-primary",
+              )}
+            >
+              {p}
+            </Link>
+          ))}
+
+          {page < totalPages && (
+            <Link
+              href={buildPageHref(page + 1)}
+              className="rounded-md border border-border bg-white px-3 py-1.5 text-sm font-medium text-secondary hover:border-primary"
+            >
+              Next
+            </Link>
+          )}
+        </nav>
+      )}
     </div>
   )
 }

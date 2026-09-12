@@ -107,7 +107,7 @@ export function Header() {
   // Header banner slider: logged-out visitors see it on every page.
   // Logged-in users only see it on the blog. (Footer banners are
   // unaffected.)
-  const isBlogPage = pathname?.startsWith("/blog")
+  const isBlogPage = pathname === "/blog" || pathname?.startsWith("/blog/")
   const showHeaderBanner = loading ? false : isAuthenticated ? isBlogPage : true
 
   // Scrolling down hides the banner strip immediately (nav bar itself

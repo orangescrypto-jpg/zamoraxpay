@@ -6,6 +6,7 @@ import { getPostBySlug, getRelatedPosts } from "@/src/services/blog"
 import { getSettingNumber } from "@/src/services/siteSettings"
 import { MarkdownContent } from "@/components/shared/MarkdownContent"
 import { ShareButton } from "@/components/shared/ShareButton"
+import { AdSenseSlot } from "@/components/shared/AdSenseSlot"
 
 export const revalidate = 3600
 
@@ -63,6 +64,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         )}
 
         <MarkdownContent markdown={post.contentMarkdown} />
+
+        <AdSenseSlot slotKey="blog_post" className="mt-10" />
       </article>
 
       {relatedPosts.length > 0 && (

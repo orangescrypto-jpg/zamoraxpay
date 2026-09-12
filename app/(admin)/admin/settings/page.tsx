@@ -43,6 +43,16 @@ const GROUPS: { title: string; keys: string[] }[] = [
   },
   { title: "Weekend Bonus", keys: ["weekend_bonus_amount_kobo", "weekend_bonus_days"] },
   {
+    title: "Korapay Charges",
+    keys: [
+      "korapay_charge_enabled",
+      "korapay_charge_type",
+      "korapay_charge_percentage",
+      "korapay_charge_flat_amount_kobo",
+      "korapay_charge_max_amount_kobo",
+    ],
+  },
+  {
     title: "Airtime to Cash",
     keys: ["airtime_to_cash_discount_percent", "airtime_to_cash_contact_phone", "airtime_to_cash_contact_email"],
   },
@@ -408,7 +418,7 @@ function SettingField({
           <option value="true">On</option>
           <option value="false">Off</option>
         </select>
-      ) : setting.key === "cashback_type" || setting.key === "deposit_bonus_type" ? (
+      ) : setting.key === "cashback_type" || setting.key === "deposit_bonus_type" || setting.key === "korapay_charge_type" ? (
         <select
           value={value}
           onChange={(e) => setValue(e.target.value)}

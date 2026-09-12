@@ -137,7 +137,7 @@ export async function listPlans(
 
   const wholesale = userTier === "reseller"
 
-  return rows
+  const finalPlans = rows
     .filter((row: any) => {
       if (!planCodesWithMappings.has(row.plan_code)) return true // unmapped plan — no liveness signal to check
       return planCodesWithLiveProvider.has(row.plan_code)
@@ -146,6 +146,15 @@ export async function listPlans(
       planCode: row.plan_code,
       priceKobo: (wholesale ? row.wholesale_price_kobo : row.retail_price_kobo) + row.convenience_fee_kobo,
     }))
+
+  // Sort by the actual price shown to the customer (base price + fee),
+  // not just base price — the SQL ORDER BY only sorts base price, and
+  // per-plan convenience fees can push the final price out of that
+  // order (e.g. two ₦100 plans with different fees end up at ₦102 and
+  // ₦110, which need to be re-sorted here to stay cheapest-first).
+  finalPlans.sort((a, b) => a.priceKobo - b.priceKobo)
+
+  return finalPlans
 }
 
 export async function listPricingRules(serviceType?: VtuServiceType, nativeDB?: any) {

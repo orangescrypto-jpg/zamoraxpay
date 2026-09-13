@@ -50,7 +50,7 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
   }
 
   // 2. Verify transaction PIN.
-  const userResult = await d1Query("SELECT transaction_pin_hash, tier, email, full_name FROM users WHERE id = ?", [
+  const userResult = await d1Query("SELECT transaction_pin_hash, tier, email, full_name, phone FROM users WHERE id = ?", [
     params.userId,
   ])
   const user = userResult.results?.[0]
@@ -133,6 +133,13 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     quantity: isQuantityService ? quantity : undefined,
     amountKobo: pricing.baseAmountKobo,
     internalReference: debitReference,
+    // Optional — only a couple of adapters (e.g. VTUGate electricity)
+    // need an SMS-receipt phone number for non-airtime purchases.
+    // Falls back to undefined if the account somehow has no phone on
+    // file; adapters that don't need it simply ignore the field, and
+    // the ones that do (VTUGate) fall back to a placeholder themselves
+    // rather than failing the purchase over a missing contact number.
+    contactPhone: user.phone ?? undefined,
   })
 
   await finalizeOrder(orderId, {

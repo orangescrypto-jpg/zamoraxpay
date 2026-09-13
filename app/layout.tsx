@@ -15,9 +15,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" })
 
 export const metadata: Metadata = {
-  title: "ZamoraxPay — Airtime, Data, Bills & More",
+  title: "ZamoraxPay - Airtime, Data, Bills & More",
   description:
-    "Buy airtime, data, cable TV, electricity, exam PINs, and fund your betting wallet — all from one fast, reliable wallet.",
+    "Buy airtime, data, cable TV, electricity, exam PINs, and fund your betting wallet, all from one fast, reliable wallet.",
   manifest: "/manifest.json",
   themeColor: "#0057FF",
   icons: {
@@ -29,14 +29,14 @@ export const metadata: Metadata = {
     apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
   },
   openGraph: {
-    title: "ZamoraxPay — Airtime, Data, Bills & More",
+    title: "ZamoraxPay - Airtime, Data, Bills & More",
     description:
-      "Buy airtime, data, cable TV, electricity, exam PINs, and fund your betting wallet — all from one fast, reliable wallet.",
+      "Buy airtime, data, cable TV, electricity, exam PINs, and fund your betting wallet, all from one fast, reliable wallet.",
     images: [{ url: "/icon-512.png", width: 512, height: 512 }],
   },
   twitter: {
     card: "summary",
-    title: "ZamoraxPay — Airtime, Data, Bills & More",
+    title: "ZamoraxPay - Airtime, Data, Bills & More",
     images: ["/icon-512.png"],
   },
   appleWebApp: {

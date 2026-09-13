@@ -66,6 +66,7 @@ export type VtuServiceType =
   | "exam_pin" // WAEC/NECO/NABTEB-style exam checker/registration PINs
   | "epin" // network recharge-card PINs (MTN/Glo/Airtel/9mobile) — distinct product from exam_pin
   | "betting"
+  | "international_topup" // cross-border airtime/data top-up (country + operator + FX, not network_or_biller/recipient/plan_code — see international_topup_orders)
 
 export interface VtuOrder {
   id: string

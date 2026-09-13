@@ -13,12 +13,16 @@ import { cheapdatahubAdapter } from "@/src/services/providers/vtu/cheapdatahub"
 import { pairgateAdapter } from "@/src/services/providers/vtu/pairgate"
 import { vtpassAdapter } from "@/src/services/providers/vtu/vtpass"
 import { vtungAdapter } from "@/src/services/providers/vtu/vtung"
+import { vtugateAdapter } from "@/src/services/providers/vtu/vtugate"
+import { connectbridgeAdapter } from "@/src/services/providers/vtu/connectbridge"
 
 export const VTU_PROVIDER_REGISTRY: Record<string, IVtuProviderAdapter> = {
   cheapdatahub: cheapdatahubAdapter,
   pairgate: pairgateAdapter,
   vtpass: vtpassAdapter,
   vtung: vtungAdapter,
+  vtugate: vtugateAdapter,
+  connectbridge: connectbridgeAdapter,
 }
 
 export function getVtuAdapter(providerKey: string): IVtuProviderAdapter | null {

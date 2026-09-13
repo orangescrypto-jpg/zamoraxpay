@@ -12,6 +12,10 @@ const SERVICES = [
   { href: "/services/electricity", label: "Electricity", desc: "Prepaid & postpaid tokens" },
   { href: "/services/exam-pin", label: "Exam PINs", desc: "WAEC, NECO, JAMB" },
   { href: "/services/betting", label: "Betting", desc: "Fund your sportsbook wallet" },
+  { href: "/services/airtime-to-cash", label: "Airtime to Cash", desc: "Convert airtime to wallet funds" },
+  { href: "/services/epin", label: "Buy ePIN", desc: "Instant PINs for redemption" },
+  { href: "/services/bulk-airtime", label: "Bulk Airtime", desc: "Send airtime to many numbers at once" },
+  { href: "/services/bulk-data", label: "Bulk Data", desc: "Send data to many numbers at once" },
 ]
 
 export const revalidate = 900 // 15 minutes — homepage content doesn't need to be second-fresh
@@ -63,7 +67,7 @@ export default async function HomePage() {
       <section className="container py-16">
         <div className="mb-8 text-center">
           <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">Everything in one place</h2>
-          <p className="mt-2 text-muted-foreground">Six services, one wallet, one login.</p>
+          <p className="mt-2 text-muted-foreground">All your services, one wallet, one login.</p>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {SERVICES.map((s) => (

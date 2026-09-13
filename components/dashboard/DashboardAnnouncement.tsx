@@ -1,9 +1,10 @@
 // components/dashboard/DashboardAnnouncement.tsx
 // Announcement slider shown on the dashboard only, between the
 // wallet balance card and Quick actions. Same auto+manual slide
-// mechanics as the header BannerSlider, and now sized as a proper
-// wide banner strip (not a thumbnail) so a full 1200x400 image
-// displays correctly instead of being cropped into a small square.
+// mechanics as the header BannerSlider. Images render at their
+// natural aspect ratio (no forced crop or letterbox) so any upload
+// size displays correctly; only the text-only fallback (no image)
+// uses a fixed 3:1 shape since it has no natural size of its own.
 // Admin can set text, an image, or both per slide — the link is
 // optional per slide, so this doubles as a plain announcement when
 // there's nothing to click through to.
@@ -79,16 +80,16 @@ export function DashboardAnnouncement() {
   // as a gradient caption, same treatment as the header BannerSlider,
   // so admins can use image-only, text-only, or both.
   const slide = (
-    <div className="relative aspect-[3/1] w-full overflow-hidden rounded-2xl bg-secondary shadow-[0_2px_10px_-6px_rgba(15,30,77,0.15)]">
+    <div className="relative w-full overflow-hidden rounded-2xl bg-secondary shadow-[0_2px_10px_-6px_rgba(15,30,77,0.15)]">
       {current.imageUrl ? (
         <img
           key={current.id}
           src={current.imageUrl}
           alt={current.text ?? "Announcement"}
-          className="h-full w-full object-contain"
+          className="block h-auto w-full"
         />
       ) : (
-        <div className="flex h-full w-full items-center bg-[#0F1E4D] px-4">
+        <div className="flex aspect-[3/1] w-full items-center bg-[#0F1E4D] px-4">
           <p className="text-sm font-medium leading-snug text-white sm:text-base">{current.text}</p>
         </div>
       )}

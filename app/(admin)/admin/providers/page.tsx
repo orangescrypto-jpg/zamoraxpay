@@ -112,6 +112,14 @@ export default function AdminProvidersPage() {
       { key: "password", label: "Password", secret: true },
       { key: "baseUrl", label: "Base URL (leave blank for default)" },
     ],
+    vtugate: [
+      { key: "apiKey", label: "API Key", secret: true },
+      { key: "baseUrl", label: "Base URL (leave blank for default)", placeholder: "https://api.vtugate.com/api/v1" },
+    ],
+    connectbridge: [
+      { key: "apiKey", label: "API Key", secret: true },
+      { key: "baseUrl", label: "Base URL (leave blank for default)", placeholder: "https://connectbridge.com.ng/api" },
+    ],
   }
   const PAYMENT_CRED_FIELDS: { key: string; label: string; secret?: boolean; placeholder?: string }[] = [
     { key: "secretKey", label: "Secret Key", secret: true },

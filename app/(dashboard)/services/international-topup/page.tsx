@@ -66,10 +66,17 @@ export default function InternationalTopupPage() {
     authedFetch("/api/international-topup/countries")
       .then((r) => r.json())
       .then((data) => {
-        if (data.success) setCountries(data.data)
+        if (data.success) {
+          setCountries(data.data)
+        } else {
+          setResult({ success: false, message: data.message ?? "Failed to load countries" })
+        }
         setLoadingCountries(false)
       })
-      .catch(() => setLoadingCountries(false))
+      .catch((err) => {
+        setResult({ success: false, message: err instanceof Error ? err.message : "Failed to load countries" })
+        setLoadingCountries(false)
+      })
   }, [])
 
   const selectedCountry = countries.find((c) => c.isoName === countryCode)

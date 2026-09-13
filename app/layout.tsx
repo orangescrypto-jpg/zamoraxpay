@@ -6,7 +6,6 @@ import "./globals.css"
 import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner"
-import PWARegistrar from "@/components/shared/PWARegistrar"
 import PWAInstallBanner from "@/components/shared/PWAInstallBanner"
 import WhatsAppSupportButton from "@/components/shared/WhatsAppSupportButton"
 import { AdSenseLoader } from "@/components/shared/AdSenseLoader"
@@ -53,7 +52,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AdSenseLoader />
       </head>
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-body`}>
-        <PWARegistrar />
         <PWAInstallBanner />
         <Header />
         <main className="min-h-screen">{children}</main>

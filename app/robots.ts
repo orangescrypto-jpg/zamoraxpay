@@ -9,8 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: [
           "/",
-          "/services",
-          "/services/*",
           "/blog",
           "/blog/*",
           "/reseller",
@@ -21,7 +19,7 @@ export default function robots(): MetadataRoute.Robots {
           "/cookie-policy",
           "/refund-policy",
         ],
-        disallow: ["/dashboard/", "/admin/", "/wallet/", "/api/", "/settings/", "/history/", "/beneficiaries/"],
+        disallow: ["/dashboard/", "/admin/", "/wallet/", "/api/", "/settings/", "/history/", "/beneficiaries/", "/services/"],
       },
     ],
     sitemap: `${base}/sitemap.xml`,

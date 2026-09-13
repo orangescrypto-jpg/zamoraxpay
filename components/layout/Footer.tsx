@@ -39,12 +39,12 @@ function FooterBanner() {
   const banner = banners[activeIndex]
 
   const content = (
-    <div className="relative overflow-hidden rounded-lg">
+    <div className="relative overflow-hidden rounded-lg border border-white/10">
       <img
         key={banner.id}
         src={banner.imageUrl}
         alt={banner.title ?? "Promotion"}
-        className="h-24 w-full object-cover sm:h-32"
+        className="block h-auto w-full"
       />
       {banner.title && (
         <div className="absolute inset-0 flex items-center bg-black/30 px-4">

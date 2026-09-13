@@ -257,13 +257,21 @@ export default function AdminPricingPage() {
     return haystack.includes(search.trim().toLowerCase())
   })
 
-  // Strip everything except letters/digits and lowercase, so plan
-  // codes that only differ in formatting ("230mb-1day-gifting" vs
-  // "MTN/230MB/1Day" vs "230MB_1D") normalize to something comparable.
-  // This is a heuristic, not a guarantee — it exists to surface
-  // candidates for a human to review, not to auto-merge anything.
+  // Lowercase and collapse separator characters (spaces, hyphens,
+  // underscores, slashes) down to a single "-", so plan codes that
+  // only differ in formatting ("230mb-1day-gifting" vs "MTN/230MB/1Day"
+  // vs "230MB_1D") normalize to something comparable. Unlike stripping
+  // separators entirely, this keeps digit runs on either side of a
+  // separator distinct, so "1-5gb" (a 1.5GB plan written with a dash)
+  // does NOT collapse onto "15gb" (an unrelated 15GB plan), and
+  // "16-5gb" does not collapse onto "165gb". This is a heuristic, not
+  // a guarantee — it exists to surface candidates for a human to
+  // review, not to auto-merge anything.
   function normalizedPlanCode(planCode: string | null): string {
-    return (planCode ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")
+    return (planCode ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
   }
 
   // Plan codes that are themselves just a variant label ("prepaid",

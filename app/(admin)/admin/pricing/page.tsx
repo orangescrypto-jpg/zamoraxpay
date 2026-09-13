@@ -328,6 +328,17 @@ export default function AdminPricingPage() {
     })
   }
 
+  function clearGroupSelection(group: DuplicateGroup) {
+    // Unchecks just this group's rows, leaving any selection made
+    // elsewhere in the page (e.g. another duplicate group, or the
+    // main table) untouched.
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      group.rules.forEach((r) => next.delete(r.id))
+      return next
+    })
+  }
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -359,12 +370,22 @@ export default function AdminPricingPage() {
                     {group.rules[0].service_type.replace("_", " ")} · {group.rules[0].network_or_biller} · similar
                     plan code
                   </span>
-                  <button
-                    onClick={() => selectAllButOneInGroup(group)}
-                    className="whitespace-nowrap text-xs font-medium text-primary hover:underline"
-                  >
-                    Select all but one
-                  </button>
+                  <div className="flex flex-shrink-0 items-center gap-3">
+                    {group.rules.some((r) => selectedIds.has(r.id)) && (
+                      <button
+                        onClick={() => clearGroupSelection(group)}
+                        className="whitespace-nowrap text-xs font-medium text-muted-foreground hover:underline"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button
+                      onClick={() => selectAllButOneInGroup(group)}
+                      className="whitespace-nowrap text-xs font-medium text-primary hover:underline"
+                    >
+                      Select all but one
+                    </button>
+                  </div>
                 </div>
                 <ul className="space-y-1">
                   {group.rules.map((r) => (

@@ -327,6 +327,8 @@ export default function ProviderPlanMappingsPage() {
               <option value="cheapdatahub">CheapDataHub</option>
               <option value="vtpass">VTpass</option>
               <option value="vtung">VTU.ng</option>
+              <option value="vtugate">VTUGate</option>
+              <option value="connectbridge">ConnectBridge</option>
             </select>
           </label>
           <label className="text-xs text-muted-foreground">

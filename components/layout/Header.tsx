@@ -41,12 +41,12 @@ function BannerSlider() {
   const current = banners[activeIndex]
 
   const SlideContent = (
-    <div className="relative aspect-[3/1] w-full overflow-hidden rounded-lg bg-secondary">
+    <div className="relative aspect-[3/1] max-h-[200px] w-full overflow-hidden rounded-lg bg-secondary">
       <img
         key={current.id}
         src={current.imageUrl}
         alt={current.title ?? "Promotional banner"}
-        className="banner-slide-enter h-full w-full object-contain"
+        className="banner-slide-enter h-full w-full object-cover"
       />
       {current.title && (
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">

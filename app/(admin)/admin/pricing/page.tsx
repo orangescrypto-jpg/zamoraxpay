@@ -265,54 +265,53 @@ export default function AdminPricingPage() {
     return (planCode ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")
   }
 
+  // Plan codes that are themselves just a variant label ("prepaid",
+  // "postpaid", "sme", "corporate", etc.) are common across many
+  // unrelated plans/billers on purpose — two electricity rules named
+  // "prepaid" and "postpaid" are different products that just happen
+  // to cost the same, not a duplicate. These normalize to something
+  // real generic-only codes never should be allowed to form a group.
+  const GENERIC_PLAN_WORDS = new Set(["prepaid", "postpaid", "sme", "corporate", "regular", "standard"])
+
+  function isGenericPlanCode(normalized: string): boolean {
+    return GENERIC_PLAN_WORDS.has(normalized)
+  }
+
   interface DuplicateGroup {
     key: string
-    reason: "same price" | "similar plan code"
+    reason: "similar plan code"
     rules: PricingRule[]
   }
 
-  // Two independent groupings, each surfacing a different kind of
-  // likely duplicate — this is exactly what happens when the same
-  // real-world plan gets added twice from different providers, once
-  // per provider instead of once with two provider_plan_mappings rows:
-  //  1. Same service + network + final price (what the customer pays)
-  //  2. Same service + network + a near-identical plan code
-  // A group only matters if it has 2+ rows.
+  // Duplicates are detected ONLY by plan-code similarity, never by
+  // price alone — the same price is common between genuinely
+  // different plans (e.g. electricity prepaid vs postpaid are both
+  // flat-fee ₦200, but are different products, not duplicates). Price
+  // is shown alongside each group only as extra context for review,
+  // not as a detection signal by itself.
+  // A group only matters if it has 2+ rows, and generic labels like
+  // "prepaid"/"postpaid" are excluded from ever forming a group on
+  // their own since matching normalized text is meaningless there.
   const duplicateGroups: DuplicateGroup[] = (() => {
-    const priceGroups = new Map<string, PricingRule[]>()
     const codeGroups = new Map<string, PricingRule[]>()
 
     for (const r of rules) {
       if (!r.plan_code) continue // flexible-amount rules (airtime etc.) have no plan_code to compare
 
-      const finalPrice = r.retail_price_kobo + r.convenience_fee_kobo
-      const priceKey = `${r.service_type}|${r.network_or_biller}|${finalPrice}`
-      if (!priceGroups.has(priceKey)) priceGroups.set(priceKey, [])
-      priceGroups.get(priceKey)!.push(r)
-
       const normalized = normalizedPlanCode(r.plan_code)
-      if (normalized) {
-        const codeKey = `${r.service_type}|${r.network_or_biller}|${normalized}`
-        if (!codeGroups.has(codeKey)) codeGroups.set(codeKey, [])
-        codeGroups.get(codeKey)!.push(r)
-      }
+      if (!normalized || isGenericPlanCode(normalized)) continue
+
+      const codeKey = `${r.service_type}|${r.network_or_biller}|${normalized}`
+      if (!codeGroups.has(codeKey)) codeGroups.set(codeKey, [])
+      codeGroups.get(codeKey)!.push(r)
     }
 
     const groups: DuplicateGroup[] = []
-    const seenRuleIdSets = new Set<string>()
 
-    function addGroup(key: string, reason: DuplicateGroup["reason"], groupRules: PricingRule[]) {
-      if (groupRules.length < 2) return
-      // Avoid showing the same exact set of rule IDs twice (a group
-      // that matched on both same price AND similar plan code).
-      const idSetKey = groupRules.map((r) => r.id).sort().join(",")
-      if (seenRuleIdSets.has(idSetKey)) return
-      seenRuleIdSets.add(idSetKey)
-      groups.push({ key, reason, rules: groupRules })
+    for (const [key, groupRules] of codeGroups) {
+      if (groupRules.length < 2) continue
+      groups.push({ key, reason: "similar plan code", rules: groupRules })
     }
-
-    for (const [key, groupRules] of priceGroups) addGroup(key, "same price", groupRules)
-    for (const [key, groupRules] of codeGroups) addGroup(key, "similar plan code", groupRules)
 
     return groups
   })()
@@ -357,10 +356,8 @@ export default function AdminPricingPage() {
               <div key={group.key} className="rounded-md border border-amber-200 bg-white p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-amber-900">
-                    {group.rules[0].service_type.replace("_", " ")} · {group.rules[0].network_or_biller} ·{" "}
-                    {group.reason === "same price"
-                      ? `same price (${formatNaira(group.rules[0].retail_price_kobo + group.rules[0].convenience_fee_kobo)})`
-                      : "similar plan code"}
+                    {group.rules[0].service_type.replace("_", " ")} · {group.rules[0].network_or_biller} · similar
+                    plan code
                   </span>
                   <button
                     onClick={() => selectAllButOneInGroup(group)}

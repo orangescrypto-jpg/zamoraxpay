@@ -96,7 +96,7 @@ export interface FeatureFlag {
   isEnabled: boolean
 }
 
-export type VtuProviderKey = "cheapdatahub" | "pairgate" | "vtpass" | "vtung"
+export type VtuProviderKey = "cheapdatahub" | "pairgate" | "vtpass" | "vtung" | "vtugate" | "connectbridge"
 export type PaymentProviderKey = "korapay" | "paystack"
 
 export interface VtuProviderConfig {

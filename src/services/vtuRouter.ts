@@ -72,8 +72,9 @@ interface RouteCandidate {
 // Providers whose plan-mapping override target is networkOrBiller
 // (their biller/provider-id field) rather than planCode, for exam_pin
 // specifically — because their purchase endpoint has no separate
-// plan/product-id field to carry the pin type.
-const EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS = new Set(["pairgate"])
+// plan/product-id field to carry the pin type. Pairgate: provider_id.
+// VTUGate: product_code (same shape — see vtugate.ts's exam_pin case).
+const EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS = new Set(["pairgate", "vtugate"])
 
 async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promise<RouteCandidate[]> {
   const activeProviders = await getActiveVtuProviders(req.serviceType, nativeDB)

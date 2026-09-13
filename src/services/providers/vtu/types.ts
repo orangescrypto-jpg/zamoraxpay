@@ -22,6 +22,7 @@ export interface VtuPurchaseRequest {
   internalReference: string // our own idempotent reference, passed through so we can reconcile
   meterType?: "prepaid" | "postpaid" // electricity only; defaults to "prepaid" in adapters if omitted
   recipientName?: string // optional display name some providers accept for cable/electricity/betting
+  contactPhone?: string // optional SMS-receipt phone number some providers require on non-airtime purchases (e.g. VTUGate electricity); adapters that don't need it simply ignore it
 }
 
 /**

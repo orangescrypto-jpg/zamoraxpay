@@ -67,6 +67,7 @@ export default function AdminPricingPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [duplicatePanelDismissed, setDuplicatePanelDismissed] = useState(false)
   const [search, setSearch] = useState("")
   const [filterServiceType, setFilterServiceType] = useState("all")
   const [draft, setDraft] = useState({
@@ -351,11 +352,19 @@ export default function AdminPricingPage() {
         </button>
       </div>
 
-      {duplicateGroups.length > 0 && (
+      {duplicateGroups.length > 0 && !duplicatePanelDismissed && (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4">
-          <h2 className="mb-1 text-sm font-semibold text-amber-900">
-            {duplicateGroups.length} possible duplicate {duplicateGroups.length === 1 ? "group" : "groups"}
-          </h2>
+          <div className="mb-1 flex items-start justify-between gap-2">
+            <h2 className="text-sm font-semibold text-amber-900">
+              {duplicateGroups.length} possible duplicate {duplicateGroups.length === 1 ? "group" : "groups"}
+            </h2>
+            <button
+              onClick={() => setDuplicatePanelDismissed(true)}
+              className="whitespace-nowrap text-xs font-medium text-amber-800 hover:underline"
+            >
+              Dismiss
+            </button>
+          </div>
           <p className="mb-3 text-xs text-amber-800">
             These look like the same real-world plan added more than once — often from adding a second
             provider as its own rule instead of a second row in Provider Plan Mappings for the same plan.

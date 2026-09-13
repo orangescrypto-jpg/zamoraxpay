@@ -89,9 +89,11 @@ export default async function BlogListPage({
               {post.title}
             </h2>
             {post.excerpt && <p className="mb-2 text-sm text-muted-foreground">{post.excerpt}</p>}
+            {/* Date hidden for now — re-enable by uncommenting when ready to reveal.
             {post.publishedAt && (
               <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
             )}
+            */}
           </Link>
         ))}
 

@@ -150,12 +150,55 @@ CREATE TABLE IF NOT EXISTS payment_webhook_events (
 
 CREATE TABLE IF NOT EXISTS vtu_webhook_events (
   id                TEXT PRIMARY KEY,      -- provider's event/transaction ID (idempotency key)
-  provider          TEXT NOT NULL,         -- 'pairgate' (only Pairgate delivers async today)
+  provider          TEXT NOT NULL,         -- 'pairgate' (only Pairgate delivers async today; VTUGate/ConnectBridge are synchronous)
   order_id          TEXT,                  -- our vtu_orders.id, once resolved from the reference
   event_type        TEXT NOT NULL,
   payload           TEXT NOT NULL,         -- raw JSON payload, for audit/replay
   processed_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- International airtime/data top-ups (Reloadly-backed, currently only
+-- exposed by VTUGate's /international/* endpoints — ConnectBridge does
+-- not offer this service today). Deliberately its own table, not a row
+-- in vtu_orders: the shape is fundamentally different (country/operator/
+-- FX-rate instead of network_or_biller/recipient/plan_code), and the
+-- purchase flow is a multi-step sequence (detect operator -> preview FX
+-- -> buy) rather than a single fallback-and-retry call.
+--
+-- Provider-neutral by design even though only one adapter implements it
+-- today: provider_key is a normal column (not hardcoded 'vtugate' in
+-- code), and which provider handles a given purchase is resolved the
+-- same way as every other service — via vtu_provider_configs rows whose
+-- supports_services includes 'international_topup', ordered by
+-- priority. Adding a second provider later (e.g. if ConnectBridge adds
+-- this) means writing its adapter + seeding its config row; this table
+-- and the router logic do not change.
+CREATE TABLE IF NOT EXISTS international_topup_orders (
+  id                      TEXT PRIMARY KEY,
+  user_id                 TEXT NOT NULL REFERENCES users(id),
+  provider_key            TEXT NOT NULL,
+  operator_id             INTEGER NOT NULL,
+  operator_name           TEXT,
+  country_code            TEXT NOT NULL,
+  recipient_number        TEXT NOT NULL,
+  requested_amount        REAL NOT NULL,
+  requested_amount_currency TEXT NOT NULL,
+  delivered_amount        REAL,
+  delivered_amount_currency TEXT,
+  charged_amount_kobo     INTEGER NOT NULL,
+  provider_charge_kobo    INTEGER NOT NULL,
+  status                  TEXT NOT NULL DEFAULT 'pending',
+  provider_reference      TEXT,
+  provider_reference_2    TEXT,
+  internal_reference      TEXT NOT NULL UNIQUE,
+  failure_reason          TEXT,
+  raw_response            TEXT,
+  created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_intl_topup_user ON international_topup_orders(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_intl_topup_reference ON international_topup_orders(internal_reference);
 
 CREATE TABLE IF NOT EXISTS vtu_orders (
   id                TEXT PRIMARY KEY,
@@ -389,7 +432,7 @@ CREATE TABLE IF NOT EXISTS site_settings (
 -- each of the 4 VTU adapters. Credentials here OVERRIDE env vars when
 -- present, so admin can rotate/add keys without a redeploy.
 CREATE TABLE IF NOT EXISTS vtu_provider_configs (
-  provider_key      TEXT PRIMARY KEY,   -- 'cheapdatahub' | 'pairgate' | 'vtpass' | 'vtung'
+  provider_key      TEXT PRIMARY KEY,   -- 'cheapdatahub' | 'pairgate' | 'vtpass' | 'vtung' | 'vtugate' | 'connectbridge'
   label             TEXT NOT NULL,
   is_enabled        INTEGER NOT NULL DEFAULT 0,
   priority          INTEGER NOT NULL DEFAULT 99,  -- lower = tried first
@@ -447,7 +490,7 @@ CREATE TABLE IF NOT EXISTS provider_plan_mappings (
   service_type        TEXT NOT NULL,          -- 'data' | 'cable' (any plan-coded service)
   network_or_biller   TEXT NOT NULL,           -- 'MTN', 'DSTV', ... — matches pricing_rules
   plan_code           TEXT NOT NULL,           -- OUR plan code — matches pricing_rules.plan_code
-  provider_key        TEXT NOT NULL,           -- 'pairgate' | 'cheapdatahub' | 'vtpass' | 'vtung'
+  provider_key        TEXT NOT NULL,           -- 'pairgate' | 'cheapdatahub' | 'vtpass' | 'vtung' | 'vtugate' | 'connectbridge'
   provider_plan_id    TEXT NOT NULL,           -- that provider's own plan_id / variation_id / bundle_id
   provider_cost_kobo  INTEGER NOT NULL,        -- what THIS provider charges us for this plan
   provider_plan_label TEXT,                    -- optional human-readable label from the provider (for admin display/debugging)
@@ -586,6 +629,7 @@ INSERT OR IGNORE INTO feature_flags (key, label, description, is_enabled) VALUES
   ('service_electricity',  'Electricity Tokens',      'Allow users to buy prepaid/postpaid electricity',     1),
   ('service_exam_pin',     'Exam PINs',               'Allow users to buy WAEC/NECO/JAMB PINs',              1),
   ('service_betting',      'Betting Wallet Funding',  'Allow users to fund sportsbook wallets',              1),
+  ('service_international_topup', 'International Airtime/Data', 'Allow users to send international airtime/data top-ups', 1),
   ('auto_reload',          'Auto-Reload',             'Allow users to schedule recurring purchases',         1),
   ('cashback',             'Cashback Rewards',        'Credit a % of each successful purchase back to wallet', 1),
   ('deposit_bonus',        'Deposit Bonus',           'Credit a bonus to wallet when a user funds their wallet', 1),
@@ -602,6 +646,7 @@ INSERT OR IGNORE INTO feature_flags (key, label, description, is_enabled) VALUES
 -- =====================================================================
 
 INSERT OR IGNORE INTO site_settings (key, label, description, value, value_type) VALUES
+  ('international_topup_markup_pct', 'International Top-up: Markup %', 'Percentage added on top of the provider''s wholesale NGN quote (which already includes their own fee) to get the amount charged to the user — e.g. 5 = 5%', '5', 'number'),
   ('adsense_enabled', 'Google AdSense Enabled', 'Master on/off switch for Google AdSense ad units', 'false', 'boolean'),
   ('adsense_client_id', 'Google AdSense Publisher ID', 'Your AdSense publisher ID, e.g. ca-pub-8830559839401006 (used for site verification and to load the AdSense script)', '', 'text'),
   ('adsense_homepage_footer_slot', 'AdSense Slot: Homepage Footer', 'Ad unit slot ID shown at the bottom of the homepage, above the footer', '', 'text'),
@@ -643,7 +688,7 @@ INSERT OR IGNORE INTO blog_categories (slug, label, description, sort_order) VAL
 
 
 -- =====================================================================
--- SECTION 4: SEED DATA — VTU provider configs (all 4, disabled by
+-- SECTION 4: SEED DATA — VTU provider configs (all 6, disabled by
 -- default until admin adds real credentials and toggles them on)
 -- =====================================================================
 
@@ -651,7 +696,9 @@ INSERT OR IGNORE INTO vtu_provider_configs (provider_key, label, is_enabled, pri
   ('cheapdatahub', 'CheapDataHub', 0, 1, '["airtime","data"]'),
   ('pairgate',     'Pairgate',     0, 2, '["cable","electricity","exam_pin"]'),
   ('vtpass',       'VTpass',       0, 3, '["airtime","data","cable","electricity","exam_pin","betting"]'),
-  ('vtung',        'VTU.ng',       0, 4, '["airtime","data","cable","electricity"]');
+  ('vtung',        'VTU.ng',       0, 4, '["airtime","data","cable","electricity"]'),
+  ('vtugate',      'VTUGate',      0, 5, '["airtime","data","cable","electricity","exam_pin","international_topup"]'),
+  ('connectbridge','ConnectBridge',0, 6, '["airtime","data"]');
 
 
 -- =====================================================================

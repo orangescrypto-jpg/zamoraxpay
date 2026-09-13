@@ -41,12 +41,12 @@ function BannerSlider() {
   const current = banners[activeIndex]
 
   const SlideContent = (
-    <div className="relative aspect-[3/1] max-h-[200px] w-full overflow-hidden rounded-lg bg-secondary">
+    <div className="relative w-full overflow-hidden rounded-lg bg-secondary">
       <img
         key={current.id}
         src={current.imageUrl}
         alt={current.title ?? "Promotional banner"}
-        className="banner-slide-enter h-full w-full object-cover"
+        className="banner-slide-enter block h-auto w-full"
       />
       {current.title && (
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
@@ -319,7 +319,7 @@ export function Header() {
         <div
           className={cn(
             "overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out",
-            bannerVisible ? "max-h-[220px] opacity-100" : "max-h-0 opacity-0",
+            bannerVisible ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0",
           )}
         >
           <div className="container pb-3 pt-3">

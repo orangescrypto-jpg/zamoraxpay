@@ -126,9 +126,11 @@ export default async function HomePage() {
                     {post.title}
                   </h3>
                   {post.excerpt && <p className="mb-2 text-sm text-muted-foreground line-clamp-2">{post.excerpt}</p>}
+                  {/* Date hidden for now — re-enable by uncommenting when ready to reveal.
                   {post.publishedAt && (
                     <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
                   )}
+                  */}
                 </Link>
               ))}
             </div>

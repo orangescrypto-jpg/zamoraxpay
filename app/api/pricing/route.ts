@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth-server"
 import { d1Query } from "@/lib/d1"
-import { listPlans, lookupPrice } from "@/src/services/pricing"
+import { listPlans, listPlanGroups, lookupPrice } from "@/src/services/pricing"
 import type { VtuServiceType } from "@/src/types"
 
 export async function GET(req: NextRequest) {
@@ -33,6 +33,12 @@ export async function GET(req: NextRequest) {
     const price = await lookupPrice(serviceType, networkOrBiller, null, tier)
     if (!price.found) return NextResponse.json({ priceKobo: null })
     return NextResponse.json({ priceKobo: price.chargeAmountKobo })
+  }
+
+  const grouped = req.nextUrl.searchParams.get("grouped") === "1"
+  if (grouped) {
+    const groups = await listPlanGroups(serviceType, networkOrBiller, tier)
+    return NextResponse.json({ groups })
   }
 
   const plans = await listPlans(serviceType, networkOrBiller, tier)

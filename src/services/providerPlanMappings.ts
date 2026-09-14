@@ -71,7 +71,7 @@ export async function hasLiveRoute(
   if (options.length === 0) return true // unmapped plan — no liveness signal, same "nothing to check" treatment as listPlans
   const { getActiveVtuProviders } = await import("@/src/services/config")
   const activeProviders = await getActiveVtuProviders(serviceType, nativeDB)
-  const activeKeys = new Set(activeProviders.map((p) => p.providerKey))
+  const activeKeys = new Set<string>(activeProviders.map((p) => p.providerKey))
   return options.some((o) => activeKeys.has(o.providerKey))
 }
 

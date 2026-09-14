@@ -82,6 +82,32 @@ export default function ProviderPlanMappingsPage() {
     results: { row: number; status: "created" | "updated" | "error"; message?: string }[]
   } | null>(null)
 
+  type SyncKey = "clubkonnect" | "vtugate"
+  const [syncingProvider, setSyncingProvider] = useState<SyncKey | null>(null)
+  const [syncResults, setSyncResults] = useState<
+    Record<SyncKey, { fetched?: number; created?: number; updated?: number; skipped?: number; error?: string } | null>
+  >({ clubkonnect: null, vtugate: null })
+
+  async function syncProvider(key: SyncKey) {
+    setSyncingProvider(key)
+    setSyncResults((prev) => ({ ...prev, [key]: null }))
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch(`/api/admin/provider-plan-mappings/sync-${key}`, { method: "POST", headers })
+      const data = await res.json()
+      if (!res.ok) {
+        setSyncResults((prev) => ({ ...prev, [key]: { error: data.error ?? "Sync failed" } }))
+      } else {
+        setSyncResults((prev) => ({ ...prev, [key]: data }))
+        load()
+      }
+    } catch (err) {
+      setSyncResults((prev) => ({ ...prev, [key]: { error: err instanceof Error ? err.message : "Sync failed" } }))
+    } finally {
+      setSyncingProvider(null)
+    }
+  }
+
   async function getAuthHeader() {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
@@ -329,6 +355,7 @@ export default function ProviderPlanMappingsPage() {
               <option value="vtung">VTU.ng</option>
               <option value="vtugate">VTUGate</option>
               <option value="connectbridge">ConnectBridge</option>
+              <option value="clubkonnect">ClubKonnect</option>
             </select>
           </label>
           <label className="text-xs text-muted-foreground">
@@ -498,6 +525,68 @@ export default function ProviderPlanMappingsPage() {
             )}
           </div>
         )}
+      </div>
+
+      <div className="mb-8 grid max-w-2xl gap-4 sm:grid-cols-2">
+        <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — ClubKonnect</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Pulls ClubKonnect's live data bundle plan list and wholesale prices and upserts them into the
+            mappings below (service_type "data") — no manual typing needed. Uses the UserID saved on the
+            Providers page; run that setup first if this returns nothing.
+          </p>
+          <button
+            onClick={() => syncProvider("clubkonnect")}
+            disabled={syncingProvider === "clubkonnect"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "clubkonnect" ? "Syncing..." : "Sync from ClubKonnect"}
+          </button>
+
+          {syncResults.clubkonnect && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults.clubkonnect.error ? (
+                <p className="text-destructive">{syncResults.clubkonnect.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults.clubkonnect.fetched} plans — {syncResults.clubkonnect.created} new,{" "}
+                  {syncResults.clubkonnect.updated} updated
+                  {syncResults.clubkonnect.skipped ? `, ${syncResults.clubkonnect.skipped} skipped` : ""}.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — VTUGate</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Pulls VTUGate's live data bundle plan list and prices (via fetchallservices + fetchdataplans) and
+            upserts them into the mappings below (service_type "data"). Requires the VTUGate API key saved on
+            the Providers page.
+          </p>
+          <button
+            onClick={() => syncProvider("vtugate")}
+            disabled={syncingProvider === "vtugate"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "vtugate" ? "Syncing..." : "Sync from VTUGate"}
+          </button>
+
+          {syncResults.vtugate && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults.vtugate.error ? (
+                <p className="text-destructive">{syncResults.vtugate.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults.vtugate.fetched} plans — {syncResults.vtugate.created} new,{" "}
+                  {syncResults.vtugate.updated} updated
+                  {syncResults.vtugate.skipped ? `, ${syncResults.vtugate.skipped} skipped` : ""}.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {mappings.length > 0 && (

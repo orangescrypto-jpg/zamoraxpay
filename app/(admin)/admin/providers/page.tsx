@@ -198,6 +198,35 @@ export default function AdminProvidersPage() {
     load()
   }
 
+  const ALL_VTU_SERVICES = [
+    "airtime",
+    "data",
+    "cable",
+    "electricity",
+    "exam_pin",
+    "epin",
+    "betting",
+    "international_topup",
+  ] as const
+
+  async function toggleService(p: VtuProvider, service: string) {
+    const next = p.supportsServices.includes(service)
+      ? p.supportsServices.filter((s) => s !== service)
+      : [...p.supportsServices, service]
+
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/admin/providers/vtu", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ providerKey: p.providerKey, supportsServices: next }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error ?? `Failed to update services for ${p.label} (status ${res.status}) — this requires super_admin`)
+    }
+    load()
+  }
+
   return (
     <div className="p-6">
       <h1 className="mb-6 text-2xl font-heading font-bold">Providers</h1>
@@ -216,7 +245,7 @@ export default function AdminProvidersPage() {
                   <div>
                     <p className="text-sm font-medium text-secondary">{p.label}</p>
                     <p className="text-xs text-muted-foreground">
-                      Supports: {p.supportsServices.join(", ")} ·{" "}
+                      Supports: {p.supportsServices.join(", ") || "none"} ·{" "}
                       {p.hasCredentials ? "Credentials set" : "No credentials configured"}
                     </p>
                   </div>
@@ -245,6 +274,19 @@ export default function AdminProvidersPage() {
                       />
                     </button>
                   </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3">
+                  {ALL_VTU_SERVICES.map((service) => (
+                    <label key={service} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={p.supportsServices.includes(service)}
+                        onChange={() => toggleService(p, service)}
+                        className="h-3.5 w-3.5"
+                      />
+                      {service}
+                    </label>
+                  ))}
                 </div>
               </div>
             ))}

@@ -11,9 +11,9 @@
 //   - Only merges rows whose canonical key ACTUALLY collides with
 //     another row's canonical key under the same
 //     (service_type, network_or_biller) scope — i.e. only fixes real
-//     duplicates like the screenshots (same size+validity+category,
-//     different spelling). Rows whose canonical key doesn't collide
-//     with anything are simply renamed in place, never merged.
+//     duplicates like the screenshots (same size+validity+category for
+//     data plans, or same tier+validity for cable packages, just
+//     spelled differently across providers).
 //   - Rows the normalizer could not confidently parse (confident:
 //     false — see planNormalization.ts) are left completely untouched
 //     and listed separately in the report for manual review. A guess

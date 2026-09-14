@@ -58,32 +58,44 @@ export default function AdminProvidersPage() {
 
   async function toggleVtu(p: VtuProvider) {
     const headers = await getAuthHeader()
-    await fetch("/api/admin/providers/vtu", {
+    const res = await fetch("/api/admin/providers/vtu", {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({ providerKey: p.providerKey, isEnabled: !p.isEnabled }),
     })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error ?? `Failed to update ${p.label} (status ${res.status})`)
+    }
     load()
   }
 
   async function togglePayment(p: PaymentProvider) {
     const headers = await getAuthHeader()
-    await fetch("/api/admin/providers/payment", {
+    const res = await fetch("/api/admin/providers/payment", {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({ providerKey: p.providerKey, isEnabled: !p.isEnabled }),
     })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error ?? `Failed to update ${p.label} (status ${res.status})`)
+    }
     load()
   }
 
   async function changePriority(type: "vtu" | "payment", providerKey: string, priority: number) {
     const headers = await getAuthHeader()
     const endpoint = type === "vtu" ? "/api/admin/providers/vtu" : "/api/admin/providers/payment"
-    await fetch(endpoint, {
+    const res = await fetch(endpoint, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({ providerKey, priority }),
     })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error ?? `Failed to update priority (status ${res.status})`)
+    }
     load()
   }
 

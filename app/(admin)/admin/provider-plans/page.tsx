@@ -72,6 +72,7 @@ export default function ProviderPlanMappingsPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [search, setSearch] = useState("")
   const [filterServiceType, setFilterServiceType] = useState("all")
+  const [filterProvider, setFilterProvider] = useState("all")
 
   const [csvText, setCsvText] = useState("")
   const [uploadingCsv, setUploadingCsv] = useState(false)
@@ -291,8 +292,15 @@ export default function ProviderPlanMappingsPage() {
   // ordering the router will actually use is obvious at a glance.
   // Client-side filter is applied before grouping, so a search hides
   // whole groups that don't match rather than leaving empty ones.
+  // Distinct provider keys present in the data, for the filter dropdown —
+  // derived from mappings (not a fixed list) so it always matches whatever
+  // has actually been synced/added, including providers not yet wired to a
+  // "Sync from X" button above.
+  const providerKeys = Array.from(new Set(mappings.map((m) => m.providerKey))).sort()
+
   const filteredMappings = mappings.filter((m) => {
     if (filterServiceType !== "all" && m.serviceType !== filterServiceType) return false
+    if (filterProvider !== "all" && m.providerKey !== filterProvider) return false
     if (!search.trim()) return true
     const haystack = `${m.networkOrBiller} ${m.planCode} ${m.providerKey} ${m.providerPlanId} ${m.providerPlanLabel ?? ""}`.toLowerCase()
     return haystack.includes(search.trim().toLowerCase())
@@ -606,6 +614,16 @@ export default function ProviderPlanMappingsPage() {
             <option value="all">All service types</option>
             {Object.keys(NETWORKS_OR_BILLERS).map((s) => (
               <option key={s} value={s}>{s.replace("_", " ")}</option>
+            ))}
+          </select>
+          <select
+            value={filterProvider}
+            onChange={(e) => setFilterProvider(e.target.value)}
+            className="rounded-md border border-border px-3 py-2 text-sm sm:w-48"
+          >
+            <option value="all">All providers</option>
+            {providerKeys.map((p) => (
+              <option key={p} value={p}>{p}</option>
             ))}
           </select>
         </div>

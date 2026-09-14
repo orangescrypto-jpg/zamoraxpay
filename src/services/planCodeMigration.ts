@@ -32,7 +32,7 @@
 //     rather than silently dropped — this is a real pricing decision,
 //     not something the migration should decide alone.
 
-import { d1Query } from "@/lib/d1"
+import { d1Query, d1Batch, type D1BatchStatement } from "@/lib/d1"
 import { canonicalPlanKey, normalizeNetworkOrBiller } from "@/src/services/planNormalization"
 
 export interface MigrationChange {
@@ -250,44 +250,55 @@ export async function migratePlanCodes(dryRun: boolean, adminUserId: string, nat
   }
 
   if (!dryRun) {
-    // Wrapped in a transaction: if any single UPDATE fails (e.g. a
-    // unique-constraint collision this report failed to predict), the
-    // whole batch rolls back instead of leaving the DB in a half-
-    // migrated state where some rows were renamed and others weren't.
-    await d1Query("BEGIN TRANSACTION", [], nativeDB)
-    try {
-      for (const change of changes) {
-        if (change.action === "rename" || change.action === "merge-kept") {
-          await d1Query(
-            `UPDATE ${change.table} SET plan_code = ?, network_or_biller = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
-            [change.newPlanCode, change.networkOrBiller, adminUserId, change.id],
-            nativeDB,
-          )
-        } else if (change.action === "merge-deactivated") {
-          // Deactivate, never delete — keeps the row auditable and
-          // trivially reversible if a merge decision turns out wrong.
-          //
-          // Deliberately do NOT write newPlanCode here. The winner row
-          // (merge-kept, above) already claims that exact
-          // (service_type, network_or_biller, plan_code, provider_key)
-          // slot, and that UNIQUE constraint has no is_active carve-out
-          // — writing the same plan_code to the loser row collides with
-          // the winner's row and aborts the whole migration. The loser
-          // keeps its OLD plan_code (harmless once is_active = 0, since
-          // no active read path matches on an inactive row) and is
-          // still fully traceable via the "Duplicate of <winner id>"
-          // note already in the change record.
-          await d1Query(
-            `UPDATE ${change.table} SET is_active = 0, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
-            [adminUserId, change.id],
-            nativeDB,
-          )
-        }
+    // All writes go through D1 batch — D1's real atomicity primitive.
+    // Raw "BEGIN TRANSACTION" SQL is rejected by D1 (both the HTTP API
+    // and the native binding reject it identically), so batching
+    // statements into d1Batch() calls is the only way to get
+    // all-or-nothing semantics here: if any statement in a batch
+    // fails (e.g. an unexpected unique-constraint collision this
+    // report failed to predict), D1 rolls back that entire batch —
+    // nothing in it partially applies.
+    //
+    // D1 caps how many statements one batch call can hold, so a large
+    // migration is split into chunks. This is an honest tradeoff, not
+    // a full guarantee: a failure rolls back only the chunk it
+    // happened in, not every chunk that already committed before it.
+    // Each chunk is still internally atomic and every UPDATE here is
+    // independently idempotent (re-running the same change twice is
+    // harmless — it just writes the same value again), so a partial-
+    // chunk failure is safe to re-run from the top rather than
+    // corrupting or duplicating anything.
+    const CHUNK_SIZE = 50
+    const statements: D1BatchStatement[] = []
+    for (const change of changes) {
+      if (change.action === "rename" || change.action === "merge-kept") {
+        statements.push({
+          sql: `UPDATE ${change.table} SET plan_code = ?, network_or_biller = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
+          params: [change.newPlanCode, change.networkOrBiller, adminUserId, change.id],
+        })
+      } else if (change.action === "merge-deactivated") {
+        // Deactivate, never delete — keeps the row auditable and
+        // trivially reversible if a merge decision turns out wrong.
+        //
+        // Deliberately do NOT write newPlanCode here. The winner row
+        // (merge-kept, above) already claims that exact
+        // (service_type, network_or_biller, plan_code, provider_key)
+        // slot, and that UNIQUE constraint has no is_active carve-out
+        // — writing the same plan_code to the loser row collides with
+        // the winner's row and aborts the batch it's in. The loser
+        // keeps its OLD plan_code (harmless once is_active = 0, since
+        // no active read path matches on an inactive row) and is
+        // still fully traceable via the "Duplicate of <winner id>"
+        // note already in the change record.
+        statements.push({
+          sql: `UPDATE ${change.table} SET is_active = 0, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
+          params: [adminUserId, change.id],
+        })
       }
-      await d1Query("COMMIT", [], nativeDB)
-    } catch (err) {
-      await d1Query("ROLLBACK", [], nativeDB)
-      throw err
+    }
+    for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
+      const chunk = statements.slice(i, i + CHUNK_SIZE)
+      await d1Batch(chunk, nativeDB)
     }
   }
 

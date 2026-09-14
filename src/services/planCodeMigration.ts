@@ -250,28 +250,44 @@ export async function migratePlanCodes(dryRun: boolean, adminUserId: string, nat
   }
 
   if (!dryRun) {
-    for (const change of changes) {
-      if (change.action === "rename") {
-        await d1Query(
-          `UPDATE ${change.table} SET plan_code = ?, network_or_biller = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
-          [change.newPlanCode, change.networkOrBiller, adminUserId, change.id],
-          nativeDB,
-        )
-      } else if (change.action === "merge-kept") {
-        await d1Query(
-          `UPDATE ${change.table} SET plan_code = ?, network_or_biller = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
-          [change.newPlanCode, change.networkOrBiller, adminUserId, change.id],
-          nativeDB,
-        )
-      } else if (change.action === "merge-deactivated") {
-        // Deactivate, never delete — keeps the row auditable and
-        // trivially reversible if a merge decision turns out wrong.
-        await d1Query(
-          `UPDATE ${change.table} SET is_active = 0, plan_code = ?, network_or_biller = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
-          [change.newPlanCode, change.networkOrBiller, adminUserId, change.id],
-          nativeDB,
-        )
+    // Wrapped in a transaction: if any single UPDATE fails (e.g. a
+    // unique-constraint collision this report failed to predict), the
+    // whole batch rolls back instead of leaving the DB in a half-
+    // migrated state where some rows were renamed and others weren't.
+    await d1Query("BEGIN TRANSACTION", [], nativeDB)
+    try {
+      for (const change of changes) {
+        if (change.action === "rename" || change.action === "merge-kept") {
+          await d1Query(
+            `UPDATE ${change.table} SET plan_code = ?, network_or_biller = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
+            [change.newPlanCode, change.networkOrBiller, adminUserId, change.id],
+            nativeDB,
+          )
+        } else if (change.action === "merge-deactivated") {
+          // Deactivate, never delete — keeps the row auditable and
+          // trivially reversible if a merge decision turns out wrong.
+          //
+          // Deliberately do NOT write newPlanCode here. The winner row
+          // (merge-kept, above) already claims that exact
+          // (service_type, network_or_biller, plan_code, provider_key)
+          // slot, and that UNIQUE constraint has no is_active carve-out
+          // — writing the same plan_code to the loser row collides with
+          // the winner's row and aborts the whole migration. The loser
+          // keeps its OLD plan_code (harmless once is_active = 0, since
+          // no active read path matches on an inactive row) and is
+          // still fully traceable via the "Duplicate of <winner id>"
+          // note already in the change record.
+          await d1Query(
+            `UPDATE ${change.table} SET is_active = 0, updated_by = ?, updated_at = datetime('now') WHERE id = ?`,
+            [adminUserId, change.id],
+            nativeDB,
+          )
+        }
       }
+      await d1Query("COMMIT", [], nativeDB)
+    } catch (err) {
+      await d1Query("ROLLBACK", [], nativeDB)
+      throw err
     }
   }
 

@@ -79,6 +79,31 @@ const NETWORK_LABEL: Record<string, string> = {
   m_9mobile: "9mobile",
 }
 
+// A plan_code that is purely numeric (optionally with a decimal, e.g.
+// "100", "750.01", "90000.03") is never a legitimate identifier — it's
+// either a raw provider price or a raw numeric package ID that got
+// written to the wrong field. Real plan_codes are slugs like
+// "1gb-7day-cg" or "ck-100". Every sync function below must reject
+// plan codes matching this shape rather than writing them, so this
+// specific failure mode (junk rows breaking the Buy Data dropdown)
+// can't recur even if a future provider has the same bad habit.
+function isNumericJunkPlanCode(code: string): boolean {
+  return /^\d+(\.\d+)?$/.test(code.trim())
+}
+
+// Turns a provider's human-readable plan name/label (e.g.
+// "1GB - 7 Days (Awoof Data)") into a stable, URL-safe plan_code
+// (e.g. "1gb-7-days-awoof-data"). Used whenever a provider's API
+// exposes a name/label field alongside a raw numeric ID, so plan_code
+// stores something meaningful instead of that raw ID or a price.
+function slugifyPlanLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
 interface ParsedPlan {
   network: string
   planId: string
@@ -168,13 +193,24 @@ export async function syncClubkonnectDataPlans(
       skipped++
       continue
     }
-    const existing = await findMappingByNaturalKey("data", plan.network, plan.planId, "clubkonnect", nativeDB)
+    // Prefer a slug derived from the plan's real name/label
+    // (PRODUCT_NAME etc, already parsed above) so plan_code is a
+    // stable human-readable identifier. Only fall back to the raw
+    // numeric PRODUCT_ID — prefixed so it's visually distinguishable
+    // from a price — when ClubKonnect genuinely sent no usable label.
+    const labelSlug = plan.label ? slugifyPlanLabel(plan.label) : ""
+    const planCode = labelSlug || `ck-${plan.planId}`
+    if (isNumericJunkPlanCode(planCode)) {
+      skipped++
+      continue
+    }
+    const existing = await findMappingByNaturalKey("data", plan.network, planCode, "clubkonnect", nativeDB)
     await upsertPlanMapping(
       {
         id: existing?.id,
         serviceType: "data",
         networkOrBiller: plan.network,
-        planCode: plan.planId,
+        planCode,
         providerKey: "clubkonnect",
         providerPlanId: plan.planId,
         providerCostKobo: costKobo,
@@ -254,13 +290,19 @@ export async function syncClubkonnectCablePlans(
         skipped++
         continue
       }
-      const existing = await findMappingByNaturalKey("cable", biller, planId, "clubkonnect", nativeDB)
+      const labelSlug = pkg?.PACKAGE_NAME ? slugifyPlanLabel(String(pkg.PACKAGE_NAME)) : ""
+      const planCode = labelSlug || `ck-${planId}`
+      if (isNumericJunkPlanCode(planCode)) {
+        skipped++
+        continue
+      }
+      const existing = await findMappingByNaturalKey("cable", biller, planCode, "clubkonnect", nativeDB)
       await upsertPlanMapping(
         {
           id: existing?.id,
           serviceType: "cable",
           networkOrBiller: biller,
-          planCode: planId,
+          planCode,
           providerKey: "clubkonnect",
           providerPlanId: planId,
           providerCostKobo: costKobo,
@@ -329,7 +371,7 @@ export async function syncClubkonnectExamPinPrices(
       const examType = String(product?.PRODUCT_CODE ?? "")
       const costNaira = Number(product?.PRODUCT_AMOUNT)
       const costKobo = Math.round(costNaira * 100)
-      if (!examType || Number.isNaN(costKobo) || costKobo <= 0) {
+      if (!examType || Number.isNaN(costKobo) || costKobo <= 0 || isNumericJunkPlanCode(examType)) {
         skipped++
         continue
       }
@@ -421,17 +463,24 @@ export async function syncCheapdatahubExamPinPrices(
       skipped++
       continue
     }
-    const existing = await findMappingByNaturalKey("exam_pin", examBoard, productId, "cheapdatahub", nativeDB)
+    const rawLabel = product?.description ?? product?.product_name ?? ""
+    const labelSlug = rawLabel ? slugifyPlanLabel(String(rawLabel)) : ""
+    const planCode = labelSlug || `cdh-${productId}`
+    if (isNumericJunkPlanCode(planCode)) {
+      skipped++
+      continue
+    }
+    const existing = await findMappingByNaturalKey("exam_pin", examBoard, planCode, "cheapdatahub", nativeDB)
     await upsertPlanMapping(
       {
         id: existing?.id,
         serviceType: "exam_pin",
         networkOrBiller: examBoard,
-        planCode: productId,
+        planCode,
         providerKey: "cheapdatahub",
         providerPlanId: productId,
         providerCostKobo: costKobo,
-        providerPlanLabel: product?.description ?? product?.product_name ?? null,
+        providerPlanLabel: rawLabel || null,
       },
       adminUserId,
       nativeDB,
@@ -549,7 +598,7 @@ export async function syncVtugateDataPlans(
       // never legitimate — every real VTUGate code seen in practice is
       // alphanumeric with letters/dashes — so reject it here rather
       // than downstream, before it ever reaches provider_plan_mappings.
-      if (/^\d+(\.\d+)?$/.test(code)) {
+      if (isNumericJunkPlanCode(code)) {
         skipped++
         continue
       }
@@ -721,7 +770,7 @@ export async function syncVtugateCablePlans(
     const code = String(plan.code ?? "")
     const priceNaira = Number(plan.price)
     const costKobo = Math.round(priceNaira * 100)
-    if (!code || Number.isNaN(costKobo) || costKobo <= 0) {
+    if (!code || Number.isNaN(costKobo) || costKobo <= 0 || isNumericJunkPlanCode(code)) {
       skipped++
       continue
     }
@@ -830,13 +879,24 @@ async function pairgateUpsertPlans(
       counts.skipped++
       continue
     }
-    const existing = await findMappingByNaturalKey(serviceType, network, planId, "pairgate", nativeDB)
+    // Prefer a slug derived from entry.name (Pairgate's real plan
+    // label, previously only stored cosmetically as
+    // providerPlanLabel) so plan_code is a stable human-readable
+    // identifier instead of the raw numeric plan_id or price. Only
+    // fall back to the prefixed numeric ID if Pairgate sent no name.
+    const labelSlug = entry.name ? slugifyPlanLabel(entry.name) : ""
+    const planCode = labelSlug || `pg-${planId}`
+    if (isNumericJunkPlanCode(planCode)) {
+      counts.skipped++
+      continue
+    }
+    const existing = await findMappingByNaturalKey(serviceType, network, planCode, "pairgate", nativeDB)
     await upsertPlanMapping(
       {
         id: existing?.id,
         serviceType,
         networkOrBiller: network,
-        planCode: planId,
+        planCode,
         providerKey: "pairgate",
         providerPlanId: planId,
         providerCostKobo: costKobo,

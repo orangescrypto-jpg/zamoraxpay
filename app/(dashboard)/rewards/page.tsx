@@ -3,9 +3,11 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Gift, Users, Flame, ArrowRight } from "lucide-react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { useAuth } from "@/hooks/useAuth"
 
 interface UnclaimedSummary {
   cashbackUnclaimedKobo: number
@@ -16,10 +18,21 @@ interface UnclaimedSummary {
 type ClaimSource = "cashback" | "referral" | "streak"
 
 export default function RewardsPage() {
+  const router = useRouter()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [summary, setSummary] = useState<UnclaimedSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [claiming, setClaiming] = useState<ClaimSource | null>(null)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  // Not logged in — send straight to login, no flash of a fake
+  // ₦0.00 rewards page first. redirect param brings them right back
+  // here once they sign in, instead of dropping them on /dashboard.
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace("/login?redirect=/rewards")
+    }
+  }, [authLoading, isAuthenticated, router])
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -37,8 +50,9 @@ export default function RewardsPage() {
   }
 
   useEffect(() => {
-    load()
-  }, [])
+    if (!authLoading && isAuthenticated) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated])
 
   async function handleClaim(source: ClaimSource) {
     setClaiming(source)
@@ -86,6 +100,8 @@ export default function RewardsPage() {
 
   const totalUnclaimedKobo =
     (summary?.cashbackUnclaimedKobo ?? 0) + (summary?.referralUnclaimedKobo ?? 0) + (summary?.streakUnclaimedKobo ?? 0)
+
+  if (authLoading || !isAuthenticated) return null
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">

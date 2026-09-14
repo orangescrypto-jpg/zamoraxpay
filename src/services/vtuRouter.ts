@@ -32,7 +32,19 @@ import { getActiveVtuProviders, getVtuProviderCredentials } from "@/src/services
 import { getPlanProviderOptions } from "@/src/services/providerPlanMappings"
 import type { VtuPurchaseRequest, VtuPurchaseResult, VtuDeliveredData } from "@/src/services/providers/vtu/types"
 
-export interface VtuRouterAttemptLog {
+const SERVICE_LABEL: Record<string, string> = {
+  data: "data plan",
+  cable: "cable subscription",
+  exam_pin: "exam pin",
+  airtime: "airtime top-up",
+  electricity: "electricity payment",
+  betting: "betting wallet funding",
+}
+
+function serviceUnavailableMessage(serviceType: string): string {
+  const label = SERVICE_LABEL[serviceType] ?? "service"
+  return `This ${label} is not available right now. Please try again shortly or choose another plan.`
+}
   providerKey: string
   success: boolean
   message: string
@@ -212,7 +224,7 @@ export async function executeVtuPurchase(
     success: false,
     providerUsed: null,
     providerReference: null,
-    message: "All enabled VTU providers failed to fulfil this order. The wallet debit for this order should be reversed.",
+    message: serviceUnavailableMessage(req.serviceType),
     attempts,
   }
 }

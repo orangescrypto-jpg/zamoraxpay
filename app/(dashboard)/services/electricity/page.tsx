@@ -1,7 +1,7 @@
 // app/(dashboard)/services/electricity/page.tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { createClient } from "@/src/services/providers/supabase/client"
 
@@ -35,11 +35,46 @@ export default function ElectricityPage() {
   const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly">("monthly")
   const [scheduleNote, setScheduleNote] = useState<{ success: boolean; message: string } | null>(null)
 
+  // Live fee preview — recalculated as the customer types an amount,
+  // so the total they'll actually be charged is visible before they
+  // ever reach the PIN field, instead of them finding out only after
+  // an "insufficient balance" failure or an unexplained debit.
+  const [quote, setQuote] = useState<{ amountKobo: number; convenienceFeeKobo: number; totalKobo: number } | null>(null)
+  const [quoteLoading, setQuoteLoading] = useState(false)
+
   async function getAuthHeader() {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     return { Authorization: `Bearer ${session?.access_token}` }
   }
+
+  useEffect(() => {
+    const amountKobo = Math.round(parseFloat(amount) * 100)
+    if (!amountKobo || amountKobo <= 0) {
+      setQuote(null)
+      return
+    }
+    const handle = setTimeout(async () => {
+      setQuoteLoading(true)
+      try {
+        const headers = await getAuthHeader()
+        const res = await fetch("/api/vtu/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...headers },
+          body: JSON.stringify({ serviceType: "electricity", networkOrBiller: biller, amountKobo }),
+        })
+        if (res.ok) setQuote(await res.json())
+      } catch {
+        // Silent — the live preview is a convenience, not a
+        // requirement; the actual charge is still validated
+        // server-side at submit regardless of whether this loaded.
+      } finally {
+        setQuoteLoading(false)
+      }
+    }, 400)
+    return () => clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amount, biller])
 
   async function scheduleRecurringPayment(amountKobo: number) {
     setScheduleNote(null)
@@ -203,6 +238,27 @@ export default function ElectricityPage() {
           <label className="mb-1 block text-sm font-medium text-secondary">Amount (₦)</label>
           <input required type="number" value={amount} onChange={(e) => setAmount(e.target.value)}
             className="w-full rounded-md border border-border px-3 py-2 text-sm" />
+          {quoteLoading && (
+            <p className="mt-1 text-xs text-muted-foreground">Calculating total…</p>
+          )}
+          {!quoteLoading && quote && (
+            <div className="mt-2 space-y-1 rounded-md bg-muted/50 p-2 text-xs text-secondary">
+              <div className="flex justify-between">
+                <span>Amount</span>
+                <span>₦{(quote.amountKobo / 100).toLocaleString()}</span>
+              </div>
+              {quote.convenienceFeeKobo > 0 && (
+                <div className="flex justify-between">
+                  <span>Transaction fee</span>
+                  <span>₦{(quote.convenienceFeeKobo / 100).toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-border/60 pt-1 font-semibold">
+                <span>Total to be charged</span>
+                <span>₦{(quote.totalKobo / 100).toLocaleString()}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="rounded-md border border-border p-3">

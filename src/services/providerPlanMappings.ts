@@ -14,6 +14,7 @@
 import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
+import { canonicalPlanKey, normalizeNetworkOrBiller } from "@/src/services/planNormalization"
 
 export interface ProviderPlanMapping {
   id: string
@@ -35,11 +36,19 @@ export async function getPlanProviderOptions(
   planCode: string,
   nativeDB?: any,
 ): Promise<ProviderPlanMapping[]> {
+  // Normalize the lookup key the same way writes are normalized, so a
+  // caller passing through an old un-normalized plan_code (e.g. from a
+  // stale pricing_rules row not yet migrated, or a caller built before
+  // this normalization existed) still matches what sync/admin writes
+  // actually stored, instead of silently finding zero options and
+  // falling through to the priority-order fallback.
+  const normalizedNetwork = normalizeNetworkOrBiller(networkOrBiller)
+  const normalizedPlanCode = canonicalPlanKey(planCode, normalizedNetwork, serviceType).planCode
   const result = await d1Query(
     `SELECT * FROM provider_plan_mappings
      WHERE service_type = ? AND network_or_biller = ? AND plan_code = ? AND is_active = 1
      ORDER BY provider_cost_kobo ASC`,
-    [serviceType, networkOrBiller, planCode],
+    [serviceType, normalizedNetwork, normalizedPlanCode],
     nativeDB,
   )
   return (result.results ?? []).map(rowToMapping)
@@ -88,10 +97,15 @@ export async function findMappingByNaturalKey(
   providerKey: string,
   nativeDB?: any,
 ): Promise<ProviderPlanMapping | null> {
+  // Callers (all sync functions) now pass an already-canonicalized
+  // planCode from canonicalizedPlanCode(), but normalize again here
+  // too — cheap, and guards any caller that isn't updated yet.
+  const normalizedNetwork = normalizeNetworkOrBiller(networkOrBiller)
+  const normalizedPlanCode = canonicalPlanKey(planCode, normalizedNetwork, serviceType).planCode
   const result = await d1Query(
     `SELECT * FROM provider_plan_mappings
      WHERE service_type = ? AND network_or_biller = ? AND plan_code = ? AND provider_key = ?`,
-    [serviceType, networkOrBiller, planCode, providerKey],
+    [serviceType, normalizedNetwork, normalizedPlanCode, providerKey],
     nativeDB,
   )
   const row = (result.results ?? [])[0]
@@ -112,6 +126,20 @@ export async function upsertPlanMapping(
   adminUserId: string,
   nativeDB?: any,
 ): Promise<void> {
+  // Normalize on every write path — not just sync. A human typing a
+  // plan code by hand in the admin UI or a bulk CSV upload is just as
+  // likely to write "MTN 230MB 1 Day" as a sync job is to receive it
+  // from a provider, so both must land on the same canonical code or
+  // the manual entry becomes its own invisible duplicate plan.
+  // providerPlanLabel (the original as-given text) is preserved
+  // unchanged for admin display — only plan_code and network_or_biller
+  // get canonicalized.
+  params = {
+    ...params,
+    networkOrBiller: normalizeNetworkOrBiller(params.networkOrBiller),
+    planCode: canonicalPlanKey(params.planCode, params.networkOrBiller, params.serviceType).planCode,
+  }
+
   if (params.id) {
     await d1Query(
       `UPDATE provider_plan_mappings SET

@@ -457,6 +457,24 @@ CREATE TABLE IF NOT EXISTS payment_provider_configs (
 
 -- Admin-editable retail/wholesale pricing per network/service, so
 -- margins can be adjusted without a code deploy.
+CREATE TABLE IF NOT EXISTS pricing_policies (
+  service_type          TEXT PRIMARY KEY,
+  retail_fee_type       TEXT NOT NULL DEFAULT 'flat',   -- 'flat' | 'percentage'
+  retail_fee_value      INTEGER NOT NULL DEFAULT 0,      -- flat: kobo. percentage: basis points
+  wholesale_fee_type    TEXT NOT NULL DEFAULT 'flat',
+  wholesale_fee_value   INTEGER NOT NULL DEFAULT 0,
+  convenience_fee_type  TEXT NOT NULL DEFAULT 'flat',
+  convenience_fee_value INTEGER NOT NULL DEFAULT 0,
+  updated_by            TEXT,
+  updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+INSERT OR IGNORE INTO pricing_policies (service_type) VALUES ('data');
+INSERT OR IGNORE INTO pricing_policies (service_type) VALUES ('cable');
+INSERT OR IGNORE INTO pricing_policies (service_type) VALUES ('electricity');
+INSERT OR IGNORE INTO pricing_policies (service_type) VALUES ('airtime');
+INSERT OR IGNORE INTO pricing_policies (service_type) VALUES ('exam_pin');
+
 CREATE TABLE IF NOT EXISTS pricing_rules (
   id                TEXT PRIMARY KEY,
   service_type      TEXT NOT NULL,

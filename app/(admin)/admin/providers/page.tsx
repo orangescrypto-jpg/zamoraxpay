@@ -94,6 +94,11 @@ export default function AdminProvidersPage() {
   // — left blank, the adapter falls back to its correct hardcoded
   // default, so there's no need to fill this in unless you actually
   // need to point at a different host.
+  const VTU_CRED_NOTES: Record<string, string> = {
+    clubkonnect:
+      "This one UserID + APIKey pair authenticates every ClubKonnect service (Airtime, Data, Cable TV, Electricity, Betting, ePIN) — there's nothing separate to enter per service.",
+  }
+
   const VTU_CRED_FIELDS: Record<string, { key: string; label: string; secret?: boolean; placeholder?: string }[]> = {
     cheapdatahub: [
       { key: "apiKey", label: "API Key", secret: true },
@@ -284,6 +289,11 @@ export default function AdminProvidersPage() {
         <div className="fixed inset-0 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-lg bg-white p-5">
             <h3 className="mb-3 font-heading font-semibold">Set credentials — {editingCreds.key}</h3>
+            {editingCreds.type === "vtu" && VTU_CRED_NOTES[editingCreds.key] && (
+              <p className="mb-3 rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
+                {VTU_CRED_NOTES[editingCreds.key]}
+              </p>
+            )}
             {credsLoading ? (
               <p className="mb-4 text-sm text-muted-foreground">Loading saved credentials…</p>
             ) : (

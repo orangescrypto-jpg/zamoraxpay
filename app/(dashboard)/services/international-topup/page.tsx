@@ -47,12 +47,14 @@ async function authedFetch(path: string, opts: RequestInit = {}) {
 }
 
 export default function InternationalTopupPage() {
+  const [mode, setMode] = useState<"airtime" | "data">("airtime")
   const [countries, setCountries] = useState<Country[]>([])
   const [countryCode, setCountryCode] = useState("")
   const [phone, setPhone] = useState("")
   const [operators, setOperators] = useState<Operator[]>([])
   const [operator, setOperator] = useState<Operator | null>(null)
   const [detecting, setDetecting] = useState(false)
+  const [loadingOperators, setLoadingOperators] = useState(false)
   const [manualPick, setManualPick] = useState(false)
   const [amount, setAmount] = useState("")
   const [preview, setPreview] = useState<FxPreview | null>(null)
@@ -80,6 +82,47 @@ export default function InternationalTopupPage() {
   }, [])
 
   const selectedCountry = countries.find((c) => c.isoName === countryCode)
+
+  // Data bundles have no auto-detect (they're a separate operator set from
+  // airtime) — go straight to the manual picker filtered to type=data.
+  async function loadDataOperators(cc: string) {
+    setLoadingOperators(true)
+    setOperators([])
+    setOperator(null)
+    setResult(null)
+    const opRes = await authedFetch(`/api/international-topup/operators?country_code=${cc}&type=data`)
+    const opData = await opRes.json()
+    setLoadingOperators(false)
+    if (opData.success) {
+      setOperators(opData.data)
+      setManualPick(true)
+    } else {
+      setResult({ success: false, message: opData.message ?? "Failed to load data bundles" })
+    }
+  }
+
+  function handleModeChange(next: "airtime" | "data") {
+    setMode(next)
+    setPhone("")
+    setOperator(null)
+    setOperators([])
+    setManualPick(false)
+    setAmount("")
+    setPreview(null)
+    setResult(null)
+    if (next === "data" && countryCode) loadDataOperators(countryCode)
+  }
+
+  function handleCountryChange(cc: string) {
+    setCountryCode(cc)
+    setPhone("")
+    setOperator(null)
+    setOperators([])
+    setManualPick(false)
+    setPreview(null)
+    setResult(null)
+    if (mode === "data" && cc) loadDataOperators(cc)
+  }
 
   async function handleDetect() {
     if (!countryCode || !phone) return
@@ -125,7 +168,7 @@ export default function InternationalTopupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!operator || !amount || !pin) return
+    if (!operator || !amount || !pin || !phone) return
     setLoading(true)
     setResult(null)
 
@@ -170,16 +213,32 @@ export default function InternationalTopupPage() {
       )}
 
       <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => handleModeChange("airtime")}
+            className={`rounded-md border py-2 text-sm font-medium ${
+              mode === "airtime" ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"
+            }`}
+          >
+            Airtime
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModeChange("data")}
+            className={`rounded-md border py-2 text-sm font-medium ${
+              mode === "data" ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"
+            }`}
+          >
+            Data
+          </button>
+        </div>
+
         <div>
           <label className="mb-1 block text-sm font-medium text-secondary">Country</label>
           <select
             value={countryCode}
-            onChange={(e) => {
-              setCountryCode(e.target.value)
-              setOperator(null)
-              setManualPick(false)
-              setPreview(null)
-            }}
+            onChange={(e) => handleCountryChange(e.target.value)}
             disabled={loadingCountries}
             className="w-full rounded-md border border-border px-3 py-2 text-sm"
           >
@@ -192,7 +251,7 @@ export default function InternationalTopupPage() {
           </select>
         </div>
 
-        {countryCode && (
+        {mode === "airtime" && countryCode && (
           <div>
             <label className="mb-1 block text-sm font-medium text-secondary">Recipient phone number</label>
             <div className="flex gap-2">
@@ -222,12 +281,26 @@ export default function InternationalTopupPage() {
           </div>
         )}
 
+        {mode === "data" && countryCode && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-secondary">Recipient phone number</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder={selectedCountry?.callingCodes?.[0] ? `${selectedCountry.callingCodes[0]}...` : "Phone number"}
+              className="w-full rounded-md border border-border px-3 py-2 text-sm"
+            />
+          </div>
+        )}
+
         {manualPick && !operator && (
           <div>
             <label className="mb-1 block text-sm font-medium text-secondary">
-              Couldn&apos;t detect the network — pick it manually
+              {mode === "data" ? "Select a data bundle network" : "Couldn't detect the network — pick it manually"}
             </label>
             <select
+              disabled={loadingOperators}
               onChange={(e) => {
                 const op = operators.find((o) => String(o.operatorId) === e.target.value)
                 setOperator(op ?? null)
@@ -235,13 +308,16 @@ export default function InternationalTopupPage() {
               }}
               className="w-full rounded-md border border-border px-3 py-2 text-sm"
             >
-              <option value="">Select network</option>
+              <option value="">{loadingOperators ? "Loading networks..." : "Select network"}</option>
               {operators.map((o) => (
                 <option key={o.operatorId} value={o.operatorId}>
                   {o.name}
                 </option>
               ))}
             </select>
+            {mode === "data" && !loadingOperators && operators.length === 0 && countryCode && (
+              <p className="mt-1 text-xs text-muted-foreground">No data bundles available for this country.</p>
+            )}
           </div>
         )}
 
@@ -308,7 +384,7 @@ export default function InternationalTopupPage() {
           </div>
         )}
 
-        {operator && amount && (
+        {operator && amount && phone && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>

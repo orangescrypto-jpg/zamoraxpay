@@ -87,6 +87,62 @@ export interface CustomerPlan {
   priceKobo: number
 }
 
+// A group of sibling plans — same size + validity + network, different
+// category (standard/awoof/gifting/cg/...) — shown to the customer as
+// ONE line ("110MB - 1 day — from ₦107") with the category choice
+// exposed as sub-options rather than hidden. Categories are kept as
+// separate plan_codes deliberately (see planNormalization.ts): they can
+// have different provider-side activation behavior, so auto-picking
+// across them on fallback would risk silently delivering a different
+// product than the one the customer saw. Grouping here is display-only
+// — purchaseFlow still charges and routes by the exact planCode the
+// customer picks, never substitutes a sibling behind their back.
+export interface CustomerPlanGroup {
+  groupKey: string // size+validity+network, e.g. "mtn-110mb-1d"
+  label: string // e.g. "110MB - 1 day"
+  cheapestPriceKobo: number
+  variants: Array<{ planCode: string; category: string; priceKobo: number }>
+}
+
+// Splits a plan_code into (groupKey, category) so sibling categories of
+// the same size+validity+network (or planFamily+validity+network, for
+// named products like "collabo") collapse into one CustomerPlanGroup.
+// Mirrors the two data plan_code shapes canonicalPlanKey() produces:
+//   `<size>mb-<days>d[-<category>][-<bundletag>...]`
+//   `<planfamily>-<days>d[-<category>][-<bundletag>...]`
+// Only ever called for serviceType === "data" — cable's canonical code
+// (`<cabletier>[-<days>d]`) has no category suffix at all (cable has no
+// Awoof/Gifting-style variants), and exam_pin/epin's plan_code is a pin
+// type or a denomination, not a size/category — grouping those would be
+// meaningless, so listPlanGroups() only calls this for data.
+// Bundle tags (social/binge/youtube/night) are a genuinely different
+// restricted product, not a category, so they stay part of the group
+// key and are never folded together with an unrestricted plan of the
+// same size.
+const CATEGORY_KEYS = new Set(["gifting", "awoof", "cg", "cg_lite", "sme", "corporate", "direct", "standard"])
+function splitPlanCodeForGrouping(planCode: string, networkOrBiller: string): { groupKey: string; category: string } {
+  // Two shapes: "<size>mb-<days>d..." (size-based) or
+  // "<planfamily>-<days>d..." (named family, e.g. "collabo-30d...").
+  // Try size-based first since it's the common case; fall back to the
+  // family form, which just requires a trailing "-<digits>d" segment
+  // with an arbitrary (non-numeric-prefixed) base before it.
+  let base: string, suffixPart: string
+  const sizeMatch = planCode.match(/^(\d+mb-\d+d)((?:-[a-z_+]+)*)$/i)
+  if (sizeMatch) {
+    ;[, base, suffixPart] = sizeMatch as unknown as [string, string, string]
+  } else {
+    const familyMatch = planCode.match(/^([a-z][a-z0-9]*-\d+d)((?:-[a-z_+]+)*)$/i)
+    if (!familyMatch) return { groupKey: `${networkOrBiller}:${planCode}`, category: "standard" }
+    ;[, base, suffixPart] = familyMatch as unknown as [string, string, string]
+  }
+  const segments = suffixPart ? suffixPart.split("-").filter(Boolean) : []
+  const categorySegs = segments.filter((s) => CATEGORY_KEYS.has(s))
+  const restSegs = segments.filter((s) => !CATEGORY_KEYS.has(s)) // bundle tags stay in the group key
+  const category = categorySegs[0] ?? "standard"
+  const groupKey = `${networkOrBiller}:${base}${restSegs.length ? "-" + restSegs.join("-") : ""}`
+  return { groupKey, category }
+}
+
 // Customer-facing plan list for a given service/network, priced at the
 // caller's tier. Unlike listPricingRules (admin-only, full rows), this
 // only returns what a buy-data/buy-cable page needs, and never exposes
@@ -179,6 +235,52 @@ export async function listPlans(
   finalPlans.sort((a, b) => a.priceKobo - b.priceKobo)
 
   return finalPlans
+}
+
+// Same liveness-filtered plan list as listPlans(), grouped by
+// size+validity+network so the buy page can show one line per real-
+// world plan with category as a sub-choice, instead of one line per
+// plan_code. See CustomerPlanGroup for why category is never
+// auto-collapsed away.
+export async function listPlanGroups(
+  serviceType: VtuServiceType,
+  networkOrBiller: string,
+  userTier: "retail" | "reseller",
+  nativeDB?: any,
+): Promise<CustomerPlanGroup[]> {
+  const normalizedNetwork = normalizeNetworkOrBiller(networkOrBiller)
+  const plans = await listPlans(serviceType, normalizedNetwork, userTier, nativeDB)
+
+  const groups = new Map<string, CustomerPlanGroup>()
+  for (const plan of plans) {
+    // Only data plan_codes carry a category suffix worth grouping on
+    // (see splitPlanCodeForGrouping) — cable's canonical code has no
+    // category at all, and exam_pin/epin's plan_code is a pin type or
+    // denomination, not a product variant. For every other service,
+    // each plan_code is simply its own singleton group, so the buy
+    // page can use one grouped rendering path for every service
+    // without cable/exam_pin/epin plans being mis-split by a regex
+    // that was never meant to apply to their code shape.
+    const { groupKey, category } =
+      serviceType === "data"
+        ? splitPlanCodeForGrouping(plan.planCode, normalizedNetwork)
+        : { groupKey: `${normalizedNetwork}:${plan.planCode}`, category: "standard" }
+    let group = groups.get(groupKey)
+    if (!group) {
+      group = { groupKey, label: "", cheapestPriceKobo: plan.priceKobo, variants: [] }
+      groups.set(groupKey, group)
+    }
+    group.variants.push({ planCode: plan.planCode, category, priceKobo: plan.priceKobo })
+    if (plan.priceKobo < group.cheapestPriceKobo) group.cheapestPriceKobo = plan.priceKobo
+  }
+
+  const result = Array.from(groups.values())
+  for (const group of result) {
+    group.variants.sort((a, b) => a.priceKobo - b.priceKobo) // cheapest variant first
+  }
+  // Groups themselves cheapest-first, same ordering principle as listPlans.
+  result.sort((a, b) => a.cheapestPriceKobo - b.cheapestPriceKobo)
+  return result
 }
 
 export async function listPricingRules(serviceType?: VtuServiceType, nativeDB?: any) {

@@ -16,6 +16,7 @@ import { upsertPlanMapping, findMappingByNaturalKey } from "@/src/services/provi
 import { d1Query } from "@/lib/db"
 import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
+import { reconcilePricingFromMappings } from "@/src/services/pricingReconcile"
 
 const VALID_SERVICE_TYPES: VtuServiceType[] = ["data", "cable", "exam_pin", "epin", "electricity"]
 
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
 
     const colIndex = (name: string) => header.indexOf(name)
     const results: RowResult[] = []
+    const touchedServiceTypes = new Set<VtuServiceType>()
 
     for (let i = 1; i < lines.length; i++) {
       const rowNum = i + 1 // 1-based, matches spreadsheet row numbers including header
@@ -161,6 +163,7 @@ export async function POST(req: NextRequest) {
         } else {
           results.push({ row: rowNum, status: "created" })
         }
+        touchedServiceTypes.add(serviceType)
       } catch (rowErr) {
         results.push({
           row: rowNum,
@@ -181,6 +184,15 @@ export async function POST(req: NextRequest) {
          VALUES (?, ?, 'provider_plan_mapping.bulk_upload', 'provider_plan_mappings', ?, ?)`,
         [randomUUID(), auth.uid, `bulk:${successCount}rows`, JSON.stringify({ createdCount, updatedCount, errorCount })],
       )
+
+      // Reconcile once per distinct service_type touched by this
+      // upload — not once per row (that would run the same query
+      // dozens of times for a big CSV), and not skipped entirely
+      // (that would leave every newly-added plan unpriced until the
+      // next unrelated sync happens to cover the same service_type).
+      for (const serviceType of touchedServiceTypes) {
+        await reconcilePricingFromMappings(serviceType, auth.uid)
+      }
     }
 
     return NextResponse.json({ createdCount, updatedCount, errorCount, results })

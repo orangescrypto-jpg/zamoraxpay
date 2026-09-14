@@ -840,7 +840,7 @@ const PAIRGATE_CABLE_PROVIDER_SLUGS: Record<string, string> = {
 // request loop comfortably under a 1-request-per-second ceiling
 // without needing to know Pairgate's exact limit.
 function pairgateThrottleDelay() {
-  return new Promise((resolve) => setTimeout(resolve, 1100))
+  return new Promise((resolve) => setTimeout(resolve, 1500))
 }
 
 // Cable billers as PairGate might return their provider_name (casing
@@ -950,6 +950,13 @@ export async function syncPairgateDataPlans(
 
   let fetched = 0
   const counts = { created: 0, updated: 0, skipped: 0 }
+
+  // Pace even the first plans call after the categories call — both
+  // count against the same per-second limit, and firing the loop's
+  // first request immediately after categories returns is exactly how
+  // a 429 can happen before any inter-iteration delay gets a chance to
+  // matter.
+  await pairgateThrottleDelay()
 
   for (let i = 0; i < categories.length; i++) {
     const cat = categories[i]

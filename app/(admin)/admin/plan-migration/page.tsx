@@ -101,6 +101,42 @@ export default function PlanMigrationPage() {
     }
   }
 
+  function downloadCSV(filename: string, rows: string[][]) {
+    const escape = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`
+    const csv = rows.map((row) => row.map(escape).join(",")).join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  function downloadSkipped(report: MigrationReport) {
+    downloadCSV("plan-migration-skipped.csv", [
+      ["table", "id", "plan_code", "reason"],
+      ...report.lowConfidenceSkipped.map((r) => [r.table, r.id, r.planCode, r.reason]),
+    ])
+  }
+
+  function downloadAllChanges(report: MigrationReport) {
+    downloadCSV("plan-migration-changes.csv", [
+      ["action", "table", "service_type", "network_or_biller", "old_plan_code", "new_plan_code", "note"],
+      ...report.changes.map((c) => [
+        c.action,
+        c.table,
+        c.serviceType,
+        c.networkOrBiller,
+        c.oldPlanCode,
+        c.newPlanCode,
+        c.note ?? "",
+      ]),
+    ])
+  }
+
   function renderReport(report: MigrationReport) {
     return (
       <div style={{ marginTop: 20 }}>
@@ -139,7 +175,12 @@ export default function PlanMigrationPage() {
 
         {report.lowConfidenceSkipped.length > 0 && (
           <div style={{ marginBottom: 20 }}>
-            <h3>Left unchanged (couldn't confidently parse)</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+              <h3 style={{ margin: 0 }}>Left unchanged (couldn't confidently parse)</h3>
+              <button onClick={() => downloadSkipped(report)} style={btnStyle("#374151")}>
+                ⬇ Download CSV
+              </button>
+            </div>
             <table style={tableStyle}>
               <thead>
                 <tr>
@@ -164,7 +205,12 @@ export default function PlanMigrationPage() {
         )}
 
         <div>
-          <h3>All changes ({report.changes.length})</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+            <h3 style={{ margin: 0 }}>All changes ({report.changes.length})</h3>
+            <button onClick={() => downloadAllChanges(report)} style={btnStyle("#374151")}>
+              ⬇ Download CSV
+            </button>
+          </div>
           <table style={tableStyle}>
             <thead>
               <tr>

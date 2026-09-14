@@ -116,16 +116,24 @@ export async function listPlans(
   // provider_plan_mappings to begin with — for those, provider
   // liveness is already covered by getActiveVtuProviders alone at
   // purchase time, so skip the extra join and keep prior behavior.
+  //
+  // Deliberately NOT filtering this query by `plan_code IN (...)` —
+  // binding one parameter per plan_code blows past D1's per-statement
+  // bound-parameter limit once a network has ~100+ synced plans (seen
+  // live: MTN/Glo failed with 128/132 plans while Airtel/9mobile at
+  // 93/59 didn't, all from the exact same code path). service_type +
+  // network_or_biller already scope this tightly enough that pulling
+  // every mapping row for this network and filtering plan_code in JS
+  // below is cheap and removes the unbounded parameter list entirely.
   const planCodes = rows.map((r: any) => r.plan_code)
-  const placeholders = planCodes.map(() => "?").join(",")
+  const planCodeSet = new Set(planCodes)
   const mappingResult = await d1Query(
     `SELECT DISTINCT plan_code, provider_key FROM provider_plan_mappings
-     WHERE service_type = ? AND network_or_biller = ? AND is_active = 1
-       AND plan_code IN (${placeholders})`,
-    [serviceType, networkOrBiller, ...planCodes],
+     WHERE service_type = ? AND network_or_biller = ? AND is_active = 1`,
+    [serviceType, networkOrBiller],
     nativeDB,
   )
-  const mappingRows = mappingResult.results ?? []
+  const mappingRows = (mappingResult.results ?? []).filter((r: any) => planCodeSet.has(r.plan_code))
 
   // Only plan_codes that have NO mappings at all skip the liveness
   // check (nothing to check — same as before). Plan codes WITH

@@ -257,6 +257,15 @@ export default function AdminPricingPage() {
     return haystack.includes(search.trim().toLowerCase())
   })
 
+  // Group the (already-filtered) rules by service type so a large rule
+  // set is easy to scan/navigate — same pattern as the provider-plans
+  // page's grouping.
+  const groupedRules = filteredRules.reduce<Record<string, PricingRule[]>>((acc, r) => {
+    acc[r.service_type] = acc[r.service_type] ? [...acc[r.service_type], r] : [r]
+    return acc
+  }, {})
+  const groupServiceTypes = Object.keys(groupedRules).sort()
+
   // Lowercase and collapse separator characters (spaces, hyphens,
   // underscores, slashes) down to a single "-", so plan codes that
   // only differ in formatting ("230mb-1day-gifting" vs "MTN/230MB/1Day"
@@ -636,137 +645,67 @@ export default function AdminPricingPage() {
               </div>
             </div>
           )}
-          {/* Mobile: stacked cards. Hidden from sm and up, where the table takes over. */}
-          <div className="space-y-3 sm:hidden">
-            {filteredRules.map((r) => (
-              <div key={r.id} className="rounded-lg border border-border bg-white p-4">
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(r.id)}
-                      onChange={() => toggleSelected(r.id)}
-                      className="mt-1 h-4 w-4 rounded border-border"
-                    />
-                    <div>
-                      <p className="text-sm font-semibold capitalize text-secondary">
-                        {r.service_type.replace("_", " ")} · {r.network_or_biller}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{r.plan_code ?? "No plan code"}</p>
-                    </div>
-                  </div>
-                </div>
+          {/* Mobile: stacked cards, grouped per service type inside a
+              collapsible <details> so a large rule set is easy to
+              navigate on a small screen. Hidden from sm and up, where
+              the table takes over. */}
+          <div className="space-y-4 sm:hidden">
+            {groupServiceTypes.map((serviceType) => (
+              <details key={serviceType} open className="rounded-lg border border-border bg-white">
+                <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold capitalize text-secondary">
+                  {serviceType.replace("_", " ")} ({groupedRules[serviceType].length})
+                </summary>
+                <div className="space-y-3 border-t border-border p-3">
+                  {groupedRules[serviceType].map((r) => (
+                    <div key={r.id} className="rounded-lg border border-border bg-white p-4">
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(r.id)}
+                            onChange={() => toggleSelected(r.id)}
+                            className="mt-1 h-4 w-4 rounded border-border"
+                          />
+                          <div>
+                            <p className="text-sm font-semibold text-secondary">{r.network_or_biller}</p>
+                            <p className="text-xs text-muted-foreground">{r.plan_code ?? "No plan code"}</p>
+                          </div>
+                        </div>
+                      </div>
 
-                <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <p className="text-muted-foreground">Retail</p>
-                    <p className="font-medium text-secondary">{formatNaira(r.retail_price_kobo)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Wholesale</p>
-                    <p className="font-medium text-secondary">{formatNaira(r.wholesale_price_kobo)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Fee</p>
-                    <p className="font-medium text-secondary">{formatNaira(r.convenience_fee_kobo)}</p>
-                  </div>
-                </div>
+                      <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <p className="text-muted-foreground">Retail</p>
+                          <p className="font-medium text-secondary">{formatNaira(r.retail_price_kobo)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Wholesale</p>
+                          <p className="font-medium text-secondary">{formatNaira(r.wholesale_price_kobo)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Fee</p>
+                          <p className="font-medium text-secondary">{formatNaira(r.convenience_fee_kobo)}</p>
+                        </div>
+                      </div>
 
-                {deletingId === r.id ? (
-                  <div className="flex items-center gap-2 border-t border-border pt-3">
-                    <span className="text-xs text-destructive">Delete this rule?</span>
-                    <button
-                      onClick={() => handleDelete(r.id)}
-                      className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-white"
-                    >
-                      Yes
-                    </button>
-                    <button
-                      onClick={() => setDeletingId(null)}
-                      className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-secondary"
-                    >
-                      No
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-4 border-t border-border pt-3">
-                    <button
-                      onClick={() => startEdit(r)}
-                      className="text-xs font-medium text-primary hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setDeletingId(r.id)}
-                      className="text-xs font-medium text-destructive hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Desktop / tablet: table. Hidden below sm, where cards take over. */}
-          <div className="hidden overflow-x-auto rounded-lg border border-border sm:block">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={filteredRules.length > 0 && filteredRules.every((r) => selectedIds.has(r.id))}
-                      onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-border"
-                      aria-label="Select all rules"
-                    />
-                  </th>
-                  <th className="px-4 py-3">Service</th>
-                  <th className="px-4 py-3">Network/Biller</th>
-                  <th className="px-4 py-3">Plan</th>
-                  <th className="px-4 py-3">Retail</th>
-                  <th className="px-4 py-3">Wholesale</th>
-                  <th className="px-4 py-3">Fee</th>
-                  <th className="px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredRules.map((r) => (
-                  <tr key={r.id}>
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(r.id)}
-                        onChange={() => toggleSelected(r.id)}
-                        className="h-4 w-4 rounded border-border"
-                      />
-                    </td>
-                    <td className="px-4 py-3 capitalize">{r.service_type.replace("_", " ")}</td>
-                    <td className="px-4 py-3">{r.network_or_biller}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{r.plan_code ?? "—"}</td>
-                    <td className="px-4 py-3">{formatNaira(r.retail_price_kobo)}</td>
-                    <td className="px-4 py-3">{formatNaira(r.wholesale_price_kobo)}</td>
-                    <td className="px-4 py-3">{formatNaira(r.convenience_fee_kobo)}</td>
-                    <td className="px-4 py-3">
                       {deletingId === r.id ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 border-t border-border pt-3">
                           <span className="text-xs text-destructive">Delete this rule?</span>
                           <button
                             onClick={() => handleDelete(r.id)}
-                            className="rounded-md bg-destructive px-2 py-1 text-xs font-medium text-white"
+                            className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-white"
                           >
                             Yes
                           </button>
                           <button
                             onClick={() => setDeletingId(null)}
-                            className="rounded-md border border-border px-2 py-1 text-xs font-medium text-secondary"
+                            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-secondary"
                           >
                             No
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-4 border-t border-border pt-3">
                           <button
                             onClick={() => startEdit(r)}
                             className="text-xs font-medium text-primary hover:underline"
@@ -781,11 +720,112 @@ export default function AdminPricingPage() {
                           </button>
                         </div>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
+
+          {/* Desktop / tablet: one table per service type, each inside a
+              collapsible <details> dropdown for quick navigation across
+              services. Hidden below sm, where cards take over. */}
+          <div className="hidden space-y-4 sm:block">
+            {groupServiceTypes.map((serviceType) => {
+              const groupRows = groupedRules[serviceType]
+              const groupIds = groupRows.map((r) => r.id)
+              const groupAllSelected = groupIds.length > 0 && groupIds.every((id) => selectedIds.has(id))
+              return (
+                <details key={serviceType} open className="overflow-hidden rounded-lg border border-border">
+                  <summary className="cursor-pointer select-none bg-muted px-4 py-3 text-sm font-semibold capitalize text-secondary">
+                    {serviceType.replace("_", " ")} ({groupRows.length})
+                  </summary>
+                  <div className="overflow-x-auto border-t border-border">
+                    <table className="w-full min-w-[680px] text-sm">
+                      <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={groupAllSelected}
+                              onChange={() => {
+                                setSelectedIds((prev) => {
+                                  const next = new Set(prev)
+                                  if (groupAllSelected) groupIds.forEach((id) => next.delete(id))
+                                  else groupIds.forEach((id) => next.add(id))
+                                  return next
+                                })
+                              }}
+                              className="h-4 w-4 rounded border-border"
+                              aria-label={`Select all ${serviceType} rules`}
+                            />
+                          </th>
+                          <th className="px-4 py-3">Network/Biller</th>
+                          <th className="px-4 py-3">Plan</th>
+                          <th className="px-4 py-3">Retail</th>
+                          <th className="px-4 py-3">Wholesale</th>
+                          <th className="px-4 py-3">Fee</th>
+                          <th className="px-4 py-3">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {groupRows.map((r) => (
+                          <tr key={r.id}>
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(r.id)}
+                                onChange={() => toggleSelected(r.id)}
+                                className="h-4 w-4 rounded border-border"
+                              />
+                            </td>
+                            <td className="px-4 py-3">{r.network_or_biller}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{r.plan_code ?? "—"}</td>
+                            <td className="px-4 py-3">{formatNaira(r.retail_price_kobo)}</td>
+                            <td className="px-4 py-3">{formatNaira(r.wholesale_price_kobo)}</td>
+                            <td className="px-4 py-3">{formatNaira(r.convenience_fee_kobo)}</td>
+                            <td className="px-4 py-3">
+                              {deletingId === r.id ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-destructive">Delete this rule?</span>
+                                  <button
+                                    onClick={() => handleDelete(r.id)}
+                                    className="rounded-md bg-destructive px-2 py-1 text-xs font-medium text-white"
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    onClick={() => setDeletingId(null)}
+                                    className="rounded-md border border-border px-2 py-1 text-xs font-medium text-secondary"
+                                  >
+                                    No
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    onClick={() => startEdit(r)}
+                                    className="text-xs font-medium text-primary hover:underline"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => setDeletingId(r.id)}
+                                    className="text-xs font-medium text-destructive hover:underline"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )
+            })}
           </div>
         </>
       )}

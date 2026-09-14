@@ -941,7 +941,12 @@ export async function syncPairgateDataPlans(
   const categoriesRes = await fetchWithRetry(
     `${baseUrl}/data-plans/categories`,
     { method: "GET", headers },
-    { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+    // retries bumped to 4 for Pairgate specifically: fetchWithRetry
+    // now honors their Retry-After header when present, but that only
+    // helps if there's attempt budget left to use it — 2 retries left
+    // almost no room after a 429, which is exactly what kept failing
+    // live even with inter-request pacing in place.
+    { retries: 4, timeoutMs: 15_000, retryUnsafe: false },
   )
   const categoriesJson = await parseJsonOrThrow(categoriesRes, "Pairgate", "data-plans/categories")
   const categories: { provider_name?: string; plan_type?: string }[] = Array.isArray(categoriesJson?.data)
@@ -968,7 +973,7 @@ export async function syncPairgateDataPlans(
     const plansRes = await fetchWithRetry(
       `${baseUrl}/data-plans?provider_id=${encodeURIComponent(providerSlug)}&plan_type=${encodeURIComponent(planType)}`,
       { method: "GET", headers },
-      { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+      { retries: 4, timeoutMs: 15_000, retryUnsafe: false },
     )
     const plansJson = await parseJsonOrThrow(plansRes, "Pairgate", "data-plans")
     const byProvider = parsePairgatePlansByProvider(plansJson)
@@ -1004,7 +1009,7 @@ export async function syncPairgateCablePlans(
     const res = await fetchWithRetry(
       `${baseUrl}/cable-plans?provider_id=${encodeURIComponent(slug)}`,
       { method: "GET", headers },
-      { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+      { retries: 4, timeoutMs: 15_000, retryUnsafe: false },
     )
     const json = await parseJsonOrThrow(res, "Pairgate", "cable-plans")
     const byProvider = parsePairgatePlansByProvider(json)

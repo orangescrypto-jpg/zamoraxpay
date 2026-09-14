@@ -24,7 +24,7 @@ interface PlanMapping {
 // free text (e.g. "Glo" vs "GLO").
 const NETWORKS_OR_BILLERS: Record<string, string[]> = {
   data: ["MTN", "Airtel", "Glo", "9mobile"],
-  cable: ["DSTV", "GOtv", "StarTimes"],
+  cable: ["DSTV", "GOtv", "StarTimes", "Showmax"],
   exam_pin: ["WAEC", "NECO", "JAMB", "NABTEB"],
   epin: ["MTN", "Airtel", "Glo", "9mobile"],
   electricity: ["IKEDC", "EKEDC", "AEDC", "PHEDC", "IBEDC", "KEDCO"],
@@ -83,11 +83,84 @@ export default function ProviderPlanMappingsPage() {
     results: { row: number; status: "created" | "updated" | "error"; message?: string }[]
   } | null>(null)
 
-  type SyncKey = "clubkonnect" | "vtugate" | "pairgate-data" | "pairgate-cable"
+  type SyncKey =
+    | "clubkonnect"
+    | "vtugate"
+    | "pairgate-data"
+    | "pairgate-cable"
+    | "vtugate-exam-pin"
+    | "vtugate-cable"
+    | "clubkonnect-cable"
+    | "clubkonnect-exam-pin"
   const [syncingProvider, setSyncingProvider] = useState<SyncKey | null>(null)
   const [syncResults, setSyncResults] = useState<
     Record<SyncKey, { fetched?: number; created?: number; updated?: number; skipped?: number; error?: string } | null>
-  >({ clubkonnect: null, vtugate: null, "pairgate-data": null, "pairgate-cable": null })
+  >({
+    clubkonnect: null,
+    vtugate: null,
+    "pairgate-data": null,
+    "pairgate-cable": null,
+    "vtugate-exam-pin": null,
+    "vtugate-cable": null,
+    "clubkonnect-cable": null,
+    "clubkonnect-exam-pin": null,
+  })
+
+  // VTUGate cable sync needs a real smartcard per biller (no
+  // list-all-plans endpoint exists) — separate small form, not the
+  // one-click syncProvider() path the other syncs use.
+  const [vtugateCableForm, setVtugateCableForm] = useState({
+    serviceId: "",
+    smartcardNumber: "",
+    biller: "DSTV",
+    phone: "",
+  })
+
+  async function syncVtugateCable() {
+    if (!vtugateCableForm.serviceId || !vtugateCableForm.smartcardNumber || !vtugateCableForm.phone) {
+      alert("Fill in service ID, smartcard number, and phone")
+      return
+    }
+    setSyncingProvider("vtugate-cable")
+    setSyncResults((prev) => ({ ...prev, "vtugate-cable": null }))
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/admin/provider-plan-mappings/sync-vtugate-cable", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(vtugateCableForm),
+      })
+      const data = await parseSyncResponse(res)
+      if (!res.ok) {
+        setSyncResults((prev) => ({ ...prev, "vtugate-cable": { error: data.error ?? "Sync failed" } }))
+      } else {
+        setSyncResults((prev) => ({ ...prev, "vtugate-cable": data }))
+        load()
+      }
+    } catch (err) {
+      setSyncResults((prev) => ({
+        ...prev,
+        "vtugate-cable": { error: err instanceof Error ? err.message : "Sync failed" },
+      }))
+    } finally {
+      setSyncingProvider(null)
+    }
+  }
+
+  // Reads the response body once and tries to parse it as JSON. A sync
+  // route can occasionally fail before it reaches our own JSON error
+  // handling (an auth gateway timeout, a platform-level 502/504 page,
+  // etc.) and return HTML instead — calling res.json() directly on
+  // that throws a cryptic "Unexpected token '<'" with no useful
+  // message. This surfaces a clear, readable error instead.
+  async function parseSyncResponse(res: Response) {
+    const text = await res.text()
+    try {
+      return text ? JSON.parse(text) : {}
+    } catch {
+      return { error: `Server returned an unexpected response (HTTP ${res.status}). Please try again.` }
+    }
+  }
 
   async function syncProvider(key: SyncKey) {
     setSyncingProvider(key)
@@ -95,7 +168,7 @@ export default function ProviderPlanMappingsPage() {
     try {
       const headers = await getAuthHeader()
       const res = await fetch(`/api/admin/provider-plan-mappings/sync-${key}`, { method: "POST", headers })
-      const data = await res.json()
+      const data = await parseSyncResponse(res)
       if (!res.ok) {
         setSyncResults((prev) => ({ ...prev, [key]: { error: data.error ?? "Sync failed" } }))
       } else {
@@ -567,6 +640,70 @@ export default function ProviderPlanMappingsPage() {
         </div>
 
         <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — ClubKonnect (Cable)</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Pulls ClubKonnect's live DSTV, GOtv, StarTimes, and Showmax package list and their wholesale prices
+            (via APICableTVPackagesV2) and upserts them into the mappings below (service_type "cable") — no
+            manual typing needed. Uses the UserID saved on the Providers page.
+          </p>
+          <button
+            onClick={() => syncProvider("clubkonnect-cable")}
+            disabled={syncingProvider === "clubkonnect-cable"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "clubkonnect-cable" ? "Syncing..." : "Sync from ClubKonnect (Cable)"}
+          </button>
+
+          {syncResults["clubkonnect-cable"] && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults["clubkonnect-cable"]!.error ? (
+                <p className="text-destructive">{syncResults["clubkonnect-cable"]!.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults["clubkonnect-cable"]!.fetched} plans —{" "}
+                  {syncResults["clubkonnect-cable"]!.created} new, {syncResults["clubkonnect-cable"]!.updated} updated
+                  {syncResults["clubkonnect-cable"]!.skipped ? `, ${syncResults["clubkonnect-cable"]!.skipped} skipped` : ""}.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — ClubKonnect (Exam Pins)</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Pulls ClubKonnect's live WAEC and JAMB exam pin catalog and prices (via APIWAECPackagesV2 and
+            APIJAMBPackagesV2) and upserts them into the mappings below (service_type "exam_pin"). Uses the
+            UserID saved on the Providers page — JAMB's catalog may require a real account to return results.
+          </p>
+          <button
+            onClick={() => syncProvider("clubkonnect-exam-pin")}
+            disabled={syncingProvider === "clubkonnect-exam-pin"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "clubkonnect-exam-pin" ? "Syncing..." : "Sync from ClubKonnect (Exam Pins)"}
+          </button>
+
+          {syncResults["clubkonnect-exam-pin"] && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults["clubkonnect-exam-pin"]!.error ? (
+                <p className="text-destructive">{syncResults["clubkonnect-exam-pin"]!.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults["clubkonnect-exam-pin"]!.fetched} products —{" "}
+                  {syncResults["clubkonnect-exam-pin"]!.created} new, {syncResults["clubkonnect-exam-pin"]!.updated}{" "}
+                  updated
+                  {syncResults["clubkonnect-exam-pin"]!.skipped
+                    ? `, ${syncResults["clubkonnect-exam-pin"]!.skipped} skipped`
+                    : ""}
+                  .
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-4">
           <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — VTUGate</h2>
           <p className="mb-3 text-xs text-muted-foreground">
             Pulls VTUGate's live data bundle plan list and prices (via fetchallservices + fetchdataplans) and
@@ -649,6 +786,99 @@ export default function ProviderPlanMappingsPage() {
                   Fetched {syncResults["pairgate-cable"]!.fetched} plans — {syncResults["pairgate-cable"]!.created} new,{" "}
                   {syncResults["pairgate-cable"]!.updated} updated
                   {syncResults["pairgate-cable"]!.skipped ? `, ${syncResults["pairgate-cable"]!.skipped} skipped` : ""}.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — VTUGate (Exam Pins)</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Pulls VTUGate's live exam pin catalog and per-pin prices (via fetchallservices + geteducationtypeprice)
+            and upserts them into the mappings below (service_type "exam_pin"). Requires the VTUGate API key saved
+            on the Providers page.
+          </p>
+          <button
+            onClick={() => syncProvider("vtugate-exam-pin")}
+            disabled={syncingProvider === "vtugate-exam-pin"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "vtugate-exam-pin" ? "Syncing..." : "Sync from VTUGate (Exam Pins)"}
+          </button>
+
+          {syncResults["vtugate-exam-pin"] && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults["vtugate-exam-pin"]!.error ? (
+                <p className="text-destructive">{syncResults["vtugate-exam-pin"]!.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults["vtugate-exam-pin"]!.fetched} products —{" "}
+                  {syncResults["vtugate-exam-pin"]!.created} new, {syncResults["vtugate-exam-pin"]!.updated} updated
+                  {syncResults["vtugate-exam-pin"]!.skipped ? `, ${syncResults["vtugate-exam-pin"]!.skipped} skipped` : ""}.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — VTUGate (Cable)</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            VTUGate has no list-all-cable-plans endpoint — the only way to see a biller's catalog is to verify a
+            real smartcard number against it. Enter one real smartcard you own or trust for the biller below; this
+            captures that biller's full plan list and prices in one call (service_type "cable"). Run once per
+            biller (DSTV, GOtv, StarTimes) to cover all of them.
+          </p>
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 sm:max-w-xl">
+            <input
+              type="text"
+              placeholder="Service ID"
+              value={vtugateCableForm.serviceId}
+              onChange={(e) => setVtugateCableForm((f) => ({ ...f, serviceId: e.target.value }))}
+              className="rounded-md border border-border px-3 py-2 text-sm"
+            />
+            <select
+              value={vtugateCableForm.biller}
+              onChange={(e) => setVtugateCableForm((f) => ({ ...f, biller: e.target.value }))}
+              className="rounded-md border border-border px-3 py-2 text-sm"
+            >
+              <option value="DSTV">DSTV</option>
+              <option value="GOtv">GOtv</option>
+              <option value="StarTimes">StarTimes</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Smartcard number"
+              value={vtugateCableForm.smartcardNumber}
+              onChange={(e) => setVtugateCableForm((f) => ({ ...f, smartcardNumber: e.target.value }))}
+              className="rounded-md border border-border px-3 py-2 text-sm"
+            />
+            <input
+              type="text"
+              placeholder="Phone number"
+              value={vtugateCableForm.phone}
+              onChange={(e) => setVtugateCableForm((f) => ({ ...f, phone: e.target.value }))}
+              className="rounded-md border border-border px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            onClick={syncVtugateCable}
+            disabled={syncingProvider === "vtugate-cable"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "vtugate-cable" ? "Syncing..." : "Sync from VTUGate (Cable)"}
+          </button>
+
+          {syncResults["vtugate-cable"] && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults["vtugate-cable"]!.error ? (
+                <p className="text-destructive">{syncResults["vtugate-cable"]!.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults["vtugate-cable"]!.fetched} plans — {syncResults["vtugate-cable"]!.created} new,{" "}
+                  {syncResults["vtugate-cable"]!.updated} updated
+                  {syncResults["vtugate-cable"]!.skipped ? `, ${syncResults["vtugate-cable"]!.skipped} skipped` : ""}.
                 </p>
               )}
             </div>

@@ -38,13 +38,43 @@ interface BulkResult {
   items: BulkItemResult[]
 }
 
-// Same plan-code-to-label heuristic as the single data page — kept in
-// sync manually since there's no shared util file for it yet.
+// Same plan-code-to-label logic as the single data page — kept in
+// sync manually since there's no shared util file for it yet. Plan
+// codes are the canonical keys from canonicalPlanKey() (e.g.
+// "5000mb-1d-awoof", "1000mb-1d-social+binge"). Category is internal
+// routing detail and dropped; bundle tags (social/binge/youtube/
+// night) ARE shown — a genuinely different, restricted product.
+const BUNDLE_TAG_LABELS: Record<string, string> = {
+  social: "Social",
+  binge: "Binge",
+  youtube: "YouTube",
+  night: "Night",
+}
+const KNOWN_BUNDLE_TAGS = new Set(Object.keys(BUNDLE_TAG_LABELS))
 function labelFromPlanCode(code: string): string {
-  const match = code.match(/^(\d+(?:\.\d+)?)(GB|MB)_(\d+)D$/i)
+  const match = code.match(/^(\d+)mb-(\d+)d((?:-[a-z_+]+)*)$/i)
   if (!match) return code
-  const [, size, unit, days] = match
-  return `${size}${unit.toUpperCase()} - ${days} days`
+  const [, sizeMBStr, daysStr, suffixPart] = match
+  const sizeMB = parseInt(sizeMBStr, 10)
+  const days = parseInt(daysStr, 10)
+  const sizeLabel =
+    sizeMB >= 1000 && sizeMB % 1000 === 0
+      ? `${sizeMB / 1000}GB`
+      : sizeMB >= 1000
+        ? `${(sizeMB / 1000).toFixed(1)}GB`
+        : `${sizeMB}MB`
+  const dayLabel = days === 1 ? "1 day" : `${days} days`
+  const segments = suffixPart ? suffixPart.split("-").filter(Boolean) : []
+  const bundleParts = segments.filter((s) => s.includes("+") || KNOWN_BUNDLE_TAGS.has(s))
+  const bundleLabel = bundleParts.length
+    ? " (" +
+      bundleParts
+        .flatMap((s) => s.split("+"))
+        .map((t) => BUNDLE_TAG_LABELS[t] ?? t)
+        .join(" + ") +
+      ")"
+    : ""
+  return `${sizeLabel} - ${dayLabel}${bundleLabel}`
 }
 
 function BulkDataForm() {

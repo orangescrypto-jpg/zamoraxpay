@@ -15,6 +15,7 @@ import {
 } from "@/src/services/providerPlanMappings"
 import { d1Query } from "@/lib/db"
 import { randomUUID } from "crypto"
+import { reconcilePricingFromMappings } from "@/src/services/pricingReconcile"
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req)
@@ -79,6 +80,13 @@ export async function POST(req: NextRequest) {
        VALUES (?, ?, 'provider_plan_mapping.upsert', 'provider_plan_mappings', ?, ?)`,
       [randomUUID(), auth.uid, id ?? `${serviceType}:${networkOrBiller}:${planCode}:${providerKey}`, JSON.stringify(body)],
     )
+
+    // A manually-added or manually-edited plan mapping needs pricing
+    // the same as one that just came from a sync — otherwise it sits
+    // with a cost but no customer-facing price until some unrelated
+    // sync happens to touch this service_type. Reuses the same
+    // reconcile pass, scoped to this one plan's service_type only.
+    await reconcilePricingFromMappings(serviceType, auth.uid)
 
     return NextResponse.json({ success: true })
   } catch (err) {

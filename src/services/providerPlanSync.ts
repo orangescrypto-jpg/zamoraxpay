@@ -17,14 +17,58 @@
 // own NETWORK_CODE map.
 //
 // Only Data Bundle sync is implemented here today (the one with a
-// genuine per-plan wholesale price list). Airtime/Cable/Electricity
-// pricing on ClubKonnect is a flat percentage discount off face value,
-// not a per-item plan catalog, so it doesn't fit this same "sync a
-// list of plan rows" shape — those stay configured the normal way
+// genuine per-plan wholesale price list). Airtime pricing on
+// ClubKonnect is a flat percentage discount off face value, not a
+// per-item plan catalog, so it doesn't fit this same "sync a list of
+// plan rows" shape — that stays configured the normal way
 // (pricing_rules), same as VTUGate's non-plan-based services.
+//
+// Cable TV and exam pins (WAEC/JAMB) DO have genuine, no-auth,
+// per-item catalog endpoints (APICableTVPackagesV2.asp,
+// APIWAECPackagesV2.asp, APIJAMBPackagesV2.asp) — confirmed live
+// against real responses, not assumed from docs — see
+// syncClubkonnectCablePlans and syncClubkonnectExamPinPrices below.
+// Cable TV packages do carry a PRODUCT_DISCOUNT_AMOUNT (their own
+// authoritative charge-to-you price, already net of their flat
+// per-provider discount), so despite that discount existing, the
+// catalog is still a genuine per-package price list worth syncing —
+// unlike electricity, which really has no per-item catalog at all
+// (just a flat percentage off whatever amount the customer requests),
+// so electricity remains configured manually via pricing_rules.
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { upsertPlanMapping, findMappingByNaturalKey } from "@/src/services/providerPlanMappings"
+
+// Every sync function below calls a provider's HTTP API and expects
+// JSON back. When a provider is down, the base URL is wrong, or the
+// API key/auth is rejected, providers commonly respond with an HTML
+// error/login page instead of JSON — calling res.json() directly on
+// that throws a useless "Unexpected token '<', is not valid JSON"
+// with no indication of what actually went wrong. This wrapper reads
+// the body once, tries to parse it as JSON, and if that fails (or the
+// HTTP status wasn't ok) throws a clear error naming the provider,
+// endpoint, and status code instead — every call site below routes
+// through this rather than `res.json()` directly.
+async function parseJsonOrThrow(res: Response, providerLabel: string, endpointLabel: string): Promise<any> {
+  const text = await res.text()
+  let json: any
+  try {
+    json = text ? JSON.parse(text) : {}
+  } catch {
+    const snippet = text.slice(0, 200)
+    throw new Error(
+      `${providerLabel} ${endpointLabel} returned a non-JSON response (HTTP ${res.status}). ` +
+        `This usually means a wrong base URL, an auth failure, or the provider is down. ` +
+        `Response started with: ${snippet}`,
+    )
+  }
+  if (!res.ok) {
+    throw new Error(
+      `${providerLabel} ${endpointLabel} returned HTTP ${res.status}: ${json?.message ?? json?.error ?? text.slice(0, 200)}`,
+    )
+  }
+  return json
+}
 
 const NETWORK_LABEL: Record<string, string> = {
   MTN: "MTN",
@@ -111,7 +155,7 @@ export async function syncClubkonnectDataPlans(
     { method: "GET" },
     { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
   )
-  const json = await res.json()
+  const json = await parseJsonOrThrow(res, "ClubKonnect", "APIDatabundlePlansV2")
   const plans = parsePlansResponse(json)
 
   let created = 0
@@ -144,6 +188,259 @@ export async function syncClubkonnectDataPlans(
   }
 
   return { fetched: plans.length, created, updated, skipped }
+}
+
+// ClubKonnect Cable TV plan sync. APICableTVPackagesV2.asp is a
+// genuine no-auth, list-everything catalog (confirmed live) shaped
+// like { TV_ID: { DStv: [ { ID, PRODUCT: [ { PACKAGE_ID,
+// PACKAGE_NAME, PACKAGE_AMOUNT, PRODUCT_DISCOUNT_AMOUNT, ... } ] } ],
+// GOtv: [...], Startimes: [...], Showmax: [...] } }. Each package's
+// PRODUCT_DISCOUNT_AMOUNT is ClubKonnect's own authoritative
+// charge-to-you price (face value less their fixed provider-wide
+// discount), so that — not PACKAGE_AMOUNT (the customer-facing face
+// value) — is what gets stored as provider_cost_kobo, same convention
+// every other provider's sync uses (the wholesale cost, not the
+// retail price the platform will charge).
+//
+// TV_ID's top-level keys (DStv/GOtv/Startimes/Showmax) are normalized
+// to the biller labels this codebase already uses elsewhere (DSTV,
+// GOtv, StarTimes) via CABLE_BILLER_LABEL below — Showmax has no
+// existing biller convention in this codebase (clubkonnect.ts's
+// purchase() only handles cable via req.networkOrBiller.toLowerCase()
+// as CableTV, so "Showmax" would work fine as a biller value too) and
+// is passed through as-is; add it to the admin page's biller picker if
+// you want it selectable there.
+const CABLE_BILLER_LABEL: Record<string, string> = {
+  DStv: "DSTV",
+  GOtv: "GOtv",
+  Startimes: "StarTimes",
+  Showmax: "Showmax",
+}
+
+export async function syncClubkonnectCablePlans(
+  adminUserId: string,
+  credentials: { userId?: string; baseUrl?: string } = {},
+  nativeDB?: any,
+): Promise<PlanSyncResult> {
+  const baseUrl = credentials.baseUrl || process.env.CLUBKONNECT_BASE_URL || "https://www.nellobytesystems.com"
+  const userId = credentials.userId || process.env.CLUBKONNECT_USERID || ""
+
+  const res = await fetchWithRetry(
+    `${baseUrl}/APICableTVPackagesV2.asp?UserID=${encodeURIComponent(userId)}`,
+    { method: "GET" },
+    { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+  )
+  const json = await parseJsonOrThrow(res, "ClubKonnect", "APICableTVPackagesV2")
+  const tvRoot = json?.TV_ID && typeof json.TV_ID === "object" ? json.TV_ID : {}
+
+  let fetched = 0
+  let created = 0
+  let updated = 0
+  let skipped = 0
+
+  for (const [tvKey, wrappers] of Object.entries(tvRoot)) {
+    const biller = CABLE_BILLER_LABEL[tvKey] ?? tvKey
+    const wrapperList = Array.isArray(wrappers) ? wrappers : [wrappers]
+    const products = (wrapperList as any[]).flatMap((w) =>
+      w && typeof w === "object" && Array.isArray(w.PRODUCT) ? w.PRODUCT : [],
+    )
+
+    for (const pkg of products) {
+      fetched++
+      const planId = String(pkg?.PACKAGE_ID ?? "")
+      const costNaira = Number(pkg?.PRODUCT_DISCOUNT_AMOUNT ?? pkg?.PACKAGE_AMOUNT)
+      const costKobo = Math.round(costNaira * 100)
+      if (!planId || Number.isNaN(costKobo) || costKobo <= 0) {
+        skipped++
+        continue
+      }
+      const existing = await findMappingByNaturalKey("cable", biller, planId, "clubkonnect", nativeDB)
+      await upsertPlanMapping(
+        {
+          id: existing?.id,
+          serviceType: "cable",
+          networkOrBiller: biller,
+          planCode: planId,
+          providerKey: "clubkonnect",
+          providerPlanId: planId,
+          providerCostKobo: costKobo,
+          providerPlanLabel: pkg?.PACKAGE_NAME ?? null,
+        },
+        adminUserId,
+        nativeDB,
+      )
+      if (existing) updated++
+      else created++
+    }
+  }
+
+  return { fetched, created, updated, skipped }
+}
+
+// ClubKonnect exam pin (WAEC/JAMB) price sync. APIWAECPackagesV2.asp
+// and APIJAMBPackagesV2.asp are genuine no-auth catalog endpoints —
+// confirmed live — shaped identically: { EXAM_TYPE: [ { PRODUCT_CODE,
+// PRODUCT_DESCRIPTION, PRODUCT_AMOUNT } ] }. PRODUCT_AMOUNT is
+// ClubKonnect's own price in naira (no separate discount field the
+// way cable has — exam pins are sold at face value), so it maps
+// straight to provider_cost_kobo like data bundle prices do.
+//
+// networkOrBiller is stored as "WAEC" / "JAMB" to match
+// clubkonnect.ts's own convention (req.networkOrBiller selects which
+// of the two underlying .asp endpoints purchase() calls), and
+// planCode carries the PRODUCT_CODE (ExamType) value the adapter
+// sends straight through as req.planCode.
+//
+// Note observed live: WAEC's packages endpoint returned real data
+// even with a placeholder UserID; JAMB's returned an empty EXAM_TYPE
+// array under the same placeholder — JAMB's catalog may be
+// account-gated, so a real ClubKonnect UserID/APIKey configured on
+// the Providers page is worth trying if this reports 0 fetched for
+// JAMB specifically. The parsing logic is identical either way.
+export async function syncClubkonnectExamPinPrices(
+  adminUserId: string,
+  credentials: { userId?: string; baseUrl?: string } = {},
+  nativeDB?: any,
+): Promise<PlanSyncResult> {
+  const baseUrl = credentials.baseUrl || process.env.CLUBKONNECT_BASE_URL || "https://www.nellobytesystems.com"
+  const userId = credentials.userId || process.env.CLUBKONNECT_USERID || ""
+
+  let fetched = 0
+  let created = 0
+  let updated = 0
+  let skipped = 0
+
+  const examEndpoints: { examBoard: string; path: string }[] = [
+    { examBoard: "WAEC", path: "/APIWAECPackagesV2.asp" },
+    { examBoard: "JAMB", path: "/APIJAMBPackagesV2.asp" },
+  ]
+
+  for (const { examBoard, path } of examEndpoints) {
+    const res = await fetchWithRetry(
+      `${baseUrl}${path}?UserID=${encodeURIComponent(userId)}`,
+      { method: "GET" },
+      { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+    )
+    const json = await parseJsonOrThrow(res, "ClubKonnect", path)
+    const products: any[] = Array.isArray(json?.EXAM_TYPE) ? json.EXAM_TYPE : []
+
+    for (const product of products) {
+      fetched++
+      const examType = String(product?.PRODUCT_CODE ?? "")
+      const costNaira = Number(product?.PRODUCT_AMOUNT)
+      const costKobo = Math.round(costNaira * 100)
+      if (!examType || Number.isNaN(costKobo) || costKobo <= 0) {
+        skipped++
+        continue
+      }
+      const existing = await findMappingByNaturalKey("exam_pin", examBoard, examType, "clubkonnect", nativeDB)
+      await upsertPlanMapping(
+        {
+          id: existing?.id,
+          serviceType: "exam_pin",
+          networkOrBiller: examBoard,
+          planCode: examType,
+          providerKey: "clubkonnect",
+          providerPlanId: examType,
+          providerCostKobo: costKobo,
+          providerPlanLabel: product?.PRODUCT_DESCRIPTION ?? null,
+        },
+        adminUserId,
+        nativeDB,
+      )
+      if (existing) updated++
+      else created++
+    }
+  }
+
+  return { fetched, created, updated, skipped }
+}
+
+// --- CheapDataHub ---------------------------------------------------
+//
+// Verified against live docs: https://www.cheapdatahub.ng/api_documentation/
+//
+// Only exam pins have a genuine JSON catalog endpoint —
+// GET /api/v1/resellers/exam-pin/products/, authenticated with the
+// same Bearer key cheapdatahub.ts uses for purchases. Confirmed from
+// the docs page directly (not assumed): "GET
+// /api/v1/resellers/exam-pin/products/ returns active exam PIN
+// products and pricing."
+//
+// Data bundle and cable TV plan IDs are NOT behind a JSON API at all —
+// CheapDataHub's own docs point integrators to a human-facing HTML
+// page (https://www.cheapdatahub.ng/api/plan-ids/) with a searchable
+// table (Network / Service / Plan Name / Plan ID / Price columns) and
+// client-side filter dropdowns, not a REST endpoint. There is no
+// documented GET that returns that table as JSON. Scraping the HTML
+// table would work today but is fragile (breaks silently the moment
+// their markup changes, with no contract to catch it) and isn't the
+// pattern any other sync in this file uses, so — same as VTUGate
+// cable and ClubKonnect electricity — data and cable plan IDs for
+// CheapDataHub stay manually entered in Provider Plan Mappings for
+// now. If CheapDataHub later publishes a real JSON endpoint for
+// these, add syncCheapdatahubDataPlans / syncCheapdatahubCablePlans
+// here following the same shape as syncCheapdatahubExamPinPrices
+// below.
+export async function syncCheapdatahubExamPinPrices(
+  adminUserId: string,
+  credentials: { apiKey?: string; baseUrl?: string } = {},
+  nativeDB?: any,
+): Promise<PlanSyncResult> {
+  const baseUrl =
+    credentials.baseUrl || process.env.CHEAPDATAHUB_BASE_URL || "https://www.cheapdatahub.ng/api/v1/resellers"
+  const apiKey = credentials.apiKey || process.env.CHEAPDATAHUB_API_KEY
+  if (!apiKey) throw new Error("CheapDataHub API key not configured")
+
+  const res = await fetchWithRetry(
+    `${baseUrl}/exam-pin/products/`,
+    { method: "GET", headers: { Authorization: `Bearer ${apiKey}` } },
+    { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+  )
+  const json = await parseJsonOrThrow(res, "CheapDataHub", "exam-pin/products")
+  // Exact field names aren't pinned down by the public docs sample
+  // (only the purchase response shape is shown there), so this reads
+  // several plausible aliases per field — same defensive approach
+  // cheapdatahub.ts's own extractDeliveredData already uses for this
+  // provider, since its response field names generally aren't fixed
+  // by public docs the way VTpass's are.
+  const products: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : []
+
+  let fetched = 0
+  let created = 0
+  let updated = 0
+  let skipped = 0
+
+  for (const product of products) {
+    fetched++
+    const productId = String(product?.id ?? product?.product_id ?? "")
+    const examBoard = String(product?.exam_name ?? product?.exam_type ?? product?.name ?? "").toUpperCase()
+    const costNaira = Number(product?.price ?? product?.amount ?? product?.cost)
+    const costKobo = Math.round(costNaira * 100)
+    if (!productId || !examBoard || Number.isNaN(costKobo) || costKobo <= 0) {
+      skipped++
+      continue
+    }
+    const existing = await findMappingByNaturalKey("exam_pin", examBoard, productId, "cheapdatahub", nativeDB)
+    await upsertPlanMapping(
+      {
+        id: existing?.id,
+        serviceType: "exam_pin",
+        networkOrBiller: examBoard,
+        planCode: productId,
+        providerKey: "cheapdatahub",
+        providerPlanId: productId,
+        providerCostKobo: costKobo,
+        providerPlanLabel: product?.description ?? product?.product_name ?? null,
+      },
+      adminUserId,
+      nativeDB,
+    )
+    if (existing) updated++
+    else created++
+  }
+
+  return { fetched, created, updated, skipped }
 }
 
 // --- VTUGate ------------------------------------------------------
@@ -183,7 +480,7 @@ async function vtugateFetchAllDataServiceIds(
     },
     { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
   )
-  const json = await res.json()
+  const json = await parseJsonOrThrow(res, "VTUGate", "fetchallservices")
   const rows: any[] = Array.isArray(json?.data) ? json.data : []
   const byNetwork: Record<string, number> = {}
   for (const row of rows) {
@@ -227,7 +524,7 @@ export async function syncVtugateDataPlans(
       },
       { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
     )
-    const json = await res.json()
+    const json = await parseJsonOrThrow(res, "VTUGate", "fetchdataplans")
     const plans: any[] = Array.isArray(json?.data?.data_plans) ? json.data.data_plans : []
     fetched += plans.length
 
@@ -259,6 +556,178 @@ export async function syncVtugateDataPlans(
       if (existing) updated++
       else created++
     }
+  }
+
+  return { fetched, created, updated, skipped }
+}
+
+// VTUGate exam pin price sync — uses fetchallservices to discover
+// every education row (service_id, product_code, edu_type), then
+// geteducationtypeprice per row for the authoritative per-pin price
+// (already includes this account's configured markup, per VTUGate's
+// docs). No smartcard/customer input needed — this is a genuine
+// list-everything sync, unlike cable below.
+//
+// planCode is stored as product_code (e.g. "waec") since that's what
+// vtugate.ts's exam_pin purchase path sends through as
+// req.networkOrBiller, not req.planCode — but provider_plan_mappings
+// keys on (serviceType, networkOrBiller, planCode, providerKey), so we
+// store product_code in both networkOrBiller and planCode to satisfy
+// that natural key without inventing a new lookup shape. providerPlanId
+// carries the numeric service_id VTUGate needs at purchase time.
+export async function syncVtugateExamPinPrices(
+  adminUserId: string,
+  credentials: { apiKey?: string; baseUrl?: string } = {},
+  nativeDB?: any,
+): Promise<PlanSyncResult> {
+  const baseUrl = credentials.baseUrl || process.env.VTUGATE_BASE_URL || "https://api.vtugate.com/api/v1"
+  const apiKey = credentials.apiKey || process.env.VTUGATE_API_KEY
+  if (!apiKey) throw new Error("VTUGate API key not configured")
+
+  const allServicesRes = await fetchWithRetry(
+    `${baseUrl}/fetchallservices`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: new URLSearchParams(),
+    },
+    { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+  )
+  const allServicesJson = await parseJsonOrThrow(allServicesRes, "VTUGate", "fetchallservices")
+  const eduRows: any[] = Array.isArray(allServicesJson?.data)
+    ? allServicesJson.data.filter((row: any) => row?.service_type === "education" && row?.product_code && row?.service_id)
+    : []
+
+  let fetched = 0
+  let created = 0
+  let updated = 0
+  let skipped = 0
+
+  for (const row of eduRows) {
+    fetched++
+    const productCode = String(row.product_code)
+    const serviceId = row.service_id
+
+    const priceRes = await fetchWithRetry(
+      `${baseUrl}/geteducationtypeprice`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: new URLSearchParams({ service_id: String(serviceId) }),
+      },
+      { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+    )
+    const priceJson = await parseJsonOrThrow(priceRes, "VTUGate", "geteducationtypeprice")
+    const priceNaira = Number(priceJson?.data?.price)
+    const costKobo = Math.round(priceNaira * 100)
+    if (!productCode || Number.isNaN(costKobo) || costKobo <= 0) {
+      skipped++
+      continue
+    }
+
+    const providerPlanId = String(serviceId)
+    const existing = await findMappingByNaturalKey("exam_pin", productCode, productCode, "vtugate", nativeDB)
+    await upsertPlanMapping(
+      {
+        id: existing?.id,
+        serviceType: "exam_pin",
+        networkOrBiller: productCode,
+        planCode: productCode,
+        providerKey: "vtugate",
+        providerPlanId,
+        providerCostKobo: costKobo,
+        providerPlanLabel: row.service_name ?? row.edu_type ?? null,
+      },
+      adminUserId,
+      nativeDB,
+    )
+    if (existing) updated++
+    else created++
+  }
+
+  return { fetched, created, updated, skipped }
+}
+
+// VTUGate cable plan sync — admin-triggered, per-smartcard. Unlike data
+// and exam_pin, VTUGate has no list-all-cable-plans endpoint; the only
+// way to see a biller's plan catalog is to Verify a real smartcard
+// number against it (per /verifycabletv docs). This is deliberately
+// NOT auto-run against a fake/placeholder smartcard — that would be a
+// live verify call against nothing real, and could misbehave or get
+// flagged by VTUGate. Instead the admin supplies one real smartcard
+// they own/trust per biller, and this captures that biller's full
+// plan list + prices (already including markup) in one call.
+export async function syncVtugateCablePlans(
+  adminUserId: string,
+  params: { serviceId: number | string; smartcardNumber: string; biller: string; phone: string },
+  credentials: { apiKey?: string; baseUrl?: string } = {},
+  nativeDB?: any,
+): Promise<PlanSyncResult> {
+  const baseUrl = credentials.baseUrl || process.env.VTUGATE_BASE_URL || "https://api.vtugate.com/api/v1"
+  const apiKey = credentials.apiKey || process.env.VTUGATE_API_KEY
+  if (!apiKey) throw new Error("VTUGate API key not configured")
+
+  const res = await fetchWithRetry(
+    `${baseUrl}/verifycabletv`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: new URLSearchParams({
+        service_id: String(params.serviceId),
+        phone: params.phone,
+        smartcard_number: params.smartcardNumber,
+      }),
+    },
+    { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+  )
+  const json = await parseJsonOrThrow(res, "VTUGate", "verifycabletv")
+  if (!json?.status || !json?.data?.provider_status) {
+    throw new Error(json?.message ?? "VTUGate smartcard verification failed")
+  }
+  const plans: any[] = Array.isArray(json?.data?.cable_plans) ? json.data.cable_plans : []
+
+  let fetched = 0
+  let created = 0
+  let updated = 0
+  let skipped = 0
+
+  for (const plan of plans) {
+    fetched++
+    const code = String(plan.code ?? "")
+    const priceNaira = Number(plan.price)
+    const costKobo = Math.round(priceNaira * 100)
+    if (!code || Number.isNaN(costKobo) || costKobo <= 0) {
+      skipped++
+      continue
+    }
+    const planServiceId = plan.service_id ? String(plan.service_id) : String(params.serviceId)
+    const providerPlanId = `${planServiceId}:${code}`
+    const existing = await findMappingByNaturalKey("cable", params.biller, code, "vtugate", nativeDB)
+    await upsertPlanMapping(
+      {
+        id: existing?.id,
+        serviceType: "cable",
+        networkOrBiller: params.biller,
+        planCode: code,
+        providerKey: "vtugate",
+        providerPlanId,
+        providerCostKobo: costKobo,
+        providerPlanLabel: plan.name ?? null,
+      },
+      adminUserId,
+      nativeDB,
+    )
+    if (existing) updated++
+    else created++
   }
 
   return { fetched, created, updated, skipped }
@@ -384,7 +853,7 @@ export async function syncPairgateDataPlans(
     { method: "GET", headers },
     { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
   )
-  const categoriesJson = await categoriesRes.json()
+  const categoriesJson = await parseJsonOrThrow(categoriesRes, "Pairgate", "data-plans/categories")
   const categories: { provider_name?: string; plan_type?: string }[] = Array.isArray(categoriesJson?.data)
     ? categoriesJson.data
     : []
@@ -403,7 +872,7 @@ export async function syncPairgateDataPlans(
       { method: "GET", headers },
       { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
     )
-    const plansJson = await plansRes.json()
+    const plansJson = await parseJsonOrThrow(plansRes, "Pairgate", "data-plans")
     const byProvider = parsePairgatePlansByProvider(plansJson)
 
     for (const [returnedProviderName, entries] of Object.entries(byProvider)) {
@@ -435,7 +904,7 @@ export async function syncPairgateCablePlans(
       { method: "GET", headers },
       { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
     )
-    const json = await res.json()
+    const json = await parseJsonOrThrow(res, "Pairgate", "cable-plans")
     const byProvider = parsePairgatePlansByProvider(json)
 
     for (const [returnedProviderName, entries] of Object.entries(byProvider)) {

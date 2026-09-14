@@ -187,6 +187,14 @@ export async function findPricingRuleByNaturalKey(
   return result.results?.[0] ?? null
 }
 
+// Every write through this function is, by definition, a human
+// setting a price directly (the admin form, or a CSV row) — so it
+// ALWAYS sets auto_priced = 0, taking this plan out of
+// reconcilePricingFromMappings's reach until the admin explicitly
+// resets it (see resetPlanToAutoPricing in pricingReconcile.ts). This
+// is what makes "except if I edit one plan myself" (the bonus-price
+// case) actually stick instead of getting silently overwritten the
+// next time a sync or policy edit triggers a reconcile.
 export async function upsertPricingRule(
   params: {
     id?: string
@@ -205,6 +213,7 @@ export async function upsertPricingRule(
       `UPDATE pricing_rules SET
         network_or_biller = ?, plan_code = ?,
         retail_price_kobo = ?, wholesale_price_kobo = ?, convenience_fee_kobo = ?,
+        auto_priced = 0,
         updated_by = ?, updated_at = datetime('now')
        WHERE id = ?`,
       [
@@ -221,8 +230,8 @@ export async function upsertPricingRule(
   } else {
     await d1Query(
       `INSERT INTO pricing_rules
-        (id, service_type, network_or_biller, plan_code, retail_price_kobo, wholesale_price_kobo, convenience_fee_kobo, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, service_type, network_or_biller, plan_code, retail_price_kobo, wholesale_price_kobo, convenience_fee_kobo, auto_priced, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       [
         randomUUID(),
         params.serviceType,

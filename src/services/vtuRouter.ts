@@ -45,6 +45,8 @@ function serviceUnavailableMessage(serviceType: string): string {
   const label = SERVICE_LABEL[serviceType] ?? "service"
   return `This ${label} is not available right now. Please try again shortly or choose another plan.`
 }
+
+export interface VtuRouterAttemptLog {
   providerKey: string
   success: boolean
   message: string

@@ -83,11 +83,11 @@ export default function ProviderPlanMappingsPage() {
     results: { row: number; status: "created" | "updated" | "error"; message?: string }[]
   } | null>(null)
 
-  type SyncKey = "clubkonnect" | "vtugate"
+  type SyncKey = "clubkonnect" | "vtugate" | "pairgate-data" | "pairgate-cable"
   const [syncingProvider, setSyncingProvider] = useState<SyncKey | null>(null)
   const [syncResults, setSyncResults] = useState<
     Record<SyncKey, { fetched?: number; created?: number; updated?: number; skipped?: number; error?: string } | null>
-  >({ clubkonnect: null, vtugate: null })
+  >({ clubkonnect: null, vtugate: null, "pairgate-data": null, "pairgate-cable": null })
 
   async function syncProvider(key: SyncKey) {
     setSyncingProvider(key)
@@ -535,7 +535,7 @@ export default function ProviderPlanMappingsPage() {
         )}
       </div>
 
-      <div className="mb-8 grid max-w-2xl gap-4 sm:grid-cols-2">
+      <div className="mb-8 grid max-w-4xl gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-border bg-white p-4">
           <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — ClubKonnect</h2>
           <p className="mb-3 text-xs text-muted-foreground">
@@ -590,6 +590,65 @@ export default function ProviderPlanMappingsPage() {
                   Fetched {syncResults.vtugate.fetched} plans — {syncResults.vtugate.created} new,{" "}
                   {syncResults.vtugate.updated} updated
                   {syncResults.vtugate.skipped ? `, ${syncResults.vtugate.skipped} skipped` : ""}.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — Pairgate (Data)</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Pulls Pairgate's live data plan categories (CG, SME, GIFTING, AWOOF, etc.) per network and their
+            prices, and upserts them into the mappings below (service_type "data"). Requires the Pairgate API
+            key saved on the Providers page.
+          </p>
+          <button
+            onClick={() => syncProvider("pairgate-data")}
+            disabled={syncingProvider === "pairgate-data"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "pairgate-data" ? "Syncing..." : "Sync from Pairgate (Data)"}
+          </button>
+
+          {syncResults["pairgate-data"] && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults["pairgate-data"]!.error ? (
+                <p className="text-destructive">{syncResults["pairgate-data"]!.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults["pairgate-data"]!.fetched} plans — {syncResults["pairgate-data"]!.created} new,{" "}
+                  {syncResults["pairgate-data"]!.updated} updated
+                  {syncResults["pairgate-data"]!.skipped ? `, ${syncResults["pairgate-data"]!.skipped} skipped` : ""}.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — Pairgate (Cable)</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Pulls Pairgate's live DSTV, GOtv, and StarTimes package list and prices, and upserts them into the
+            mappings below (service_type "cable"). Requires the Pairgate API key saved on the Providers page.
+          </p>
+          <button
+            onClick={() => syncProvider("pairgate-cable")}
+            disabled={syncingProvider === "pairgate-cable"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "pairgate-cable" ? "Syncing..." : "Sync from Pairgate (Cable)"}
+          </button>
+
+          {syncResults["pairgate-cable"] && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults["pairgate-cable"]!.error ? (
+                <p className="text-destructive">{syncResults["pairgate-cable"]!.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults["pairgate-cable"]!.fetched} plans — {syncResults["pairgate-cable"]!.created} new,{" "}
+                  {syncResults["pairgate-cable"]!.updated} updated
+                  {syncResults["pairgate-cable"]!.skipped ? `, ${syncResults["pairgate-cable"]!.skipped} skipped` : ""}.
                 </p>
               )}
             </div>

@@ -771,7 +771,7 @@ const PAIRGATE_CABLE_PROVIDER_SLUGS: Record<string, string> = {
 // "StarTimes"). Separate from NETWORK_LABEL, which is mobile-network
 // only (MTN/Glo/Airtel/9mobile) and would silently pass cable billers
 // through unmapped/mis-cased if reused here.
-const CABLE_BILLER_LABEL: Record<string, string> = {
+const PAIRGATE_CABLE_BILLER_LABEL: Record<string, string> = {
   dstv: "DSTV",
   gotv: "GOtv",
   startimes: "StarTimes",
@@ -803,7 +803,7 @@ async function pairgateUpsertPlans(
 ) {
   const network =
     serviceType === "cable"
-      ? CABLE_BILLER_LABEL[providerName.toLowerCase()] ?? providerName
+      ? PAIRGATE_CABLE_BILLER_LABEL[providerName.toLowerCase()] ?? providerName
       : NETWORK_LABEL[providerName] ?? providerName
   for (const entry of entries) {
     const planId = String(entry.plan_id ?? "")

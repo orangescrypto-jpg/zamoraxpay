@@ -175,76 +175,80 @@ export default function PlanMigrationPage() {
 
         {report.lowConfidenceSkipped.length > 0 && (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-              <h3 style={{ margin: 0 }}>Left unchanged (couldn't confidently parse)</h3>
+            <div style={{ marginBottom: 8 }}>
+              <h3 style={{ margin: "0 0 8px" }}>Left unchanged (couldn't confidently parse)</h3>
               <button onClick={() => downloadSkipped(report)} style={btnStyle("#374151")}>
                 ⬇ Download CSV
               </button>
             </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Table</th>
+                    <th style={thStyle}>ID</th>
+                    <th style={thStyle}>Plan code</th>
+                    <th style={thStyle}>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.lowConfidenceSkipped.map((r, i) => (
+                    <tr key={i}>
+                      <td style={tdStyle}>{r.table}</td>
+                      <td style={tdStyle}>{r.id}</td>
+                      <td style={tdStyle}>{r.planCode}</td>
+                      <td style={tdStyle}>{r.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div>
+          <div style={{ marginBottom: 8 }}>
+            <h3 style={{ margin: "0 0 8px" }}>All changes ({report.changes.length})</h3>
+            <button onClick={() => downloadAllChanges(report)} style={btnStyle("#374151")}>
+              ⬇ Download CSV
+            </button>
+          </div>
+          <div style={{ overflowX: "auto" }}>
             <table style={tableStyle}>
               <thead>
                 <tr>
+                  <th style={thStyle}>Action</th>
                   <th style={thStyle}>Table</th>
-                  <th style={thStyle}>ID</th>
-                  <th style={thStyle}>Plan code</th>
-                  <th style={thStyle}>Reason</th>
+                  <th style={thStyle}>Service</th>
+                  <th style={thStyle}>Network/Biller</th>
+                  <th style={thStyle}>Old code</th>
+                  <th style={thStyle}>New code</th>
+                  <th style={thStyle}>Note</th>
                 </tr>
               </thead>
               <tbody>
-                {report.lowConfidenceSkipped.map((r, i) => (
+                {report.changes.map((c, i) => (
                   <tr key={i}>
-                    <td style={tdStyle}>{r.table}</td>
-                    <td style={tdStyle}>{r.id}</td>
-                    <td style={tdStyle}>{r.planCode}</td>
-                    <td style={tdStyle}>{r.reason}</td>
+                    <td style={{ ...tdStyle, color: ACTION_COLOR[c.action], fontWeight: 600 }}>{c.action}</td>
+                    <td style={tdStyle}>{c.table}</td>
+                    <td style={tdStyle}>{c.serviceType}</td>
+                    <td style={tdStyle}>{c.networkOrBiller}</td>
+                    <td style={tdStyle}>{c.oldPlanCode}</td>
+                    <td style={tdStyle}>{c.newPlanCode}</td>
+                    <td style={tdStyle}>{c.note ?? ""}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-            <h3 style={{ margin: 0 }}>All changes ({report.changes.length})</h3>
-            <button onClick={() => downloadAllChanges(report)} style={btnStyle("#374151")}>
-              ⬇ Download CSV
-            </button>
-          </div>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Action</th>
-                <th style={thStyle}>Table</th>
-                <th style={thStyle}>Service</th>
-                <th style={thStyle}>Network/Biller</th>
-                <th style={thStyle}>Old code</th>
-                <th style={thStyle}>New code</th>
-                <th style={thStyle}>Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.changes.map((c, i) => (
-                <tr key={i}>
-                  <td style={{ ...tdStyle, color: ACTION_COLOR[c.action], fontWeight: 600 }}>{c.action}</td>
-                  <td style={tdStyle}>{c.table}</td>
-                  <td style={tdStyle}>{c.serviceType}</td>
-                  <td style={tdStyle}>{c.networkOrBiller}</td>
-                  <td style={tdStyle}>{c.oldPlanCode}</td>
-                  <td style={tdStyle}>{c.newPlanCode}</td>
-                  <td style={tdStyle}>{c.note ?? ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
     )
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
-      <h1>Plan Code Migration</h1>
+    <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
+      <h1 style={{ fontSize: 22 }}>Plan Code Migration</h1>
       <p style={{ color: "#555" }}>
         Re-keys existing pricing and provider-mapping rows onto canonical plan codes, so the same
         real-world plan written differently by different providers (casing, "1Day" vs "1-day", etc.)
@@ -252,7 +256,7 @@ export default function PlanMigrationPage() {
         category are never merged — only formatting differences are folded.
       </p>
 
-      <div style={{ display: "flex", gap: 12, margin: "20px 0" }}>
+      <div style={{ display: "flex", gap: 12, margin: "20px 0", flexWrap: "wrap" }}>
         <button onClick={runDryRun} disabled={running !== null} style={btnStyle("#2563eb")}>
           {running === "dry" ? "Running dry run..." : "Run Dry Run"}
         </button>
@@ -326,6 +330,7 @@ function btnStyle(color: string): React.CSSProperties {
     borderRadius: 6,
     cursor: "pointer",
     fontWeight: 600,
+    whiteSpace: "nowrap",
   }
 }
 

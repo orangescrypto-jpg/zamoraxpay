@@ -49,6 +49,7 @@ export interface ParsedPlanIdentity {
   category: string // "standard" when the provider draws no distinction
   cableTier: string | null // e.g. "compact", "max", "nova" — cable's equivalent of size; null for non-cable services
   planFamily: string | null // e.g. "collabo", "always-on" — named data products with no fixed size (unlimited/capped-speed bundles); null for size-based data plans and non-data services
+  bundleTag: string | null // e.g. "social", "binge", "night" — an app-restricted or time-restricted data variant layered on top of a normal sized plan; null for an unrestricted (general-purpose) data plan
   // True only when every field we needed was confidently extracted.
   // When false, canonicalPlanKey() falls back to a lightly-cleaned
   // version of the original text instead of guessing — a failed parse
@@ -67,6 +68,39 @@ const CATEGORY_PATTERNS: Array<{ key: string; re: RegExp }> = [
   { key: "corporate", re: /\bcorporate\b/i },
   { key: "direct", re: /\bdirect\b/i },
 ]
+
+// Restriction tags that ride ALONGSIDE size+validity+category on some
+// labels — "200mb-social-plan-platforms-2day-gifting" is a plain-size
+// "gifting" plan, but it is NOT the same product as an unrestricted
+// "200mb-2day-gifting" plan: social/binge/night/youtube bundles are
+// typically app-specific or time-window-specific data at the provider
+// level (different activation, often not usable the same way as
+// general data), same real-distinction rationale as CATEGORY_PATTERNS
+// above. Without this field these labels were silently colliding with
+// plain gifting/awoof plans of the same size+validity purely because
+// CATEGORY_PATTERNS matched "gifting" and discarded everything else —
+// a genuine merge bug, not a formatting fold. Order matters only in
+// that more specific multi-word tags should be listed before a
+// shorter fragment they contain; none currently overlap.
+const BUNDLE_TAG_PATTERNS: Array<{ key: string; re: RegExp }> = [
+  { key: "social", re: /\bsocial[\s-]*(plan|bundle)?[\s-]*(platforms?)?\b/i },
+  { key: "binge", re: /\bbinge[\s-]*(plan|bundle)?\b/i },
+  { key: "youtube", re: /\byoutube\b/i },
+  { key: "night", re: /\bnight[\s-]*(plan|bundle)?\b/i },
+]
+
+function extractBundleTag(text: string): string | null {
+  const hits: string[] = []
+  for (const { key, re } of BUNDLE_TAG_PATTERNS) {
+    if (re.test(text)) hits.push(key)
+  }
+  if (hits.length === 0) return null
+  // Multiple tags on one label (e.g. "binge-plan-youtube-social-plan-
+  // data") describe one combined restricted product — join them so
+  // e.g. a binge+youtube+social plan never collides with a plain
+  // "social" plan of the same size+validity.
+  return hits.sort().join("+")
+}
 
 // Networks/billers this system already uses, so free-text like "mtn",
 // "MTN", "Mtn Nigeria" all fold to the one convention every other
@@ -247,13 +281,14 @@ export function parsePlanIdentity(
   const validityDays = extractValidityDays(rawLabel)
 
   if (serviceType === "data") {
+    const bundleTag = extractBundleTag(rawLabel)
     const sizeMB = extractSizeMB(rawLabel)
     if (sizeMB !== null) {
       // Normal size-based data plan — size + validity both required,
       // exactly as before. A size without validity is NOT confidently
       // parsed — do not guess.
       const confident = validityDays !== null
-      return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, cableTier: null, planFamily: null, confident }
+      return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, cableTier: null, planFamily: null, bundleTag, confident }
     }
     // No data size found — check for a named plan family (Collabo,
     // Always-On, ...) instead. These are real products identified by
@@ -266,7 +301,7 @@ export function parsePlanIdentity(
     // (which duration is it?) and is not guessed at.
     const planFamily = extractPlanFamily(rawLabel)
     const confident = planFamily !== null && validityDays !== null
-    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, planFamily, confident }
+    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, planFamily, bundleTag, confident }
   }
 
   if (serviceType === "cable") {
@@ -280,7 +315,7 @@ export function parsePlanIdentity(
     // at, exactly like an unparseable data size.
     const cableTier = extractCableTier(rawLabel, normalizedNetwork)
     const confident = cableTier !== null
-    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier, planFamily: null, confident }
+    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier, planFamily: null, bundleTag: null, confident }
   }
 
   // Remaining non-size, non-cable plan-coded services (exam_pin,
@@ -291,7 +326,7 @@ export function parsePlanIdentity(
   // cleaned text alone.
   const cleaned = cleanToken(rawLabel)
   const confident = /^[a-z0-9-]{2,40}$/.test(cleaned)
-  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, planFamily: null, confident }
+  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, planFamily: null, bundleTag: null, confident }
 }
 
 // Lightly-cleaned fallback slug used both for the "couldn't confidently
@@ -330,16 +365,22 @@ export function canonicalPlanKey(
 
   if (serviceType === "data" && parsed.sizeMB !== null && parsed.validityDays !== null) {
     const categorySuffix = parsed.category === "standard" ? "" : `-${parsed.category}`
+    // Bundle tag goes last so e.g. an unrestricted "1000mb-1d-gifting"
+    // never collides with a social/binge/night-restricted variant of
+    // the identical size+validity+category — those are different
+    // products at the provider level, not a formatting difference.
+    const bundleSuffix = parsed.bundleTag !== null ? `-${parsed.bundleTag}` : ""
     return {
-      planCode: `${parsed.sizeMB}mb-${parsed.validityDays}d${categorySuffix}`,
+      planCode: `${parsed.sizeMB}mb-${parsed.validityDays}d${categorySuffix}${bundleSuffix}`,
       confident: true,
     }
   }
 
   if (serviceType === "data" && parsed.planFamily !== null && parsed.validityDays !== null) {
     const categorySuffix = parsed.category === "standard" ? "" : `-${parsed.category}`
+    const bundleSuffix = parsed.bundleTag !== null ? `-${parsed.bundleTag}` : ""
     return {
-      planCode: `${parsed.planFamily}-${parsed.validityDays}d${categorySuffix}`,
+      planCode: `${parsed.planFamily}-${parsed.validityDays}d${categorySuffix}${bundleSuffix}`,
       confident: true,
     }
   }

@@ -6,10 +6,11 @@
 // one place instead of being copy-pasted seven times.
 
 import { randomUUID } from "crypto"
-import { lookupPrice } from "@/src/services/pricing"
+import { lookupPrice, listPlanGroups } from "@/src/services/pricing"
 import { createPendingOrder, finalizeOrder } from "@/src/services/vtuOrders"
 import { debitWallet, refundWallet } from "@/src/services/wallet"
 import { executeVtuPurchase } from "@/src/services/vtuRouter"
+import { hasLiveRoute } from "@/src/services/providerPlanMappings"
 import { verifyPin } from "@/src/services/pin"
 import { d1Query } from "@/lib/d1"
 import { sendPurchaseReceiptEmail } from "@/src/services/email"
@@ -30,6 +31,15 @@ export interface PurchaseFlowParams {
   transactionPin: string
   isAutoReload?: boolean
   autoReloadRuleId?: string
+  // Price the customer saw on the buy page for this exact planCode.
+  // If the resolved price at purchase time doesn't match (plan was
+  // repriced, or the row backing it changed between page-load and
+  // submit), the purchase is NOT charged — it's reported back as
+  // requiresPriceConfirmation so the frontend can show the new price
+  // and let the customer explicitly confirm before anything is
+  // charged. Optional so existing callers that don't send it keep
+  // working exactly as before (no confirmation gate).
+  expectedPriceKobo?: number
 }
 
 export interface PurchaseFlowResult {
@@ -40,6 +50,26 @@ export interface PurchaseFlowResult {
   newBalanceKobo?: number
   cashbackEarnedKobo?: number
   deliveredData?: VtuDeliveredData
+  // True when expectedPriceKobo was sent and didn't match the price
+  // just resolved for this exact planCode — nothing was charged, no
+  // order/pending record was created. actualPriceKobo is what it would
+  // cost now; the caller should show that and let the customer
+  // explicitly resubmit (with expectedPriceKobo = actualPriceKobo) to
+  // proceed at the new price.
+  requiresPriceConfirmation?: boolean
+  actualPriceKobo?: number
+  // True when the exact planCode the customer picked has NO live
+  // provider right now (checked BEFORE debit — see hasLiveRoute).
+  // suggestedPlanCode/suggestedPriceKobo, when present, is the next-
+  // cheapest sibling variant (same size+validity+network, different
+  // category) that IS currently live — the caller shows "Awoof
+  // unavailable, Standard is ₦109 instead — continue?" and only
+  // resubmits (with planCode = suggestedPlanCode and
+  // expectedPriceKobo = suggestedPriceKobo) on explicit confirmation.
+  // Nothing is charged and no order is created when this fires.
+  planUnavailable?: boolean
+  suggestedPlanCode?: string
+  suggestedPriceKobo?: number
 }
 
 export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<PurchaseFlowResult> {
@@ -85,6 +115,58 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     pricing.baseAmountKobo *= quantity
     pricing.chargeAmountKobo *= quantity
     pricing.convenienceFeeKobo *= quantity
+  }
+
+  // 3b. Price-confirmation gate. Only applies when the caller sent
+  // expectedPriceKobo (i.e. the buy page knows the price it showed).
+  // Checked BEFORE any order is created or wallet debited — a mismatch
+  // here means the customer sees the new price and must resubmit to
+  // actually pay it, never gets silently charged more than they agreed to.
+  if (
+    params.expectedPriceKobo !== undefined &&
+    params.expectedPriceKobo !== pricing.chargeAmountKobo
+  ) {
+    return {
+      success: false,
+      message: "This plan's price has changed since you loaded the page. Please confirm the new price to continue.",
+      requiresPriceConfirmation: true,
+      actualPriceKobo: pricing.chargeAmountKobo,
+    }
+  }
+
+  // 3c. Pre-debit liveness check — plan-coded services only, and only
+  // when a planCode is actually present. Catches "the only provider
+  // for this exact plan just went down" BEFORE any money moves, so a
+  // sibling category can be offered instead of debit → router-fails →
+  // refund, which would otherwise be the customer's only signal that
+  // something else is available. Deliberately narrow: this suggests a
+  // DIFFERENT plan_code (a different category, e.g. Awoof -> Standard)
+  // for the customer to explicitly accept — it never silently
+  // substitutes one itself, for the same activation-behavior reasons
+  // categories are kept separate everywhere else in this codebase.
+  if (
+    params.planCode &&
+    (params.serviceType === "data" || params.serviceType === "cable") &&
+    !(await hasLiveRoute(params.serviceType, params.networkOrBiller, params.planCode))
+  ) {
+    const groups = await listPlanGroups(params.serviceType, params.networkOrBiller, user.tier)
+    const group = groups.find((g) => g.variants.some((v) => v.planCode === params.planCode))
+    const alternative = group?.variants.find((v) => v.planCode !== params.planCode)
+
+    if (alternative) {
+      return {
+        success: false,
+        message: `This plan is currently unavailable. ${alternative.category} is available at ₦${(alternative.priceKobo / 100).toLocaleString()} — confirm to continue with that instead.`,
+        planUnavailable: true,
+        suggestedPlanCode: alternative.planCode,
+        suggestedPriceKobo: alternative.priceKobo,
+      }
+    }
+    // No live sibling either — fall through to the normal flow, which
+    // will debit, let the router fail as usual, and auto-refund. Not
+    // returning early here on purpose: a stale/incomplete provider-
+    // mapping read shouldn't block a purchase that might still
+    // succeed — the router is the actual source of truth on attempt.
   }
 
   // 4. Create the pending order record.

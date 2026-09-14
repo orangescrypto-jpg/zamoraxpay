@@ -12,7 +12,9 @@
 //   Airtime:      GET /APIAirtimeV1.asp      MobileNetwork, Amount, MobileNumber
 //   Data:         GET /APIDatabundleV1.asp   MobileNetwork, DataPlan, MobileNumber
 //   Cable TV:     GET /APICableTVV1.asp      CableTV, Package, SmartCardNo, PhoneNo
+//                 (preceded by GET /APIVerifyCableTVV1.asp — see note below)
 //   Electricity:  GET /APIElectricityV1.asp  ElectricCompany, MeterType, MeterNo, Amount, PhoneNo
+//                 (preceded by GET /APIVerifyElectricityV1.asp — see note below)
 //   Betting:      GET /APIBettingV1.asp      BettingCompany, CustomerID, Amount
 //   Airtime ePIN: GET /APIEPINV1.asp         MobileNetwork, Value, Quantity
 //   Data ePIN:    GET /APIDatabundleEPINV1.asp  MobileNetwork, DataPlan, Quantity
@@ -35,6 +37,13 @@
 // at submission time (actual success/failure is async — reconcile via
 // APIQueryV1 or the CallBackURL). Electricity purchases can return
 // meter token synchronously in the same response.
+//
+// Cable/electricity: ClubKonnect's docs explicitly recommend calling
+// their Verify endpoint (APIVerifyCableTVV1 / APIVerifyElectricityV1)
+// before Buy, to confirm the smartcard/meter belongs to the intended
+// customer — this adapter does that automatically inside purchase(),
+// same as vtugate.ts's own verify-then-buy step, so the router/checkout
+// flow never needs to know about this two-call requirement.
 //
 // exam_pin here covers both WAEC and JAMB — ClubKonnect exposes them
 // as two separate .asp endpoints (APIWAECV1 / APIJAMBV1) rather than
@@ -129,6 +138,24 @@ export const clubkonnectAdapter: IVtuProviderAdapter = {
           break
         }
         case "cable": {
+          // ClubKonnect docs: "Tip: Use Verify Smartcard endpoint
+          // before subscription to validate customer." A wrong
+          // smartcard/IUC number would otherwise deliver — and charge
+          // for — a subscription to the wrong account.
+          const verifyUrl = buildUrl(baseUrl, "/APIVerifyCableTVV1.asp", {
+            ...auth,
+            CableTV: req.networkOrBiller.toLowerCase(),
+            SmartCardNo: req.recipient,
+          })
+          const verifyJson = await getJson(verifyUrl)
+          const customerName = verifyJson?.customer_name
+          if (!customerName || String(customerName).toUpperCase().includes("INVALID")) {
+            return {
+              success: false,
+              message: customerName ? String(customerName) : "ClubKonnect could not verify this smartcard/IUC number",
+              raw: verifyJson,
+            }
+          }
           url = buildUrl(baseUrl, "/APICableTVV1.asp", {
             ...auth,
             CableTV: req.networkOrBiller.toLowerCase(),
@@ -140,10 +167,32 @@ export const clubkonnectAdapter: IVtuProviderAdapter = {
           break
         }
         case "electricity": {
+          // Same rationale as cable: verify the meter belongs to the
+          // expected customer before debiting the wallet, per
+          // ClubKonnect's docs ("Always call this before Buy
+          // Electricity so you can confirm the meter belongs to the
+          // intended customer" — the same guidance VTUGate's own docs
+          // give, mirrored here for consistency).
+          const meterTypeCode = req.meterType === "postpaid" ? "02" : "01"
+          const verifyUrl = buildUrl(baseUrl, "/APIVerifyElectricityV1.asp", {
+            ...auth,
+            ElectricCompany: req.networkOrBiller,
+            MeterNo: req.recipient,
+            MeterType: meterTypeCode,
+          })
+          const verifyJson = await getJson(verifyUrl)
+          const customerName = verifyJson?.customer_name
+          if (!customerName || String(customerName).toUpperCase().includes("INVALID")) {
+            return {
+              success: false,
+              message: customerName ? String(customerName) : "ClubKonnect could not verify this meter number",
+              raw: verifyJson,
+            }
+          }
           url = buildUrl(baseUrl, "/APIElectricityV1.asp", {
             ...auth,
             ElectricCompany: req.networkOrBiller,
-            MeterType: req.meterType === "postpaid" ? "02" : "01",
+            MeterType: meterTypeCode,
             MeterNo: req.recipient,
             Amount: req.amountKobo / 100,
             PhoneNo: req.contactPhone || req.recipient,

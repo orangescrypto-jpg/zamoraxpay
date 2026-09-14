@@ -163,19 +163,21 @@ function extractCableTier(text: string, biller: string): string | null {
   return null
 }
 
-// Extracts size+unit anywhere in the text: "200mb", "1 GB", "1.5GB".
-// Returns size normalized to MB. GB uses 1000 (not 1024) to match the
-// marketing convention every provider's own labels already use ("1GB"
-// meaning 1000MB in their plan names) — using 1024 here would silently
-// make a provider's own "1GB" plan fail to match another provider's
-// "1000MB" listing of the identical plan, which is the exact bug this
-// normalizer exists to fix.
+// Extracts size+unit anywhere in the text: "200mb", "1 GB", "1.5GB",
+// "1.5TB". Returns size normalized to MB. GB/TB use 1000/1,000,000
+// (not 1024/1,048,576) to match the marketing convention every
+// provider's own labels already use ("1GB" meaning 1000MB in their
+// plan names) — using binary units here would silently make a
+// provider's own "1GB" plan fail to match another provider's "1000MB"
+// listing of the identical plan, which is the exact bug this
+// normalizer exists to fix. The unit pattern checks "tb" before "gb"/
+// "mb" so "1.5TB" isn't partially matched by a shorter alternative.
 function extractSizeMB(text: string): number | null {
-  const match = text.match(/(\d+(?:\.\d+)?)\s*(mb|gb)\b/i)
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(tb|gb|mb)\b/i)
   if (!match) return null
   const value = parseFloat(match[1])
   const unit = match[2].toLowerCase()
-  const mb = unit === "gb" ? value * 1000 : value
+  const mb = unit === "tb" ? value * 1_000_000 : unit === "gb" ? value * 1000 : value
   // Round to nearest whole MB — fractional MB in a provider label is
   // always a rounding artifact (e.g. "1.5GB" -> 1500), never a
   // meaningfully distinct plan size at sub-MB granularity.

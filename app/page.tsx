@@ -16,6 +16,7 @@ const SERVICES = [
   { href: "/services/epin", label: "Buy ePIN", desc: "Instant PINs for redemption" },
   { href: "/services/bulk-airtime", label: "Bulk Airtime", desc: "Send airtime to many numbers at once" },
   { href: "/services/bulk-data", label: "Bulk Data", desc: "Send data to many numbers at once" },
+  { href: "/services/international-topup", label: "International Airtime & Data", desc: "Top up a phone number in another country" },
 ]
 
 export const revalidate = 900 // 15 minutes — homepage content doesn't need to be second-fresh

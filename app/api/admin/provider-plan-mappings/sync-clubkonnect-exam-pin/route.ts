@@ -1,0 +1,21 @@
+// app/api/admin/provider-plan-mappings/sync-clubkonnect-exam-pin/route.ts
+import { NextRequest, NextResponse } from "next/server"
+import { requireAdmin } from "@/lib/auth-server"
+import { syncClubkonnectExamPinPrices } from "@/src/services/providerPlanSync"
+import { getVtuProviderCredentials } from "@/src/services/config"
+
+export async function POST(req: NextRequest) {
+  const auth = await requireAdmin(req)
+  if (!auth.ok) return auth.error
+
+  try {
+    const credentials = await getVtuProviderCredentials("clubkonnect")
+    const result = await syncClubkonnectExamPinPrices(auth.uid, credentials)
+    return NextResponse.json({ success: true, ...result })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Sync failed" },
+      { status: 500 },
+    )
+  }
+}

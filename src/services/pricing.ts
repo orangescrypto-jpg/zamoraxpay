@@ -10,6 +10,19 @@ import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
 import { getActiveVtuProviders } from "@/src/services/config"
+import { canonicalPlanKey, normalizeNetworkOrBiller } from "@/src/services/planNormalization"
+
+// pricing_rules.plan_code is nullable (flat services like airtime have
+// none) — only normalize when a plan_code is actually present, so
+// null stays null rather than becoming a stringified fallback.
+function normalizedPlanCodeOrNull(
+  planCode: string | null,
+  networkOrBiller: string,
+  serviceType: VtuServiceType,
+): string | null {
+  if (planCode === null) return null
+  return canonicalPlanKey(planCode, networkOrBiller, serviceType).planCode
+}
 
 export interface PricingLookupResult {
   found: boolean
@@ -27,12 +40,14 @@ export async function lookupPrice(
   requestedAmountKobo?: number, // used for flexible-amount services like airtime/electricity
   nativeDB?: any,
 ): Promise<PricingLookupResult> {
+  const normalizedNetwork = normalizeNetworkOrBiller(networkOrBiller)
+  const normalizedPlanCode = normalizedPlanCodeOrNull(planCode, normalizedNetwork, serviceType)
   const result = await d1Query(
     `SELECT * FROM pricing_rules
      WHERE service_type = ? AND network_or_biller = ? AND is_active = 1
        AND (plan_code = ? OR (plan_code IS NULL AND ? IS NULL))
      LIMIT 1`,
-    [serviceType, networkOrBiller, planCode, planCode],
+    [serviceType, normalizedNetwork, normalizedPlanCode, normalizedPlanCode],
     nativeDB,
   )
 
@@ -96,6 +111,7 @@ export async function listPlans(
   userTier: "retail" | "reseller",
   nativeDB?: any,
 ): Promise<CustomerPlan[]> {
+  networkOrBiller = normalizeNetworkOrBiller(networkOrBiller)
   const result = await d1Query(
     `SELECT plan_code, retail_price_kobo, wholesale_price_kobo, convenience_fee_kobo
      FROM pricing_rules
@@ -184,12 +200,14 @@ export async function findPricingRuleByNaturalKey(
   planCode: string | null,
   nativeDB?: any,
 ) {
+  const normalizedNetwork = normalizeNetworkOrBiller(networkOrBiller)
+  const normalizedPlanCode = normalizedPlanCodeOrNull(planCode, normalizedNetwork, serviceType)
   const result = await d1Query(
     `SELECT * FROM pricing_rules
      WHERE service_type = ? AND network_or_biller = ?
        AND (plan_code = ? OR (plan_code IS NULL AND ? IS NULL))
      LIMIT 1`,
-    [serviceType, networkOrBiller, planCode, planCode],
+    [serviceType, normalizedNetwork, normalizedPlanCode, normalizedPlanCode],
     nativeDB,
   )
   return result.results?.[0] ?? null
@@ -216,6 +234,14 @@ export async function upsertPricingRule(
   adminUserId: string,
   nativeDB?: any,
 ): Promise<void> {
+  // Normalize before writing — admin form entry and CSV rows are
+  // human-typed and must land on the same plan_code sync produces, or
+  // a manually-priced plan silently becomes its own untouchable
+  // duplicate instead of matching the provider mappings underneath it.
+  const networkOrBiller = normalizeNetworkOrBiller(params.networkOrBiller)
+  const planCode = normalizedPlanCodeOrNull(params.planCode, networkOrBiller, params.serviceType)
+  params = { ...params, networkOrBiller, planCode }
+
   if (params.id) {
     await d1Query(
       `UPDATE pricing_rules SET

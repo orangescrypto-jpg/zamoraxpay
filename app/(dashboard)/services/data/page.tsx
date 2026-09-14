@@ -15,14 +15,47 @@ interface Plan {
   priceKobo: number
 }
 
-// Plan codes are admin-defined (e.g. "1GB_30D"), so we turn them into
-// a readable label rather than keeping a second, separate label list
-// in the frontend that could drift from what admin actually configured.
+// Plan codes are the canonical keys produced by canonicalPlanKey()
+// (see src/services/planNormalization.ts) — e.g. "5000mb-1d-awoof",
+// "500mb-7d", "1000mb-1d-social+binge". Category (gifting/awoof/cg/
+// sme) is an internal routing detail and is dropped from the label.
+// Bundle tags (social/binge/youtube/night) ARE shown — they mean a
+// genuinely different, restricted product the customer should know
+// about before buying. Size converts MB -> GB above 1000MB.
+const BUNDLE_TAG_LABELS: Record<string, string> = {
+  social: "Social",
+  binge: "Binge",
+  youtube: "YouTube",
+  night: "Night",
+}
+const KNOWN_BUNDLE_TAGS = new Set(Object.keys(BUNDLE_TAG_LABELS))
 function labelFromPlanCode(code: string): string {
-  const match = code.match(/^(\d+(?:\.\d+)?)(GB|MB)_(\d+)D$/i)
+  const match = code.match(/^(\d+)mb-(\d+)d((?:-[a-z_+]+)*)$/i)
   if (!match) return code
-  const [, size, unit, days] = match
-  return `${size}${unit.toUpperCase()} - ${days} days`
+  const [, sizeMBStr, daysStr, suffixPart] = match
+  const sizeMB = parseInt(sizeMBStr, 10)
+  const days = parseInt(daysStr, 10)
+  const sizeLabel =
+    sizeMB >= 1000 && sizeMB % 1000 === 0
+      ? `${sizeMB / 1000}GB`
+      : sizeMB >= 1000
+        ? `${(sizeMB / 1000).toFixed(1)}GB`
+        : `${sizeMB}MB`
+  const dayLabel = days === 1 ? "1 day" : `${days} days`
+  // Suffix segments after size/validity are category (internal,
+  // dropped) and/or bundle tags (shown — a genuinely different,
+  // restricted product). A "+"-joined segment is always bundle tags.
+  const segments = suffixPart ? suffixPart.split("-").filter(Boolean) : []
+  const bundleParts = segments.filter((s) => s.includes("+") || KNOWN_BUNDLE_TAGS.has(s))
+  const bundleLabel = bundleParts.length
+    ? " (" +
+      bundleParts
+        .flatMap((s) => s.split("+"))
+        .map((t) => BUNDLE_TAG_LABELS[t] ?? t)
+        .join(" + ") +
+      ")"
+    : ""
+  return `${sizeLabel} - ${dayLabel}${bundleLabel}`
 }
 
 export default function DataPage() {

@@ -38,6 +38,7 @@
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { upsertPlanMapping, findMappingByNaturalKey } from "@/src/services/providerPlanMappings"
+import { canonicalPlanKey } from "@/src/services/planNormalization"
 
 // Every sync function below calls a provider's HTTP API and expects
 // JSON back. When a provider is down, the base URL is wrong, or the
@@ -102,6 +103,21 @@ function slugifyPlanLabel(label: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
+}
+
+// Turns a provider's raw plan label into OUR canonical plan_code via
+// canonicalPlanKey() (see planNormalization.ts) — so "75mb-1day-gifting",
+// "MTN/110MB/1Day", and "110mb-daily-plan-1-day-awoof-data" from
+// different providers land on the same string when they're genuinely
+// the same size+validity+category, instead of each provider's own
+// phrasing creating an invisible-to-each-other duplicate plan. Falls
+// back to the plain slugified label (never a canonical recomposition)
+// when the label couldn't be confidently parsed, so an odd label never
+// gets silently merged into the wrong plan — see planNormalization.ts's
+// `confident` flag.
+function canonicalizedPlanCode(label: string, networkOrBiller: string, serviceType: string): string {
+  const { planCode } = canonicalPlanKey(label, networkOrBiller, serviceType)
+  return planCode
 }
 
 interface ParsedPlan {
@@ -198,8 +214,7 @@ export async function syncClubkonnectDataPlans(
     // stable human-readable identifier. Only fall back to the raw
     // numeric PRODUCT_ID — prefixed so it's visually distinguishable
     // from a price — when ClubKonnect genuinely sent no usable label.
-    const labelSlug = plan.label ? slugifyPlanLabel(plan.label) : ""
-    const planCode = labelSlug || `ck-${plan.planId}`
+    const planCode = plan.label ? canonicalizedPlanCode(plan.label, plan.network, "data") : `ck-${plan.planId}`
     if (isNumericJunkPlanCode(planCode)) {
       skipped++
       continue
@@ -290,8 +305,9 @@ export async function syncClubkonnectCablePlans(
         skipped++
         continue
       }
-      const labelSlug = pkg?.PACKAGE_NAME ? slugifyPlanLabel(String(pkg.PACKAGE_NAME)) : ""
-      const planCode = labelSlug || `ck-${planId}`
+      const planCode = pkg?.PACKAGE_NAME
+        ? canonicalizedPlanCode(String(pkg.PACKAGE_NAME), biller, "cable")
+        : `ck-${planId}`
       if (isNumericJunkPlanCode(planCode)) {
         skipped++
         continue
@@ -464,8 +480,7 @@ export async function syncCheapdatahubExamPinPrices(
       continue
     }
     const rawLabel = product?.description ?? product?.product_name ?? ""
-    const labelSlug = rawLabel ? slugifyPlanLabel(String(rawLabel)) : ""
-    const planCode = labelSlug || `cdh-${productId}`
+    const planCode = rawLabel ? canonicalizedPlanCode(String(rawLabel), examBoard, "exam_pin") : `cdh-${productId}`
     if (isNumericJunkPlanCode(planCode)) {
       skipped++
       continue
@@ -603,13 +618,21 @@ export async function syncVtugateDataPlans(
         continue
       }
       const providerPlanId = `${planServiceId}:${code}`
-      const existing = await findMappingByNaturalKey("data", network, code, "vtugate", nativeDB)
+      // VTUGate's own "code" (e.g. "1gb-7day-cg") is already slug-like,
+      // but is still just THEIR wording — run it through the same
+      // canonicalizer as every other provider so "1gb-7day-cg" from
+      // VTUGate and "1GB/7Days/CG" from another provider land on the
+      // same plan_code, instead of VTUGate's raw code becoming its own
+      // permanent one-provider-only plan entry. Prefer plan.name when
+      // present (fuller text to parse from); fall back to code itself.
+      const planCode = canonicalizedPlanCode(plan.name || code, network, "data")
+      const existing = await findMappingByNaturalKey("data", network, planCode, "vtugate", nativeDB)
       await upsertPlanMapping(
         {
           id: existing?.id,
           serviceType: "data",
           networkOrBiller: network,
-          planCode: code,
+          planCode,
           providerKey: "vtugate",
           providerPlanId,
           providerCostKobo: costKobo,
@@ -776,13 +799,14 @@ export async function syncVtugateCablePlans(
     }
     const planServiceId = plan.service_id ? String(plan.service_id) : String(params.serviceId)
     const providerPlanId = `${planServiceId}:${code}`
-    const existing = await findMappingByNaturalKey("cable", params.biller, code, "vtugate", nativeDB)
+    const planCode = canonicalizedPlanCode(plan.name || code, params.biller, "cable")
+    const existing = await findMappingByNaturalKey("cable", params.biller, planCode, "vtugate", nativeDB)
     await upsertPlanMapping(
       {
         id: existing?.id,
         serviceType: "cable",
         networkOrBiller: params.biller,
-        planCode: code,
+        planCode,
         providerKey: "vtugate",
         providerPlanId,
         providerCostKobo: costKobo,
@@ -898,8 +922,7 @@ async function pairgateUpsertPlans(
     // providerPlanLabel) so plan_code is a stable human-readable
     // identifier instead of the raw numeric plan_id or price. Only
     // fall back to the prefixed numeric ID if Pairgate sent no name.
-    const labelSlug = entry.name ? slugifyPlanLabel(entry.name) : ""
-    const planCode = labelSlug || `pg-${planId}`
+    const planCode = entry.name ? canonicalizedPlanCode(entry.name, network, serviceType) : `pg-${planId}`
     if (isNumericJunkPlanCode(planCode)) {
       counts.skipped++
       continue

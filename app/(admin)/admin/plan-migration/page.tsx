@@ -19,6 +19,7 @@ interface MigrationReport {
   changes: MigrationChange[]
   lowConfidenceSkipped: Array<{ table: string; id: string; planCode: string; reason: string }>
   manualReviewNeeded: Array<{ table: string; canonicalKey: string; conflictingIds: string[]; reason: string }>
+  writeErrors?: Array<{ table: string; id: string; planCode: string; error: string }>
   summary: { renamed: number; merged: number; skipped: number; flaggedForReview: number }
 }
 
@@ -146,6 +147,32 @@ export default function PlanMigrationPage() {
           <Stat label="Skipped (low confidence)" value={report.summary.skipped} />
           <Stat label="Flagged for review" value={report.summary.flaggedForReview} />
         </div>
+
+        {report.writeErrors && report.writeErrors.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ color: "#dc2626" }}>✕ Failed to write ({report.writeErrors.length})</h3>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Table</th>
+                  <th style={thStyle}>ID</th>
+                  <th style={thStyle}>Plan code</th>
+                  <th style={thStyle}>Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.writeErrors.map((r, i) => (
+                  <tr key={i}>
+                    <td style={tdStyle}>{r.table}</td>
+                    <td style={tdStyle}>{r.id}</td>
+                    <td style={tdStyle}>{r.planCode}</td>
+                    <td style={tdStyle}>{r.error}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {report.manualReviewNeeded.length > 0 && (
           <div style={{ marginBottom: 20 }}>

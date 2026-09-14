@@ -127,7 +127,7 @@ export async function getPaymentProviderCredentials(
 
 export async function updateVtuProviderConfig(
   providerKey: string,
-  updates: { isEnabled?: boolean; priority?: number; credentials?: Record<string, string> },
+  updates: { isEnabled?: boolean; priority?: number; credentials?: Record<string, string>; supportsServices?: string[] },
   adminUserId: string,
   nativeDB?: any,
 ): Promise<void> {
@@ -141,6 +141,10 @@ export async function updateVtuProviderConfig(
   if (updates.priority !== undefined) {
     sets.push("priority = ?")
     params.push(updates.priority)
+  }
+  if (updates.supportsServices !== undefined) {
+    sets.push("supports_services = ?")
+    params.push(JSON.stringify(updates.supportsServices))
   }
   if (updates.credentials !== undefined) {
     // Merge with whatever is already saved instead of replacing the

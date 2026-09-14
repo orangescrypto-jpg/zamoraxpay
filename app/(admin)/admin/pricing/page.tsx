@@ -14,6 +14,7 @@ interface PricingRule {
   retail_price_kobo: number
   wholesale_price_kobo: number
   convenience_fee_kobo: number
+  auto_priced: number // 1 = system-managed (general fee applies automatically), 0 = manually overridden
 }
 
 const SERVICE_TYPES = ["airtime", "data", "cable", "electricity", "exam_pin", "epin", "betting"]
@@ -157,6 +158,33 @@ export default function AdminPricingPage() {
       }),
     })
     resetForm()
+    load()
+  }
+
+  // Hands a manually-priced plan back to the general pricing policy —
+  // it's immediately repriced from current provider cost + the
+  // service's policy fee, and future syncs/policy edits will keep it
+  // updated again (see resetPlanToAutoPricing in pricingReconcile.ts).
+  async function handleResetToAuto(rule: PricingRule) {
+    if (!rule.plan_code) {
+      alert("Only plan-coded rules (data/cable) support auto-pricing reset.")
+      return
+    }
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/admin/pricing-rules/reset-auto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({
+        serviceType: rule.service_type,
+        networkOrBiller: rule.network_or_biller,
+        planCode: rule.plan_code,
+      }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error ?? "Reset failed")
+      return
+    }
     load()
   }
 
@@ -669,6 +697,13 @@ export default function AdminPricingPage() {
                           <div>
                             <p className="text-sm font-semibold text-secondary">{r.network_or_biller}</p>
                             <p className="text-xs text-muted-foreground">{r.plan_code ?? "No plan code"}</p>
+                            <span
+                              className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                r.auto_priced ? "bg-muted text-muted-foreground" : "bg-amber-100 text-amber-800"
+                              }`}
+                            >
+                              {r.auto_priced ? "Auto-priced" : "Manual"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -712,6 +747,14 @@ export default function AdminPricingPage() {
                           >
                             Edit
                           </button>
+                          {!r.auto_priced && r.plan_code && (
+                            <button
+                              onClick={() => handleResetToAuto(r)}
+                              className="text-xs font-medium text-secondary hover:underline"
+                            >
+                              Reset to auto
+                            </button>
+                          )}
                           <button
                             onClick={() => setDeletingId(r.id)}
                             className="text-xs font-medium text-destructive hover:underline"
@@ -765,6 +808,7 @@ export default function AdminPricingPage() {
                           <th className="px-4 py-3">Retail</th>
                           <th className="px-4 py-3">Wholesale</th>
                           <th className="px-4 py-3">Fee</th>
+                          <th className="px-4 py-3">Status</th>
                           <th className="px-4 py-3">Actions</th>
                         </tr>
                       </thead>
@@ -784,6 +828,15 @@ export default function AdminPricingPage() {
                             <td className="px-4 py-3">{formatNaira(r.retail_price_kobo)}</td>
                             <td className="px-4 py-3">{formatNaira(r.wholesale_price_kobo)}</td>
                             <td className="px-4 py-3">{formatNaira(r.convenience_fee_kobo)}</td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                                  r.auto_priced ? "bg-muted text-muted-foreground" : "bg-amber-100 text-amber-800"
+                                }`}
+                              >
+                                {r.auto_priced ? "Auto-priced" : "Manual"}
+                              </span>
+                            </td>
                             <td className="px-4 py-3">
                               {deletingId === r.id ? (
                                 <div className="flex items-center gap-2">
@@ -809,6 +862,14 @@ export default function AdminPricingPage() {
                                   >
                                     Edit
                                   </button>
+                                  {!r.auto_priced && r.plan_code && (
+                                    <button
+                                      onClick={() => handleResetToAuto(r)}
+                                      className="text-xs font-medium text-secondary hover:underline"
+                                    >
+                                      Reset to auto
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => setDeletingId(r.id)}
                                     className="text-xs font-medium text-destructive hover:underline"

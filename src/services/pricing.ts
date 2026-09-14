@@ -11,6 +11,13 @@ import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
 import { getActiveVtuProviders } from "@/src/services/config"
 import { canonicalPlanKey, normalizeNetworkOrBiller } from "@/src/services/planNormalization"
+import { getPricingPolicy, applyFee } from "@/src/services/pricingPolicies"
+
+// Services where the customer names their own amount instead of
+// picking a fixed plan — no pricing_rules row will ever exist for
+// these (plan_code is null), so their fee comes straight from the
+// pricing_policies convenience fee instead.
+const FLEXIBLE_AMOUNT_SERVICES = new Set<VtuServiceType>(["airtime", "electricity", "betting"])
 
 // pricing_rules.plan_code is nullable (flat services like airtime have
 // none) — only normalize when a plan_code is actually present, so
@@ -54,17 +61,29 @@ export async function lookupPrice(
   const rule = result.results?.[0]
 
   // Flexible-amount services (airtime, electricity, betting) don't have
-  // a fixed plan price — the user names the amount, and we just apply
-  // the convenience fee on top, at whatever fee the admin has set for
-  // that biller (falling back to zero if unconfigured).
+  // a fixed plan price — the user names the amount, and we apply the
+  // convenience fee from pricing_policies on top of it. This never
+  // goes through pricing_rules: reconcile is sourced from
+  // provider_plan_mappings and keyed by plan_code, and these services
+  // pass plan_code = null, so no pricing_rules row is ever created for
+  // them — falling through to "convenienceFeeKobo: 0" unconditionally
+  // (the old behavior) silently dropped the fee for every purchase.
   if (!rule) {
     if (requestedAmountKobo) {
+      const tierUsed = userTier === "reseller" ? "wholesale" : "retail"
+      let convenienceFeeKobo = 0
+      if (FLEXIBLE_AMOUNT_SERVICES.has(serviceType)) {
+        const policy = await getPricingPolicy(serviceType, nativeDB)
+        if (policy) {
+          convenienceFeeKobo = applyFee(requestedAmountKobo, policy.convenienceFeeType, policy.convenienceFeeValue)
+        }
+      }
       return {
         found: true,
         baseAmountKobo: requestedAmountKobo,
-        chargeAmountKobo: requestedAmountKobo,
-        convenienceFeeKobo: 0,
-        tierUsed: userTier === "reseller" ? "wholesale" : "retail",
+        chargeAmountKobo: requestedAmountKobo + convenienceFeeKobo,
+        convenienceFeeKobo,
+        tierUsed,
       }
     }
     return { found: false, baseAmountKobo: 0, chargeAmountKobo: 0, convenienceFeeKobo: 0, tierUsed: "retail" }

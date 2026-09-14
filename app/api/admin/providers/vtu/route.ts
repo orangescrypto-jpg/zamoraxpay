@@ -31,16 +31,22 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { providerKey, isEnabled, priority, credentials } = body
+    const { providerKey, isEnabled, priority, credentials, supportsServices } = body
 
     if (!providerKey) return NextResponse.json({ error: "providerKey is required" }, { status: 400 })
 
-    // Credential changes are sensitive — require super_admin. Toggling
-    // enable/disable or reordering priority only requires regular admin.
-    const auth = credentials !== undefined ? await requireSuperAdmin(req) : await requireAdmin(req)
+    // Credential changes AND service-support changes are sensitive —
+    // supportsServices controls which purchase flows a provider is
+    // eligible for (e.g. international_topup), so it gets the same
+    // super_admin gate as credentials rather than the plain admin gate
+    // used for enable/disable and priority.
+    const auth =
+      credentials !== undefined || supportsServices !== undefined
+        ? await requireSuperAdmin(req)
+        : await requireAdmin(req)
     if (!auth.ok) return auth.error
 
-    await updateVtuProviderConfig(providerKey, { isEnabled, priority, credentials }, auth.uid)
+    await updateVtuProviderConfig(providerKey, { isEnabled, priority, credentials, supportsServices }, auth.uid)
 
     await d1Query(
       `INSERT INTO admin_audit_log (id, admin_user_id, action, target_table, target_id, after_json)
@@ -49,7 +55,7 @@ export async function PATCH(req: NextRequest) {
         randomUUID(),
         auth.uid,
         providerKey,
-        JSON.stringify({ isEnabled, priority, credentialsChanged: credentials !== undefined }),
+        JSON.stringify({ isEnabled, priority, credentialsChanged: credentials !== undefined, supportsServices }),
       ],
     )
 

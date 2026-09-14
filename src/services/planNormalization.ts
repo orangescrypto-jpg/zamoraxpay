@@ -83,7 +83,7 @@ const CATEGORY_PATTERNS: Array<{ key: string; re: RegExp }> = [
 // that more specific multi-word tags should be listed before a
 // shorter fragment they contain; none currently overlap.
 const BUNDLE_TAG_PATTERNS: Array<{ key: string; re: RegExp }> = [
-  { key: "social", re: /\bsocial[\s-]*(plan|bundle)?[\s-]*(platforms?)?\b/i },
+  { key: "social", re: /\bsocials?[\s-]*(plan|bundle)?[\s-]*(platforms?)?\b/i },
   { key: "binge", re: /\bbinge[\s-]*(plan|bundle)?\b/i },
   { key: "youtube", re: /\byoutube\b/i },
   { key: "night", re: /\bnight[\s-]*(plan|bundle)?\b/i },

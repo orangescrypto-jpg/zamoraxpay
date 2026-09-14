@@ -7,9 +7,16 @@ import { formatNaira } from "@/lib/utils"
 
 const BILLERS = ["DSTV", "GOtv", "StarTimes"]
 
-interface Plan {
+interface PlanVariant {
   planCode: string
+  category: string
   priceKobo: number
+}
+
+interface PlanGroup {
+  groupKey: string
+  cheapestPriceKobo: number
+  variants: PlanVariant[]
 }
 
 // Plan codes are admin-defined (e.g. "DSTV_COMPACT_PLUS"); turn the
@@ -25,13 +32,23 @@ function labelFromPlanCode(code: string, biller: string): string {
 export default function CablePage() {
   const [biller, setBiller] = useState(BILLERS[0])
   const [smartcardNumber, setSmartcardNumber] = useState("")
-  const [plans, setPlans] = useState<Plan[]>([])
+  // Cable plan_codes have no category variants (see pricing.ts
+  // listPlanGroups — cable's canonical code has no category suffix),
+  // so every group here has exactly one variant. Grouped API is still
+  // used so cable gets the same price-confirmation and plan-
+  // unavailable safety net as data, without needing separate logic.
+  const [groups, setGroups] = useState<PlanGroup[]>([])
   const [plansLoading, setPlansLoading] = useState(true)
   const [plansError, setPlansError] = useState<string | null>(null)
   const [planCode, setPlanCode] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [confirmState, setConfirmState] = useState<{
+    message: string
+    planCode: string
+    priceKobo: number
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -40,13 +57,14 @@ export default function CablePage() {
       setPlansLoading(true)
       setPlansError(null)
       setPlanCode("")
+      setConfirmState(null)
 
       try {
         const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
 
         const res = await fetch(
-          `/api/pricing?serviceType=cable&networkOrBiller=${encodeURIComponent(biller)}`,
+          `/api/pricing?serviceType=cable&networkOrBiller=${encodeURIComponent(biller)}&grouped=1`,
           { headers: { Authorization: `Bearer ${session?.access_token}` } },
         )
         const data = await res.json()
@@ -54,12 +72,13 @@ export default function CablePage() {
 
         if (!res.ok) {
           setPlansError(data.error ?? "Could not load packages")
-          setPlans([])
+          setGroups([])
           return
         }
 
-        setPlans(data.plans ?? [])
-        if (data.plans?.length) setPlanCode(data.plans[0].planCode)
+        const loadedGroups: PlanGroup[] = data.groups ?? []
+        setGroups(loadedGroups)
+        if (loadedGroups.length) setPlanCode(loadedGroups[0].variants[0].planCode)
       } catch {
         if (!cancelled) setPlansError("Could not load packages")
       } finally {
@@ -71,23 +90,66 @@ export default function CablePage() {
     return () => { cancelled = true }
   }, [biller])
 
-  const selectedPlan = plans.find((p) => p.planCode === planCode)
+  const allVariants = groups.flatMap((g) => g.variants)
+  const selectedPlan = allVariants.find((p) => p.planCode === planCode)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setResult(null)
-    setLoading(true)
-
+  async function submitPurchase(expectedPriceKobo: number | undefined, useplanCode: string) {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
 
     const res = await fetch("/api/vtu/cable", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ biller, smartcardNumber, planCode, transactionPin: pin }),
+      body: JSON.stringify({
+        biller,
+        smartcardNumber,
+        planCode: useplanCode,
+        transactionPin: pin,
+        expectedPriceKobo,
+      }),
     })
-    const data = await res.json()
+    return res.json()
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setResult(null)
+    setConfirmState(null)
+    setLoading(true)
+
+    const data = await submitPurchase(selectedPlan?.priceKobo, planCode)
     setLoading(false)
+
+    if (data.requiresPriceConfirmation || data.planUnavailable) {
+      setConfirmState({
+        message: data.message,
+        planCode: data.suggestedPlanCode ?? planCode,
+        priceKobo: data.actualPriceKobo ?? data.suggestedPriceKobo,
+      })
+      return
+    }
+
+    setResult({ success: data.success, message: data.message ?? data.error })
+    if (data.success) { setSmartcardNumber(""); setPin("") }
+  }
+
+  async function handleConfirm() {
+    if (!confirmState) return
+    setLoading(true)
+    setResult(null)
+    const data = await submitPurchase(confirmState.priceKobo, confirmState.planCode)
+    setLoading(false)
+    setConfirmState(null)
+
+    if (data.requiresPriceConfirmation || data.planUnavailable) {
+      setConfirmState({
+        message: data.message,
+        planCode: data.suggestedPlanCode ?? confirmState.planCode,
+        priceKobo: data.actualPriceKobo ?? data.suggestedPriceKobo,
+      })
+      return
+    }
+
     setResult({ success: data.success, message: data.message ?? data.error })
     if (data.success) { setSmartcardNumber(""); setPin("") }
   }
@@ -100,6 +162,29 @@ export default function CablePage() {
         <p className={`mb-4 rounded-md p-3 text-sm ${result.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"}`}>
           {result.message}
         </p>
+      )}
+
+      {confirmState && (
+        <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="mb-2">{confirmState.message}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={loading}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+            >
+              {loading ? "Processing..." : `Confirm ${formatNaira(confirmState.priceKobo)}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmState(null)}
+              className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -127,14 +212,14 @@ export default function CablePage() {
             <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">Loading packages…</div>
           ) : plansError ? (
             <div className="w-full rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{plansError}</div>
-          ) : plans.length === 0 ? (
+          ) : allVariants.length === 0 ? (
             <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
               No packages are configured for {biller} yet.
             </div>
           ) : (
-            <select value={planCode} onChange={(e) => setPlanCode(e.target.value)}
+            <select value={planCode} onChange={(e) => { setPlanCode(e.target.value); setConfirmState(null) }}
               className="w-full rounded-md border border-border px-3 py-2 text-sm">
-              {plans.map((p) => (
+              {allVariants.map((p) => (
                 <option key={p.planCode} value={p.planCode}>
                   {labelFromPlanCode(p.planCode, biller)} - {formatNaira(p.priceKobo)}
                 </option>

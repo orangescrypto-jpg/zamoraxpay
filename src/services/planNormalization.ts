@@ -48,6 +48,7 @@ export interface ParsedPlanIdentity {
   validityDays: number | null // null when no validity applies
   category: string // "standard" when the provider draws no distinction
   cableTier: string | null // e.g. "compact", "max", "nova" — cable's equivalent of size; null for non-cable services
+  planFamily: string | null // e.g. "collabo", "always-on" — named data products with no fixed size (unlimited/capped-speed bundles); null for size-based data plans and non-data services
   // True only when every field we needed was confidently extracted.
   // When false, canonicalPlanKey() falls back to a lightly-cleaned
   // version of the original text instead of guessing — a failed parse
@@ -113,23 +114,23 @@ export function normalizeNetworkOrBiller(raw: string): string {
 // maintained.
 const CABLE_TIER_PATTERNS: Record<string, Array<{ key: string; re: RegExp }>> = {
   DSTV: [
-    { key: "premium-french", re: /\bpremium\s*french\b/i },
-    { key: "premium-asia", re: /\bpremium\s*asia\b/i },
+    { key: "premium-french", re: /\bpremium[\s-]*french\b/i },
+    { key: "premium-asia", re: /\bpremium[\s-]*asia\b/i },
     { key: "premium", re: /\bpremium\b/i },
-    { key: "compact-plus", re: /\bcompact\s*\+|\bcompact\s*plus\b/i },
+    { key: "compact-plus", re: /\bcompact[\s-]*\+|\bcompact[\s-]*plus\b/i },
     { key: "compact", re: /\bcompact\b/i },
     { key: "confam", re: /\bconfam\b/i },
     { key: "yanga", re: /\byanga\b/i },
     { key: "padi", re: /\bpadi\b/i },
     { key: "asia", re: /\basia\b/i },
-    { key: "french-touch", re: /\bfrench\s*touch\b/i },
-    { key: "great-wall", re: /\bgreat\s*wall\b/i },
-    { key: "indian", re: /\bindian(?:\s*ultra)?\b/i },
+    { key: "french-touch", re: /\bfrench[\s-]*touch\b/i },
+    { key: "great-wall", re: /\bgreat[\s-]*wall\b/i },
+    { key: "indian", re: /\bindian(?:[\s-]*ultra)?\b/i },
     { key: "family", re: /\bfamily\b/i },
     { key: "access", re: /\baccess\b/i },
   ],
   GOtv: [
-    { key: "supa-plus", re: /\bsupa\s*plus\b/i },
+    { key: "supa-plus", re: /\bsupa[\s-]*plus\b/i },
     { key: "supa", re: /\bsupa\b/i },
     { key: "max", re: /\bmax\b/i },
     { key: "jolli", re: /\bjolli\b/i },
@@ -158,6 +159,26 @@ function extractCableTier(text: string, biller: string): string | null {
   const patterns = CABLE_TIER_PATTERNS[biller]
   if (!patterns) return null
   for (const { key, re } of patterns) {
+    if (re.test(text)) return key
+  }
+  return null
+}
+
+// Named data products with no fixed MB/GB size — "Collabo" and
+// "Always-On" are real MTN bundle families sold by validity+price
+// tier rather than a data quota (often unlimited-at-reduced-speed, or
+// social/app-specific). These need their own identity field, the same
+// way cable has "tier" instead of "size" — the family name IS the
+// product, not formatting noise. An unrecognized family name is NOT
+// guessed at; it falls through to low-confidence, same as an
+// unrecognized cable tier or an unparseable data size.
+const DATA_PLAN_FAMILY_PATTERNS: Array<{ key: string; re: RegExp }> = [
+  { key: "collabo", re: /\bcollabo\b/i },
+  { key: "always-on", re: /\balways[\s-]*on\b/i },
+]
+
+function extractPlanFamily(text: string): string | null {
+  for (const { key, re } of DATA_PLAN_FAMILY_PATTERNS) {
     if (re.test(text)) return key
   }
   return null
@@ -227,12 +248,25 @@ export function parsePlanIdentity(
 
   if (serviceType === "data") {
     const sizeMB = extractSizeMB(rawLabel)
-    // A data plan with no extractable size, or no extractable
-    // validity, is not confidently parsed — do NOT guess. Callers
-    // must fall back to a cleaned-but-unmerged code for these so a
-    // parsing gap never silently merges two different plans.
-    const confident = sizeMB !== null && validityDays !== null
-    return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, cableTier: null, confident }
+    if (sizeMB !== null) {
+      // Normal size-based data plan — size + validity both required,
+      // exactly as before. A size without validity is NOT confidently
+      // parsed — do not guess.
+      const confident = validityDays !== null
+      return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, cableTier: null, planFamily: null, confident }
+    }
+    // No data size found — check for a named plan family (Collabo,
+    // Always-On, ...) instead. These are real products identified by
+    // name + validity (+ often an embedded price, which is NOT part
+    // of the identity key — two providers' ₦2000 and ₦2500 versions
+    // of the same family+validity are still priced separately via
+    // provider_cost_kobo, not folded into plan_code). Confidence
+    // requires BOTH the family to be recognized AND a validity to be
+    // present — a recognized family with no validity is ambiguous
+    // (which duration is it?) and is not guessed at.
+    const planFamily = extractPlanFamily(rawLabel)
+    const confident = planFamily !== null && validityDays !== null
+    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, planFamily, confident }
   }
 
   if (serviceType === "cable") {
@@ -246,7 +280,7 @@ export function parsePlanIdentity(
     // at, exactly like an unparseable data size.
     const cableTier = extractCableTier(rawLabel, normalizedNetwork)
     const confident = cableTier !== null
-    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier, confident }
+    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier, planFamily: null, confident }
   }
 
   // Remaining non-size, non-cable plan-coded services (exam_pin,
@@ -257,7 +291,7 @@ export function parsePlanIdentity(
   // cleaned text alone.
   const cleaned = cleanToken(rawLabel)
   const confident = /^[a-z0-9-]{2,40}$/.test(cleaned)
-  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, confident }
+  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, planFamily: null, confident }
 }
 
 // Lightly-cleaned fallback slug used both for the "couldn't confidently
@@ -298,6 +332,14 @@ export function canonicalPlanKey(
     const categorySuffix = parsed.category === "standard" ? "" : `-${parsed.category}`
     return {
       planCode: `${parsed.sizeMB}mb-${parsed.validityDays}d${categorySuffix}`,
+      confident: true,
+    }
+  }
+
+  if (serviceType === "data" && parsed.planFamily !== null && parsed.validityDays !== null) {
+    const categorySuffix = parsed.category === "standard" ? "" : `-${parsed.category}`
+    return {
+      planCode: `${parsed.planFamily}-${parsed.validityDays}d${categorySuffix}`,
       confident: true,
     }
   }

@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { cn } from "@/lib/utils"
+import { Eye, EyeOff } from "lucide-react"
 
 interface VtuProvider {
   providerKey: string
@@ -29,6 +30,7 @@ export default function AdminProvidersPage() {
   const [loading, setLoading] = useState(true)
   const [editingCreds, setEditingCreds] = useState<{ type: "vtu" | "payment"; key: string } | null>(null)
   const [credsFields, setCredsFields] = useState<Record<string, string>>({})
+  const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({})
   const [credsLoading, setCredsLoading] = useState(false)
 
   async function getAuthHeader() {
@@ -138,6 +140,7 @@ export default function AdminProvidersPage() {
   async function openVtuCredsEditor(p: VtuProvider) {
     setEditingCreds({ type: "vtu", key: p.providerKey })
     setCredsFields({})
+    setVisibleFields({})
 
     if (!p.hasCredentials) return // nothing saved yet — blank fields is correct
 
@@ -252,6 +255,7 @@ export default function AdminProvidersPage() {
                       onClick={() => {
                         setEditingCreds({ type: "payment", key: p.providerKey })
                         setCredsFields({})
+                        setVisibleFields({})
                       }}
                       className="text-sm text-primary hover:underline"
                     >
@@ -287,14 +291,26 @@ export default function AdminProvidersPage() {
                 {fieldsFor(editingCreds.type, editingCreds.key).map((f) => (
                   <label key={f.key} className="block text-xs text-muted-foreground">
                     {f.label}
-                    <input
-                      type={f.secret ? "password" : "text"}
-                      value={credsFields[f.key] ?? ""}
-                      onChange={(e) => setCredsFields({ ...credsFields, [f.key]: e.target.value })}
-                      placeholder={f.placeholder}
-                      autoComplete="off"
-                      className="mt-1 w-full rounded-md border border-border px-3 py-1.5 font-mono text-sm"
-                    />
+                    <div className="relative mt-1">
+                      <input
+                        type={f.secret && !visibleFields[f.key] ? "password" : "text"}
+                        value={credsFields[f.key] ?? ""}
+                        onChange={(e) => setCredsFields({ ...credsFields, [f.key]: e.target.value })}
+                        placeholder={f.placeholder}
+                        autoComplete="off"
+                        className="w-full rounded-md border border-border px-3 py-1.5 pr-9 font-mono text-sm"
+                      />
+                      {f.secret && (
+                        <button
+                          type="button"
+                          onClick={() => setVisibleFields({ ...visibleFields, [f.key]: !visibleFields[f.key] })}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-secondary"
+                          aria-label={visibleFields[f.key] ? `Hide ${f.label}` : `Show ${f.label}`}
+                        >
+                          {visibleFields[f.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      )}
+                    </div>
                   </label>
                 ))}
                 <p className="text-xs text-muted-foreground">

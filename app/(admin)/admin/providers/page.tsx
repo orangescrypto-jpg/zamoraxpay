@@ -120,6 +120,11 @@ export default function AdminProvidersPage() {
       { key: "apiKey", label: "API Key", secret: true },
       { key: "baseUrl", label: "Base URL (leave blank for default)", placeholder: "https://connectbridge.com.ng/api" },
     ],
+    clubkonnect: [
+      { key: "userId", label: "UserID" },
+      { key: "apiKey", label: "APIKey", secret: true },
+      { key: "baseUrl", label: "Base URL (leave blank for default)", placeholder: "https://www.nellobytesystems.com" },
+    ],
   }
   const PAYMENT_CRED_FIELDS: { key: string; label: string; secret?: boolean; placeholder?: string }[] = [
     { key: "secretKey", label: "Secret Key", secret: true },

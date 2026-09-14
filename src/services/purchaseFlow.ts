@@ -200,7 +200,7 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
       ? cashbackEarnedKobo > 0
         ? `Purchase successful — you earned ₦${(cashbackEarnedKobo / 100).toLocaleString()} cashback`
         : "Purchase successful"
-      : `Purchase failed — ${routerResult.message} Your wallet has been refunded.`,
+      : `${routerResult.message} Your wallet has been refunded.`,
     chargedAmountKobo: pricing.chargeAmountKobo,
     newBalanceKobo,
     cashbackEarnedKobo,

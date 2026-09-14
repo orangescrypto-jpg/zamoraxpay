@@ -829,6 +829,20 @@ const PAIRGATE_CABLE_PROVIDER_SLUGS: Record<string, string> = {
   StarTimes: "startimes",
 }
 
+// Both Pairgate sync loops below fire one HTTP call per category/slug
+// in a tight loop with zero pacing between iterations. fetchWithRetry
+// already backs off *within* a single call on a 429, but that doesn't
+// help here — Pairgate's limit is per-second across ALL calls, so a
+// data sync with a dozen-plus categories can trip it repeatedly before
+// any individual call's own retry logic matters, as seen live ("Please
+// wait 1 seconds before retrying" firing on both Data and Cable syncs
+// back to back). A small fixed delay between iterations keeps every
+// request loop comfortably under a 1-request-per-second ceiling
+// without needing to know Pairgate's exact limit.
+function pairgateThrottleDelay() {
+  return new Promise((resolve) => setTimeout(resolve, 1100))
+}
+
 // Cable billers as PairGate might return their provider_name (casing
 // varies by doc example — "DSTV" in the docs, but treat this as
 // case-insensitive-ish by normalizing both sides at lookup time)
@@ -937,7 +951,8 @@ export async function syncPairgateDataPlans(
   let fetched = 0
   const counts = { created: 0, updated: 0, skipped: 0 }
 
-  for (const cat of categories) {
+  for (let i = 0; i < categories.length; i++) {
+    const cat = categories[i]
     const providerName = cat.provider_name
     const planType = cat.plan_type
     if (!providerName || !planType) continue
@@ -955,6 +970,8 @@ export async function syncPairgateDataPlans(
       fetched += entries.length
       await pairgateUpsertPlans("data", returnedProviderName, entries, adminUserId, nativeDB, counts)
     }
+
+    if (i < categories.length - 1) await pairgateThrottleDelay()
   }
 
   return { fetched, ...counts }
@@ -974,7 +991,9 @@ export async function syncPairgateCablePlans(
   let fetched = 0
   const counts = { created: 0, updated: 0, skipped: 0 }
 
-  for (const [, slug] of Object.entries(PAIRGATE_CABLE_PROVIDER_SLUGS)) {
+  const slugEntries = Object.entries(PAIRGATE_CABLE_PROVIDER_SLUGS)
+  for (let i = 0; i < slugEntries.length; i++) {
+    const [, slug] = slugEntries[i]
     const res = await fetchWithRetry(
       `${baseUrl}/cable-plans?provider_id=${encodeURIComponent(slug)}`,
       { method: "GET", headers },
@@ -987,6 +1006,8 @@ export async function syncPairgateCablePlans(
       fetched += entries.length
       await pairgateUpsertPlans("cable", returnedProviderName, entries, adminUserId, nativeDB, counts)
     }
+
+    if (i < slugEntries.length - 1) await pairgateThrottleDelay()
   }
 
   return { fetched, ...counts }

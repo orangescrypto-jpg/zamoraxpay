@@ -42,6 +42,26 @@ function backoffDelay(attempt: number, baseDelayMs: number) {
   return exp + jitter
 }
 
+/**
+ * Reads Retry-After from a 429/503 response, if present, and returns
+ * the wait time in ms. Providers that actually tell us how long to
+ * wait (Retry-After: 30, or an HTTP-date) should always win over our
+ * own blind exponential guess — guessing is what caused repeated 429s
+ * against Pairgate even after backing off, because our fixed delays
+ * had no relationship to their actual rate-limit window. Returns null
+ * if the header is absent or unparseable, so the caller falls back to
+ * backoffDelay as before.
+ */
+function retryAfterMs(res: Response): number | null {
+  const header = res.headers.get("Retry-After")
+  if (!header) return null
+  const asSeconds = Number(header)
+  if (Number.isFinite(asSeconds)) return Math.max(0, asSeconds * 1000)
+  const asDate = Date.parse(header)
+  if (!Number.isNaN(asDate)) return Math.max(0, asDate - Date.now())
+  return null
+}
+
 export async function fetchWithRetry(
   input: string | URL,
   init: RequestInit = {},
@@ -84,7 +104,7 @@ export async function fetchWithRetry(
       // so the caller sees the real failure instead of a thrown error.
       if (attempt === retries - 1) return res
 
-      await sleep(backoffDelay(attempt, baseDelayMs))
+      await sleep(retryAfterMs(res) ?? backoffDelay(attempt, baseDelayMs))
       continue
     } catch (err) {
       clearTimeout(timeout)

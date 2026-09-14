@@ -32,6 +32,7 @@ const NETWORK_LABEL: Record<string, string> = {
   Airtel: "Airtel",
   "9mobile": "9mobile",
   t2mobile: "9mobile",
+  m_9mobile: "9mobile",
 }
 
 interface ParsedPlan {
@@ -50,14 +51,37 @@ function parsePlansResponse(json: any): ParsedPlan[] {
   const out: ParsedPlan[] = []
   if (!json || typeof json !== "object") return out
 
-  for (const [networkKey, entries] of Object.entries(json)) {
+  // ClubKonnect's real APIDatabundlePlansV2.asp response wraps every
+  // network under a top-level "MOBILE_NETWORK" key, e.g.
+  // { "MOBILE_NETWORK": { "MTN": [ { "ID":"01","PRODUCT":[...] } ], ... } }
+  // — descend into it when present rather than treating MOBILE_NETWORK
+  // itself as a network (which previously matched nothing and made
+  // every sync silently return 0 plans regardless of credentials).
+  const networksRoot = json.MOBILE_NETWORK && typeof json.MOBILE_NETWORK === "object" ? json.MOBILE_NETWORK : json
+
+  for (const [networkKey, entries] of Object.entries(networksRoot)) {
     const network = NETWORK_LABEL[networkKey] ?? networkKey
-    const list = Array.isArray(entries) ? entries : Object.values(entries ?? {})
+    // Each network's value is an array of one object like
+    // { "ID": "01", "PRODUCT": [ {...}, {...} ] } — flatten out the
+    // PRODUCT arrays rather than treating the wrapper objects
+    // themselves as plan entries.
+    const wrappers = Array.isArray(entries) ? entries : Object.values(entries ?? {})
+    const list = (wrappers as any[]).flatMap((w) =>
+      w && typeof w === "object" && Array.isArray(w.PRODUCT) ? w.PRODUCT : Array.isArray(w) ? w : [w],
+    )
     for (const entry of list as any[]) {
       if (!entry || typeof entry !== "object") continue
-      const planId = String(entry.DataPlan ?? entry.dataplan ?? entry.plan_id ?? entry.PlanId ?? entry.id ?? "")
-      const label = String(entry.Plan ?? entry.PackageName ?? entry.plan ?? entry.name ?? entry.Description ?? "")
-      const priceRaw = entry.Price ?? entry.price ?? entry.Amount ?? entry.amount
+      // Real field names are PRODUCT_ID / PRODUCT_NAME / PRODUCT_AMOUNT
+      // (see APIDatabundlePlansV2.asp sample response); the older
+      // DataPlan/Plan/Price aliases are kept as fallbacks in case a
+      // different ClubKonnect endpoint/version uses them.
+      const planId = String(
+        entry.PRODUCT_ID ?? entry.DataPlan ?? entry.dataplan ?? entry.plan_id ?? entry.PlanId ?? entry.id ?? "",
+      )
+      const label = String(
+        entry.PRODUCT_NAME ?? entry.Plan ?? entry.PackageName ?? entry.plan ?? entry.name ?? entry.Description ?? "",
+      )
+      const priceRaw = entry.PRODUCT_AMOUNT ?? entry.Price ?? entry.price ?? entry.Amount ?? entry.amount
       const priceNaira = typeof priceRaw === "string" ? parseFloat(priceRaw.replace(/[^0-9.]/g, "")) : Number(priceRaw)
       if (planId && !Number.isNaN(priceNaira)) {
         out.push({ network, planId, label, priceNaira })
@@ -238,4 +262,187 @@ export async function syncVtugateDataPlans(
   }
 
   return { fetched, created, updated, skipped }
+}
+
+// --- PairGate -------------------------------------------------------
+//
+// Verified against live docs: https://pairgate.com/developers/data-plans
+// and https://pairgate.com/developers/cable-plans (both require the
+// Bearer API key already stored on the Providers page).
+//
+// Data plans: PairGate requires BOTH provider_id (network slug) and
+// plan_type (a category label — CG, CG_LITE, SME, GIFTING, AWOOF) as
+// query params on GET /data-plans, and doesn't expose a single
+// "everything" endpoint — so this is a two-step sync, same shape as
+// VTUGate's: first call GET /data-plans/categories to discover every
+// (provider, plan_type) combination that actually exists, then fetch
+// each one in turn. Response is { data: { "<ProviderName>": [
+// { plan_id, name, price, duration } ] } } — grouped by provider
+// display name (e.g. "MTN"), not slug, so NETWORK_LABEL normalizes
+// that against the same "MTN"/"Glo"/"Airtel"/"9mobile" convention
+// every other provider's mappings use.
+//
+// Cable plans: simpler — one GET /cable-plans?provider_id=<slug> per
+// billers, response shaped the same way: { data: { "DSTV": [
+// { plan_id, name, price } ] } }.
+//
+// Both endpoints return `price` already in naira (not kobo), same
+// unit ClubKonnect/VTUGate use, so the *100 conversion below matches.
+
+const PAIRGATE_CABLE_PROVIDER_SLUGS: Record<string, string> = {
+  DSTV: "dstv",
+  GOtv: "gotv",
+  StarTimes: "startimes",
+}
+
+// Cable billers as PairGate might return their provider_name (casing
+// varies by doc example — "DSTV" in the docs, but treat this as
+// case-insensitive-ish by normalizing both sides at lookup time)
+// against our own NETWORKS_OR_BILLERS convention ("DSTV", "GOtv",
+// "StarTimes"). Separate from NETWORK_LABEL, which is mobile-network
+// only (MTN/Glo/Airtel/9mobile) and would silently pass cable billers
+// through unmapped/mis-cased if reused here.
+const CABLE_BILLER_LABEL: Record<string, string> = {
+  dstv: "DSTV",
+  gotv: "GOtv",
+  startimes: "StarTimes",
+}
+
+interface PairgatePlanEntry {
+  plan_id?: string | number
+  name?: string
+  price?: number | string
+}
+
+function parsePairgatePlansByProvider(json: any): Record<string, PairgatePlanEntry[]> {
+  const data = json?.data
+  if (!data || typeof data !== "object") return {}
+  const out: Record<string, PairgatePlanEntry[]> = {}
+  for (const [providerName, entries] of Object.entries(data)) {
+    out[providerName] = Array.isArray(entries) ? (entries as PairgatePlanEntry[]) : []
+  }
+  return out
+}
+
+async function pairgateUpsertPlans(
+  serviceType: "data" | "cable",
+  providerName: string,
+  entries: PairgatePlanEntry[],
+  adminUserId: string,
+  nativeDB: any,
+  counts: { created: number; updated: number; skipped: number },
+) {
+  const network =
+    serviceType === "cable"
+      ? CABLE_BILLER_LABEL[providerName.toLowerCase()] ?? providerName
+      : NETWORK_LABEL[providerName] ?? providerName
+  for (const entry of entries) {
+    const planId = String(entry.plan_id ?? "")
+    const priceRaw = entry.price
+    const priceNaira = typeof priceRaw === "string" ? parseFloat(priceRaw.replace(/[^0-9.]/g, "")) : Number(priceRaw)
+    const costKobo = Math.round(priceNaira * 100)
+    if (!planId || Number.isNaN(costKobo) || costKobo <= 0) {
+      counts.skipped++
+      continue
+    }
+    const existing = await findMappingByNaturalKey(serviceType, network, planId, "pairgate", nativeDB)
+    await upsertPlanMapping(
+      {
+        id: existing?.id,
+        serviceType,
+        networkOrBiller: network,
+        planCode: planId,
+        providerKey: "pairgate",
+        providerPlanId: planId,
+        providerCostKobo: costKobo,
+        providerPlanLabel: entry.name ?? null,
+      },
+      adminUserId,
+      nativeDB,
+    )
+    if (existing) counts.updated++
+    else counts.created++
+  }
+}
+
+export async function syncPairgateDataPlans(
+  adminUserId: string,
+  credentials: { apiKey?: string; baseUrl?: string } = {},
+  nativeDB?: any,
+): Promise<PlanSyncResult> {
+  const baseUrl = credentials.baseUrl || process.env.PAIRGATE_BASE_URL || "https://pairgate.com/api/v1"
+  const apiKey = credentials.apiKey || process.env.PAIRGATE_API_KEY
+  if (!apiKey) throw new Error("Pairgate API key not configured")
+
+  const headers = { Authorization: `Bearer ${apiKey}`, "Cache-Control": "no-cache" }
+
+  // Discover every (provider_id, plan_type) pair that actually exists,
+  // rather than hardcoding the plan_type list — categories vary per
+  // network and PairGate may add new ones without notice.
+  const categoriesRes = await fetchWithRetry(
+    `${baseUrl}/data-plans/categories`,
+    { method: "GET", headers },
+    { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+  )
+  const categoriesJson = await categoriesRes.json()
+  const categories: { provider_name?: string; plan_type?: string }[] = Array.isArray(categoriesJson?.data)
+    ? categoriesJson.data
+    : []
+
+  let fetched = 0
+  const counts = { created: 0, updated: 0, skipped: 0 }
+
+  for (const cat of categories) {
+    const providerName = cat.provider_name
+    const planType = cat.plan_type
+    if (!providerName || !planType) continue
+    const providerSlug = providerName.toLowerCase()
+
+    const plansRes = await fetchWithRetry(
+      `${baseUrl}/data-plans?provider_id=${encodeURIComponent(providerSlug)}&plan_type=${encodeURIComponent(planType)}`,
+      { method: "GET", headers },
+      { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+    )
+    const plansJson = await plansRes.json()
+    const byProvider = parsePairgatePlansByProvider(plansJson)
+
+    for (const [returnedProviderName, entries] of Object.entries(byProvider)) {
+      fetched += entries.length
+      await pairgateUpsertPlans("data", returnedProviderName, entries, adminUserId, nativeDB, counts)
+    }
+  }
+
+  return { fetched, ...counts }
+}
+
+export async function syncPairgateCablePlans(
+  adminUserId: string,
+  credentials: { apiKey?: string; baseUrl?: string } = {},
+  nativeDB?: any,
+): Promise<PlanSyncResult> {
+  const baseUrl = credentials.baseUrl || process.env.PAIRGATE_BASE_URL || "https://pairgate.com/api/v1"
+  const apiKey = credentials.apiKey || process.env.PAIRGATE_API_KEY
+  if (!apiKey) throw new Error("Pairgate API key not configured")
+
+  const headers = { Authorization: `Bearer ${apiKey}`, "Cache-Control": "no-cache" }
+
+  let fetched = 0
+  const counts = { created: 0, updated: 0, skipped: 0 }
+
+  for (const [, slug] of Object.entries(PAIRGATE_CABLE_PROVIDER_SLUGS)) {
+    const res = await fetchWithRetry(
+      `${baseUrl}/cable-plans?provider_id=${encodeURIComponent(slug)}`,
+      { method: "GET", headers },
+      { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+    )
+    const json = await res.json()
+    const byProvider = parsePairgatePlansByProvider(json)
+
+    for (const [returnedProviderName, entries] of Object.entries(byProvider)) {
+      fetched += entries.length
+      await pairgateUpsertPlans("cable", returnedProviderName, entries, adminUserId, nativeDB, counts)
+    }
+  }
+
+  return { fetched, ...counts }
 }

@@ -537,6 +537,22 @@ export async function syncVtugateDataPlans(
         skipped++
         continue
       }
+      // VTUGate's fetchdataplans response returns a genuine plan_code
+      // for most plans (e.g. "1gb-7day-cg"), but for some rows "code"
+      // is actually just the plan's own price re-echoed as a string
+      // (e.g. "1499.91", "20000.01") — not a stable identifier at all.
+      // Storing that as plan_code creates a distinct (and meaningless)
+      // pricing_rules row every time the price changes, floods the
+      // buy-data plan picker with duplicate-looking numeric entries,
+      // and can never be reliably re-matched across syncs. A plan_code
+      // that parses as a plain number (optionally with a decimal) is
+      // never legitimate — every real VTUGate code seen in practice is
+      // alphanumeric with letters/dashes — so reject it here rather
+      // than downstream, before it ever reaches provider_plan_mappings.
+      if (/^\d+(\.\d+)?$/.test(code)) {
+        skipped++
+        continue
+      }
       const providerPlanId = `${planServiceId}:${code}`
       const existing = await findMappingByNaturalKey("data", network, code, "vtugate", nativeDB)
       await upsertPlanMapping(

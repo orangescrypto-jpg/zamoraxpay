@@ -54,6 +54,27 @@ export async function getPlanProviderOptions(
   return (result.results ?? []).map(rowToMapping)
 }
 
+// True if this exact plan_code has at least one provider mapping that
+// is both is_active AND currently enabled in vtu_provider_configs —
+// i.e. the router would actually have something to try for it right
+// now. Used pre-debit by purchaseFlow to detect a dead plan BEFORE
+// charging the customer, not after a failed router attempt — so a
+// cross-variant fallback offer can be made without ever needing to
+// debit-then-refund-then-redebit.
+export async function hasLiveRoute(
+  serviceType: VtuServiceType,
+  networkOrBiller: string,
+  planCode: string,
+  nativeDB?: any,
+): Promise<boolean> {
+  const options = await getPlanProviderOptions(serviceType, networkOrBiller, planCode, nativeDB)
+  if (options.length === 0) return true // unmapped plan — no liveness signal, same "nothing to check" treatment as listPlans
+  const { getActiveVtuProviders } = await import("@/src/services/config")
+  const activeProviders = await getActiveVtuProviders(serviceType, nativeDB)
+  const activeKeys = new Set(activeProviders.map((p) => p.providerKey))
+  return options.some((o) => activeKeys.has(o.providerKey))
+}
+
 // Full admin listing (optionally filtered), including inactive rows,
 // for the admin plan-mapping management screen.
 export async function listPlanMappings(

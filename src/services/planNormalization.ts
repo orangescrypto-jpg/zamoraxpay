@@ -47,6 +47,7 @@ export interface ParsedPlanIdentity {
   sizeMB: number | null // null when this isn't a size-based plan (e.g. cable, exam_pin)
   validityDays: number | null // null when no validity applies
   category: string // "standard" when the provider draws no distinction
+  cableTier: string | null // e.g. "compact", "max", "nova" — cable's equivalent of size; null for non-cable services
   // True only when every field we needed was confidently extracted.
   // When false, canonicalPlanKey() falls back to a lightly-cleaned
   // version of the original text instead of guessing — a failed parse
@@ -89,6 +90,77 @@ const NETWORK_OR_BILLER_LABEL: Record<string, string> = {
 export function normalizeNetworkOrBiller(raw: string): string {
   const key = raw.trim().toLowerCase().replace(/[^a-z0-9]/g, "")
   return NETWORK_OR_BILLER_LABEL[key] ?? raw.trim()
+}
+
+// Cable package tier names, per biller. This is the cable equivalent
+// of "size" for data plans — the actual product identity (DSTV
+// Compact vs DSTV Premium are genuinely different subscriptions, not
+// a formatting difference), so it must be extracted and preserved
+// just as rigorously as data's size field, not folded away.
+//
+// Longest/most-specific pattern first within each biller so e.g.
+// "Compact Plus" matches before the plain "Compact" fragment inside
+// it, and "Confam" (a real DSTV tier) doesn't get swallowed by a
+// shorter unrelated match.
+//
+// This list is necessarily incomplete — cable providers add/rename
+// tiers over time. A tier not in this list falls through to
+// tier === null, which means parsePlanIdentity treats that cable
+// label as NOT confidently parsed (see below) rather than guessing —
+// exactly the same "refuse rather than guess wrong" rule data sizes
+// follow. New tiers should be added here as they're seen in a
+// provider's real catalog, the same way NETWORK_OR_BILLER_LABEL is
+// maintained.
+const CABLE_TIER_PATTERNS: Record<string, Array<{ key: string; re: RegExp }>> = {
+  DSTV: [
+    { key: "premium-french", re: /\bpremium\s*french\b/i },
+    { key: "premium-asia", re: /\bpremium\s*asia\b/i },
+    { key: "premium", re: /\bpremium\b/i },
+    { key: "compact-plus", re: /\bcompact\s*\+|\bcompact\s*plus\b/i },
+    { key: "compact", re: /\bcompact\b/i },
+    { key: "confam", re: /\bconfam\b/i },
+    { key: "yanga", re: /\byanga\b/i },
+    { key: "padi", re: /\bpadi\b/i },
+    { key: "asia", re: /\basia\b/i },
+    { key: "french-touch", re: /\bfrench\s*touch\b/i },
+    { key: "great-wall", re: /\bgreat\s*wall\b/i },
+    { key: "indian", re: /\bindian(?:\s*ultra)?\b/i },
+    { key: "family", re: /\bfamily\b/i },
+    { key: "access", re: /\baccess\b/i },
+  ],
+  GOtv: [
+    { key: "supa-plus", re: /\bsupa\s*plus\b/i },
+    { key: "supa", re: /\bsupa\b/i },
+    { key: "max", re: /\bmax\b/i },
+    { key: "jolli", re: /\bjolli\b/i },
+    { key: "jinja", re: /\bjinja\b/i },
+    { key: "smallie", re: /\bsmallie\b/i },
+    { key: "value", re: /\bvalue\b/i },
+    { key: "lite", re: /\blite\b/i },
+  ],
+  StarTimes: [
+    { key: "nova", re: /\bnova\b/i },
+    { key: "basic", re: /\bbasic\b/i },
+    { key: "smart", re: /\bsmart\b/i },
+    { key: "classic", re: /\bclassic\b/i },
+    { key: "super", re: /\bsuper\b/i },
+    { key: "unique", re: /\bunique\b/i },
+    { key: "global", re: /\bglobal\b/i },
+  ],
+  Showmax: [
+    { key: "mobile", re: /\bmobile\b/i },
+    { key: "standard", re: /\bstandard\b/i },
+    { key: "pro", re: /\bpro\b/i },
+  ],
+}
+
+function extractCableTier(text: string, biller: string): string | null {
+  const patterns = CABLE_TIER_PATTERNS[biller]
+  if (!patterns) return null
+  for (const { key, re } of patterns) {
+    if (re.test(text)) return key
+  }
+  return null
 }
 
 // Extracts size+unit anywhere in the text: "200mb", "1 GB", "1.5GB".
@@ -140,9 +212,8 @@ function extractCategory(text: string): string {
 
 // Parses a raw provider label/plan-code into its identity fields.
 // serviceType matters: only "data" plans are expected to have a
-// size — cable/exam_pin/epin plans are validity- or denomination-based
-// without a data size, so a missing size there is normal, not a
-// failed parse.
+// size — cable plans use a tier name instead of a size — and
+// exam_pin/epin plans are denomination/type-based with neither.
 export function parsePlanIdentity(
   rawLabel: string,
   networkOrBiller: string,
@@ -159,21 +230,32 @@ export function parsePlanIdentity(
     // must fall back to a cleaned-but-unmerged code for these so a
     // parsing gap never silently merges two different plans.
     const confident = sizeMB !== null && validityDays !== null
-    return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, confident }
+    return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, cableTier: null, confident }
   }
 
-  // Non-data plan-coded services (cable, exam_pin, epin): no data
-  // size applies. Confidence just requires the category extraction to
-  // have found something identity-bearing OR the label to otherwise
-  // be short/stable enough that format-folding alone is safe. We
-  // treat these as confident whenever a validity was found (cable
-  // packages) OR the raw label, once cleaned, is already short and
-  // token-like (typical for exam_pin: "registration", "result-checker",
-  // epin denominations: "100", "200") — those don't need size/validity
-  // extraction to be safely identity-matched on cleaned text alone.
+  if (serviceType === "cable") {
+    // Cable's identity-bearing field is the package TIER (Compact,
+    // Max, Nova, ...) — this is the cable equivalent of "size" for
+    // data plans, a real product distinction, never folded away.
+    // Validity ("1 Month") often accompanies it but isn't required —
+    // some providers list a bare tier with no validity in the label
+    // at all (validity is implied to be monthly). Confidence requires
+    // the tier to be recognized; an unrecognized tier is NOT guessed
+    // at, exactly like an unparseable data size.
+    const cableTier = extractCableTier(rawLabel, normalizedNetwork)
+    const confident = cableTier !== null
+    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier, confident }
+  }
+
+  // Remaining non-size, non-cable plan-coded services (exam_pin,
+  // epin): identity is a fixed token (denomination or pin type), not
+  // size/validity/tier. Confidence just requires the label to
+  // cleanly reduce to a short, stable slug — no size/validity/tier
+  // extraction needed for these to be safely identity-matched on
+  // cleaned text alone.
   const cleaned = cleanToken(rawLabel)
-  const confident = validityDays !== null || /^[a-z0-9-]{2,40}$/.test(cleaned)
-  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, confident }
+  const confident = /^[a-z0-9-]{2,40}$/.test(cleaned)
+  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, confident }
 }
 
 // Lightly-cleaned fallback slug used both for the "couldn't confidently
@@ -218,11 +300,19 @@ export function canonicalPlanKey(
     }
   }
 
-  // Non-data plan-coded services: recompose from validity + category
-  // when we have them (cable packages typically do), otherwise fall
-  // back to the cleaned token (exam_pin/epin — "registration",
-  // "result-checker", "100", "200" already are the identity, with no
-  // separate size/validity to recompose from).
+  if (serviceType === "cable" && parsed.cableTier !== null) {
+    // Validity is appended only when present in the label — many
+    // cable catalogs list one row per tier with validity implied
+    // (monthly) rather than stated, so its absence here does not
+    // reduce confidence the way it does for data plans.
+    const validitySuffix = parsed.validityDays !== null ? `-${parsed.validityDays}d` : ""
+    return { planCode: `${parsed.cableTier}${validitySuffix}`, confident: true }
+  }
+
+  // Any other non-data, non-cable plan-coded service with a validity
+  // component recomposes from validity + category. In practice
+  // exam_pin/epin have neither and fall through to the cleaned token
+  // below instead.
   if (parsed.validityDays !== null) {
     const categorySuffix = parsed.category === "standard" ? "" : `-${parsed.category}`
     return { planCode: `${parsed.validityDays}d${categorySuffix}`, confident: true }

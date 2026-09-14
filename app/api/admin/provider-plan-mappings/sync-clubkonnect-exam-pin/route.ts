@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth-server"
 import { syncClubkonnectExamPinPrices } from "@/src/services/providerPlanSync"
 import { getVtuProviderCredentials } from "@/src/services/config"
+import { reconcilePricingFromMappings } from "@/src/services/pricingReconcile"
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req)
@@ -11,6 +12,7 @@ export async function POST(req: NextRequest) {
   try {
     const credentials = await getVtuProviderCredentials("clubkonnect")
     const result = await syncClubkonnectExamPinPrices(auth.uid, credentials)
+    await reconcilePricingFromMappings("exam_pin", auth.uid)
     return NextResponse.json({ success: true, ...result })
   } catch (err) {
     return NextResponse.json(

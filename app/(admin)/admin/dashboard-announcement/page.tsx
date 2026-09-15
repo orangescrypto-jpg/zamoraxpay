@@ -8,6 +8,9 @@ import { createClient } from "@/src/services/providers/supabase/client"
 import { cn } from "@/lib/utils"
 import { ImagePicker } from "@/components/admin/ImagePicker"
 
+type DisplayStyle = "banner" | "popup"
+type Audience = "all" | "retail" | "reseller"
+
 interface AdminAnnouncement {
   id: string
   text: string | null
@@ -15,6 +18,10 @@ interface AdminAnnouncement {
   link_url: string | null
   sort_order: number
   is_active: number
+  display_style: DisplayStyle
+  background_color: string | null
+  audience: Audience
+  show_once: number
 }
 
 export default function AdminDashboardAnnouncementPage() {
@@ -23,6 +30,10 @@ export default function AdminDashboardAnnouncementPage() {
   const [draftText, setDraftText] = useState("")
   const [draftLink, setDraftLink] = useState("")
   const [draftImageUrl, setDraftImageUrl] = useState("")
+  const [draftDisplayStyle, setDraftDisplayStyle] = useState<DisplayStyle>("banner")
+  const [draftBackgroundColor, setDraftBackgroundColor] = useState("#0F1E4D")
+  const [draftAudience, setDraftAudience] = useState<Audience>("all")
+  const [draftShowOnce, setDraftShowOnce] = useState(false)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -55,12 +66,20 @@ export default function AdminDashboardAnnouncementPage() {
         imageUrl: draftImageUrl || null,
         linkUrl: draftLink || null,
         sortOrder: announcements.length,
+        displayStyle: draftDisplayStyle,
+        backgroundColor: draftBackgroundColor || null,
+        audience: draftAudience,
+        showOnce: draftDisplayStyle === "popup" ? draftShowOnce : false,
       }),
     })
 
     setDraftText("")
     setDraftLink("")
     setDraftImageUrl("")
+    setDraftDisplayStyle("banner")
+    setDraftBackgroundColor("#0F1E4D")
+    setDraftAudience("all")
+    setDraftShowOnce(false)
     loadAnnouncements()
   }
 
@@ -106,15 +125,35 @@ export default function AdminDashboardAnnouncementPage() {
     <div className="mx-auto max-w-4xl p-6">
       <h1 className="mb-1 text-2xl font-heading font-bold">Dashboard Announcement</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Shown only on the user dashboard, between the wallet balance card and Quick actions. Use
-        text, an image, or both per slide — the link is optional; leave it blank for a plain
-        announcement. Multiple active slides auto-rotate every 5 seconds and can also be swiped
-        manually, same as the header banner. Use the arrows below to reorder.
+        Banner items show as a strip between the wallet balance card and Quick actions, and
+        auto-rotate every 5 seconds if there's more than one. Popup items show as a centered modal
+        once the dashboard loads — only the first eligible popup shows at a time. Use text, an
+        image, or both per item; the link is optional. Audience lets you target retail or reseller
+        users only, or leave it as "Everyone". Use the arrows below to reorder banner items.
       </p>
 
       {/* Add new announcement */}
       <div className="mb-8 rounded-lg border border-border p-4">
-        <h2 className="mb-3 text-sm font-semibold text-secondary">Add New Slide</h2>
+        <h2 className="mb-3 text-sm font-semibold text-secondary">Add New Item</h2>
+
+        <div className="mb-3">
+          <label className="mb-1 block text-sm font-medium text-secondary">Display style</label>
+          <div className="flex gap-2">
+            {(["banner", "popup"] as DisplayStyle[]).map((style) => (
+              <button
+                key={style}
+                type="button"
+                onClick={() => setDraftDisplayStyle(style)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-medium capitalize",
+                  draftDisplayStyle === style ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {style}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="mb-3">
           <ImagePicker value={draftImageUrl} onChange={setDraftImageUrl} folder="banners" label="Image (optional)" />
@@ -140,12 +179,61 @@ export default function AdminDashboardAnnouncementPage() {
           />
         </div>
 
+        <div className="mb-3 flex items-center gap-3">
+          <label className="text-sm font-medium text-secondary">Background color</label>
+          <input
+            type="color"
+            value={draftBackgroundColor}
+            onChange={(e) => setDraftBackgroundColor(e.target.value)}
+            className="h-8 w-14 cursor-pointer rounded border border-border"
+          />
+          <span className="text-xs text-muted-foreground">Used when there's no image, or behind a popup's text</span>
+        </div>
+
+        <div className="mb-3">
+          <label className="mb-1 block text-sm font-medium text-secondary">Audience</label>
+          <div className="flex gap-2">
+            {([
+              { value: "all", label: "Everyone" },
+              { value: "retail", label: "Retail" },
+              { value: "reseller", label: "Reseller" },
+            ] as { value: Audience; label: string }[]).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDraftAudience(opt.value)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-medium",
+                  draftAudience === opt.value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {draftDisplayStyle === "popup" && (
+          <div className="mb-3 flex items-center gap-2">
+            <input
+              id="show-once"
+              type="checkbox"
+              checked={draftShowOnce}
+              onChange={(e) => setDraftShowOnce(e.target.checked)}
+              className="h-4 w-4 rounded border-border"
+            />
+            <label htmlFor="show-once" className="text-sm text-secondary">
+              Show only once per user (otherwise reappears every login)
+            </label>
+          </div>
+        )}
+
         <button
           onClick={handleAdd}
           disabled={!draftText && !draftImageUrl}
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
-          Add Slide
+          Add Item
         </button>
       </div>
 
@@ -175,9 +263,28 @@ export default function AdminDashboardAnnouncementPage() {
               {item.image_url && (
                 <img src={item.image_url} alt={item.text ?? ""} className="h-14 w-14 rounded-xl object-cover" />
               )}
+              {!item.image_url && item.background_color && (
+                <div
+                  className="h-14 w-14 shrink-0 rounded-xl"
+                  style={{ backgroundColor: item.background_color }}
+                />
+              )}
               <div className="flex-1">
                 <p className="text-sm font-medium">{item.text || "(image only)"}</p>
                 {item.link_url && <p className="text-xs text-muted-foreground">{item.link_url}</p>}
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium capitalize text-muted-foreground">
+                    {item.display_style}
+                  </span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium capitalize text-muted-foreground">
+                    {item.audience === "all" ? "Everyone" : item.audience}
+                  </span>
+                  {item.display_style === "popup" && item.show_once === 1 && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      Once only
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => toggleActive(item)}

@@ -52,7 +52,6 @@
 import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
-import { getLivePlanProviderOptions } from "@/src/services/providerPlanMappings"
 import { getPricingPolicy, applyFee, type PricingBasisStrategy } from "@/src/services/pricingPolicies"
 
 export interface ReconcileResult {
@@ -146,30 +145,86 @@ export async function reconcilePricingFromMappings(
 
   const result: ReconcileResult = { scanned: 0, created: 0, updated: 0, skippedManual: 0, skippedNoCost: 0 }
 
+  // Everything below used to be 3–4 sequential D1 round-trips PER
+  // PLAN (getLivePlanProviderOptions re-querying provider_plan_mappings
+  // AND vtu_provider_configs from scratch every iteration, plus a
+  // pricing_rules SELECT, plus the UPDATE/INSERT) — fine for exam_pin's
+  // handful of plans, but on data (hundreds of plans across 4+
+  // networks × every size/validity/category) that serialized loop
+  // routinely blew past the serverless function's execution time
+  // limit, killing the request mid-flight and returning the
+  // platform's own timeout error page instead of ever reaching our
+  // JSON response (the "Unexpected token 'A', is not valid JSON"
+  // error the admin saw is that failure mode, not a real save
+  // failure). Fetching the three shared inputs ONCE up front, then
+  // running the remaining per-plan writes concurrently, turns N*3-4
+  // sequential round-trips into ~3 fixed ones + N concurrent ones.
+  const [allMappingsResult, activeProviders, existingRulesResult] = await Promise.all([
+    d1Query(
+      `SELECT * FROM provider_plan_mappings
+       WHERE service_type = ? AND is_active = 1
+       ORDER BY provider_cost_kobo ASC`,
+      [serviceType],
+      nativeDB,
+    ),
+    (async () => {
+      const { getActiveVtuProviders } = await import("@/src/services/config")
+      return getActiveVtuProviders(serviceType, nativeDB)
+    })(),
+    d1Query(
+      `SELECT id, network_or_biller, plan_code, auto_priced FROM pricing_rules
+       WHERE service_type = ?`,
+      [serviceType],
+      nativeDB,
+    ),
+  ])
+
+  const activeProviderKeys = new Set(activeProviders.map((p) => p.providerKey))
+
+  // Group all-mappings rows by (network_or_biller, plan_code) once,
+  // filtered to only providers currently enabled — same live-provider
+  // definition getLivePlanProviderOptions used, just computed from the
+  // one bulk fetch instead of a fresh query per plan. Rows already
+  // arrive cheapest-first from the ORDER BY above, so each group stays
+  // cheapest-first too.
+  type MappingRow = { provider_key: string; provider_cost_kobo: number }
+  const liveOptionsByPlan = new Map<string, MappingRow[]>()
+  for (const row of (allMappingsResult.results ?? []) as any[]) {
+    if (!activeProviderKeys.has(row.provider_key)) continue
+    const key = `${row.network_or_biller}\u0000${row.plan_code}`
+    const list = liveOptionsByPlan.get(key) ?? []
+    list.push({ provider_key: row.provider_key, provider_cost_kobo: row.provider_cost_kobo })
+    liveOptionsByPlan.set(key, list)
+  }
+
+  const existingRuleByPlan = new Map<string, { id: string; auto_priced: number }>()
+  for (const row of (existingRulesResult.results ?? []) as any[]) {
+    existingRuleByPlan.set(`${row.network_or_biller}\u0000${row.plan_code}`, { id: row.id, auto_priced: row.auto_priced })
+  }
+
+  const writes: Promise<void>[] = []
+
   for (const { network_or_biller: networkOrBiller, plan_code: planCode } of distinctPlans) {
     result.scanned++
+    const key = `${networkOrBiller}\u0000${planCode}`
 
     // Live options only — excludes any provider the admin has
     // toggled off, not just inactive mappings. Same source the router
     // uses for its own candidate list, so a toggle changes price and
     // routing together, never one without the other.
-    const options = await getLivePlanProviderOptions(serviceType, networkOrBiller, planCode, nativeDB)
+    const options = liveOptionsByPlan.get(key) ?? []
     if (options.length === 0) {
       result.skippedNoCost++
       continue
     }
-    const cheapestCostKobo = options[0].providerCostKobo
-    const basis = selectPricingBasis(options, policy.pricingBasisStrategy)
+    const cheapestCostKobo = options[0].provider_cost_kobo
+    const basis = selectPricingBasis(
+      options.map((o) => ({ providerKey: o.provider_key, providerCostKobo: o.provider_cost_kobo })),
+      policy.pricingBasisStrategy,
+    )
     const providerCostKobo = basis.providerCostKobo
 
-    const existingResult = await d1Query(
-      `SELECT id, auto_priced FROM pricing_rules
-       WHERE service_type = ? AND network_or_biller = ? AND plan_code = ?
-       LIMIT 1`,
-      [serviceType, networkOrBiller, planCode],
-      nativeDB,
-    )
-    const existing = existingResult.results?.[0]
+    const existing = existingRuleByPlan.get(key)
 
     if (existing && existing.auto_priced === 0) {
       result.skippedManual++
@@ -193,56 +248,71 @@ export async function reconcilePricingFromMappings(
     // is what the customer is effectively covering; cheapestCostKobo
     // is the normal-case actual cost; worstCostKobo is the true
     // worst-case exposure if every other provider also fails.
-    const worstCostKobo = options[options.length - 1].providerCostKobo
+    const worstCostKobo = options[options.length - 1].provider_cost_kobo
 
     if (existing) {
-      await d1Query(
-        `UPDATE pricing_rules SET
-          retail_price_kobo = ?, wholesale_price_kobo = ?, convenience_fee_kobo = 0,
-          pricing_basis_provider_key = ?, pricing_basis_cost_kobo = ?,
-          cheapest_live_cost_kobo = ?, worst_live_cost_kobo = ?, live_provider_count = ?,
-          updated_by = ?, updated_at = datetime('now')
-         WHERE id = ?`,
-        [
-          retailPriceKobo,
-          wholesalePriceKobo,
-          basis.providerKey,
-          providerCostKobo,
-          cheapestCostKobo,
-          worstCostKobo,
-          options.length,
-          adminUserId,
-          existing.id,
-        ],
-        nativeDB,
-      )
       result.updated++
-    } else {
-      await d1Query(
-        `INSERT INTO pricing_rules
-          (id, service_type, network_or_biller, plan_code, retail_price_kobo, wholesale_price_kobo,
-           convenience_fee_kobo, auto_priced, pricing_basis_provider_key, pricing_basis_cost_kobo,
-           cheapest_live_cost_kobo, worst_live_cost_kobo, live_provider_count, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?)`,
-        [
-          randomUUID(),
-          serviceType,
-          networkOrBiller,
-          planCode,
-          retailPriceKobo,
-          wholesalePriceKobo,
-          basis.providerKey,
-          providerCostKobo,
-          cheapestCostKobo,
-          worstCostKobo,
-          options.length,
-          adminUserId,
-        ],
-        nativeDB,
+      writes.push(
+        d1Query(
+          `UPDATE pricing_rules SET
+            retail_price_kobo = ?, wholesale_price_kobo = ?, convenience_fee_kobo = 0,
+            pricing_basis_provider_key = ?, pricing_basis_cost_kobo = ?,
+            cheapest_live_cost_kobo = ?, worst_live_cost_kobo = ?, live_provider_count = ?,
+            updated_by = ?, updated_at = datetime('now')
+           WHERE id = ?`,
+          [
+            retailPriceKobo,
+            wholesalePriceKobo,
+            basis.providerKey,
+            providerCostKobo,
+            cheapestCostKobo,
+            worstCostKobo,
+            options.length,
+            adminUserId,
+            existing.id,
+          ],
+          nativeDB,
+        ).then(() => undefined),
       )
+    } else {
       result.created++
+      writes.push(
+        d1Query(
+          `INSERT INTO pricing_rules
+            (id, service_type, network_or_biller, plan_code, retail_price_kobo, wholesale_price_kobo,
+             convenience_fee_kobo, auto_priced, pricing_basis_provider_key, pricing_basis_cost_kobo,
+             cheapest_live_cost_kobo, worst_live_cost_kobo, live_provider_count, updated_by)
+           VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?)`,
+          [
+            randomUUID(),
+            serviceType,
+            networkOrBiller,
+            planCode,
+            retailPriceKobo,
+            wholesalePriceKobo,
+            basis.providerKey,
+            providerCostKobo,
+            cheapestCostKobo,
+            worstCostKobo,
+            options.length,
+            adminUserId,
+          ],
+          nativeDB,
+        ).then(() => undefined),
+      )
     }
   }
+
+  // Fire all writes concurrently rather than one-at-a-time — there's
+  // no cross-row dependency between plans, and D1 has no real
+  // transaction/batch endpoint to fold these into anyway (see
+  // lib/d1.ts's header comment), so concurrency is the only lever
+  // available to cut wall-clock time. A failure in one plan's write
+  // shouldn't silently swallow the rest — Promise.all here still
+  // throws on the first rejection, matching the previous sequential
+  // behavior's own failure mode (an early exception also aborted
+  // everything after it in the old for-loop).
+  await Promise.all(writes)
 
   return result
 }

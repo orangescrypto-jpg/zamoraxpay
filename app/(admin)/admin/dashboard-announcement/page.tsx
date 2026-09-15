@@ -161,11 +161,12 @@ export default function AdminDashboardAnnouncementPage() {
 
         <div className="mb-3">
           <label className="mb-1 block text-sm font-medium text-secondary">Text (optional)</label>
-          <input
+          <textarea
             value={draftText}
             onChange={(e) => setDraftText(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-border px-3 py-2 text-sm whitespace-pre-wrap"
             placeholder="Scheduled maintenance tonight from 11pm–1am"
+            rows={6}
           />
         </div>
 

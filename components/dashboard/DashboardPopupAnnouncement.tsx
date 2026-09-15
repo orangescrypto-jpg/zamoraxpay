@@ -7,11 +7,15 @@
 // Dismissal: there is no per-user dismissal table in this codebase,
 // so "don't show again" is tracked client-side via localStorage,
 // keyed per announcement id:
-//   - show_once = 1  → dismissing writes localStorage and the popup
-//                       never shows again on this browser until the
-//                       admin edits/re-creates the announcement (new id).
-//   - show_once = 0  → dismissing only hides it for this page session
-//                       (sessionStorage) — it reappears on next login.
+//   - show_always = 1 → dismissing never persists anywhere. The popup
+//                        reappears on every dashboard load/refresh,
+//                        not just on next login — this takes priority
+//                        over show_once.
+//   - show_once = 1   → dismissing writes localStorage and the popup
+//                        never shows again on this browser until the
+//                        admin edits/re-creates the announcement (new id).
+//   - show_once = 0   → dismissing only hides it for this page session
+//                        (sessionStorage) — it reappears on next login.
 "use client"
 
 import { useEffect, useState } from "react"
@@ -25,12 +29,14 @@ interface PopupAnnouncement {
   linkUrl: string | null
   backgroundColor: string | null
   showOnce: boolean
+  showAlways: boolean
 }
 
 const DISMISSED_KEY_PREFIX = "zpay_popup_dismissed_"
 
 function isDismissed(item: PopupAnnouncement): boolean {
   if (typeof window === "undefined") return true
+  if (item.showAlways) return false // never treated as dismissed — always eligible again
   const key = DISMISSED_KEY_PREFIX + item.id
   const store = item.showOnce ? window.localStorage : window.sessionStorage
   return store.getItem(key) === "1"
@@ -38,6 +44,7 @@ function isDismissed(item: PopupAnnouncement): boolean {
 
 function markDismissed(item: PopupAnnouncement) {
   if (typeof window === "undefined") return
+  if (item.showAlways) return // no-op — closing it this time shouldn't suppress future loads
   const key = DISMISSED_KEY_PREFIX + item.id
   const store = item.showOnce ? window.localStorage : window.sessionStorage
   store.setItem(key, "1")
@@ -117,6 +124,12 @@ export function DashboardPopupAnnouncement() {
         ) : (
           body
         )}
+        <button
+          onClick={handleDismiss}
+          className="mt-3 w-full rounded-xl bg-white/90 py-2.5 text-sm font-semibold text-secondary shadow-md hover:bg-white"
+        >
+          Dismiss
+        </button>
       </div>
     </div>
   )

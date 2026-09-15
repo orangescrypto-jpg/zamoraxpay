@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.error
 
   try {
-    const { network, phone, amountKobo, transactionPin } = await req.json()
+    const { network, phone, amountKobo, transactionPin, confirmNetworkMismatch } = await req.json()
     if (!network || !phone || !amountKobo || !transactionPin) {
       return NextResponse.json({ error: "network, phone, amountKobo, and transactionPin are required" }, { status: 400 })
     }
@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       recipient: phone,
       requestedAmountKobo: amountKobo,
       transactionPin,
+      confirmNetworkMismatch: !!confirmNetworkMismatch,
     })
 
     return NextResponse.json(result, { status: result.success ? 200 : 400 })

@@ -23,9 +23,59 @@ export default function AirtimePage() {
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  // Set when the server rejects the purchase because the number and
+  // selected network don't match. This is a hard gate, not a dismissible
+  // dialog — the user must explicitly tick a checkbox acknowledging the
+  // mismatch and resubmit before the purchase is retried with
+  // confirmNetworkMismatch: true. Cleared whenever network or phone
+  // changes, so an old confirmation can't silently carry over to a
+  // different number.
+  const [networkConfirmNeeded, setNetworkConfirmNeeded] = useState<{ detected: string | null } | null>(null)
+  const [ackMismatch, setAckMismatch] = useState(false)
 
   const networkMismatch = phone.length > 0 && !matchesSelectedNetwork(phone, network)
   const detected = detectNetwork(phone)
+
+  useEffect(() => {
+    setNetworkConfirmNeeded(null)
+    setAckMismatch(false)
+  }, [network, phone])
+
+  async function submitPurchase(confirmNetworkMismatch: boolean) {
+    setLoading(true)
+
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    const res = await fetch("/api/vtu/airtime", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({
+        network,
+        phone,
+        amountKobo: Math.round(parseFloat(amount) * 100),
+        transactionPin: pin,
+        confirmNetworkMismatch,
+      }),
+    })
+    const data = await res.json()
+    setLoading(false)
+
+    if (data.requiresNetworkConfirmation) {
+      setNetworkConfirmNeeded({ detected: data.detectedNetwork ?? null })
+      return
+    }
+
+    setResult({ success: data.success, message: data.message ?? data.error })
+
+    if (data.success) {
+      setPhone("")
+      setAmount("")
+      setPin("")
+      setNetworkConfirmNeeded(null)
+      setAckMismatch(false)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,32 +86,15 @@ export default function AirtimePage() {
       return
     }
 
-    if (networkMismatch) {
-      const proceed = window.confirm(
-        `This number looks like it's on ${detected}, not ${network}. Buy anyway?`,
-      )
-      if (!proceed) return
+    // If we already went through the mismatch confirmation for this
+    // exact (network, phone), require the checkbox before resubmitting.
+    if (networkConfirmNeeded) {
+      if (!ackMismatch) return
+      await submitPurchase(true)
+      return
     }
 
-    setLoading(true)
-
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-
-    const res = await fetch("/api/vtu/airtime", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ network, phone, amountKobo: Math.round(parseFloat(amount) * 100), transactionPin: pin }),
-    })
-    const data = await res.json()
-    setLoading(false)
-    setResult({ success: data.success, message: data.message ?? data.error })
-
-    if (data.success) {
-      setPhone("")
-      setAmount("")
-      setPin("")
-    }
+    await submitPurchase(false)
   }
 
   return (
@@ -161,12 +194,30 @@ export default function AirtimePage() {
           />
         </div>
 
+        {networkConfirmNeeded && (
+          <div className="rounded-md border border-destructive bg-destructive/10 p-3">
+            <p className="text-sm font-medium text-destructive">
+              This number looks like it's on {networkConfirmNeeded.detected ?? "a different network"}, not {network}.
+              Airtime sent to the wrong network cannot be refunded.
+            </p>
+            <label className="mt-2 flex items-start gap-2 text-sm text-secondary">
+              <input
+                type="checkbox"
+                checked={ackMismatch}
+                onChange={(e) => setAckMismatch(e.target.checked)}
+                className="mt-0.5"
+              />
+              I've checked the number and want to buy {network} airtime for it anyway.
+            </label>
+          </div>
+        )}
+
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || (!!networkConfirmNeeded && !ackMismatch)}
           className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
-          {loading ? "Processing..." : "Buy airtime"}
+          {loading ? "Processing..." : networkConfirmNeeded ? "Confirm and buy anyway" : "Buy airtime"}
         </button>
       </form>
     </div>

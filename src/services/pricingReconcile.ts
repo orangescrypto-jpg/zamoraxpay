@@ -53,7 +53,7 @@ import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
 import { getLivePlanProviderOptions } from "@/src/services/providerPlanMappings"
-import { getPricingPolicy, applyFee } from "@/src/services/pricingPolicies"
+import { getPricingPolicy, applyFee, type PricingBasisStrategy } from "@/src/services/pricingPolicies"
 
 export interface ReconcileResult {
   scanned: number
@@ -70,27 +70,47 @@ export interface ReconcileResult {
 // instead of zero margin, and the loss on a fallback order is capped
 // by design rather than open-ended.
 //
-//   - 1 live provider  -> that provider's cost (nothing to hedge
-//     against — there's no fallback that could ever happen).
-//   - 2 live providers -> the pricier of the two (which, with exactly
-//     two, is also "one below the highest" — same rule, same result).
-//   - 3+ live providers -> one below the highest (second-most-
-//     expensive), NOT the average and NOT the cheapest. This bounds
-//     the worst case (router falls all the way to the priciest
-//     provider) to just the gap between the two priciest options,
-//     while still pricing well below the priciest provider itself for
-//     every more-likely outcome.
+// strategy is the admin's per-service_type choice (pricing_policies.
+// pricing_basis_strategy), picked on the Pricing Policies screen:
+//   - "cheapest" -> always the cheapest live provider's cost. Best
+//     margin on a normal order, but a fallback order can lose money
+//     (customer was charged for the cheapest, provider that actually
+//     fulfilled was pricier).
+//   - "highest"  -> always the priciest live provider's cost. Never
+//     loses money on any fallback, but a normal (cheapest-provider)
+//     order carries the biggest cushion — most conservative, least
+//     competitive price shown to the customer.
+//   - "default"  -> (unchanged from the original behavior)
+//       - 1 live provider  -> that provider's cost (nothing to hedge
+//         against — there's no fallback that could ever happen).
+//       - 2 live providers -> the pricier of the two (which, with
+//         exactly two, is also "one below the highest" — same rule,
+//         same result).
+//       - 3+ live providers -> one below the highest (second-most-
+//         expensive), NOT the average and NOT the cheapest. This
+//         bounds the worst case (router falls all the way to the
+//         priciest provider) to just the gap between the two priciest
+//         options, while still pricing well below the priciest
+//         provider itself for every more-likely outcome.
 function selectPricingBasis(
   options: { providerKey: string; providerCostKobo: number }[],
-): { providerCostKobo: number; providerKey: string; basisRank: "only" | "second-cheapest-of-two" | "second-highest" } {
+  strategy: PricingBasisStrategy,
+): { providerCostKobo: number; providerKey: string; basisRank: "only" | "cheapest" | "highest" | "second-cheapest-of-two" | "second-highest" } {
   // options arrives cheapest-first (see getLivePlanProviderOptions).
   const n = options.length
   if (n === 1) {
     return { providerCostKobo: options[0].providerCostKobo, providerKey: options[0].providerKey, basisRank: "only" }
   }
-  // Index n-2 is "one below the highest" for any n >= 2 — for n === 2
-  // that IS the highest (index 1), matching the explicit two-provider
-  // rule; for n >= 3 it's the second-most-expensive.
+  if (strategy === "cheapest") {
+    return { providerCostKobo: options[0].providerCostKobo, providerKey: options[0].providerKey, basisRank: "cheapest" }
+  }
+  if (strategy === "highest") {
+    const highest = options[n - 1]
+    return { providerCostKobo: highest.providerCostKobo, providerKey: highest.providerKey, basisRank: "highest" }
+  }
+  // "default" — index n-2 is "one below the highest" for any n >= 2 —
+  // for n === 2 that IS the highest (index 1), matching the explicit
+  // two-provider rule; for n >= 3 it's the second-most-expensive.
   const basis = options[n - 2]
   return {
     providerCostKobo: basis.providerCostKobo,
@@ -139,7 +159,7 @@ export async function reconcilePricingFromMappings(
       continue
     }
     const cheapestCostKobo = options[0].providerCostKobo
-    const basis = selectPricingBasis(options)
+    const basis = selectPricingBasis(options, policy.pricingBasisStrategy)
     const providerCostKobo = basis.providerCostKobo
 
     const existingResult = await d1Query(

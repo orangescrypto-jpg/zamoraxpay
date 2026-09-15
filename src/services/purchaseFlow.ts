@@ -231,6 +231,11 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     deliveredData: routerResult.deliveredData,
     attempts: routerResult.attempts,
     failureReason: routerResult.success ? undefined : routerResult.message,
+    // Real cost of whichever provider actually fulfilled this order —
+    // independent of pricing.baseAmountKobo (the plan-level pricing
+    // basis). This is what the admin margin view compares against
+    // pricing.chargeAmountKobo to show real per-order profit/loss.
+    actualProviderCostKobo: routerResult.providerCostKobo,
   })
 
   // 7. If every provider failed, auto-refund the wallet — no manual

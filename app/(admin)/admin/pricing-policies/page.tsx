@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 
 type FeeType = "flat" | "percentage"
+type PricingBasisStrategy = "cheapest" | "default" | "highest"
 
 interface PricingPolicy {
   serviceType: string
@@ -14,6 +15,7 @@ interface PricingPolicy {
   wholesaleFeeValue: number
   convenienceFeeType: FeeType
   convenienceFeeValue: number
+  pricingBasisStrategy: PricingBasisStrategy
   updatedBy: string | null
   updatedAt: string
 }
@@ -26,6 +28,13 @@ interface EditableRow {
   wholesaleFeeNaira: string
   convenienceFeeType: FeeType
   convenienceFeeNaira: string
+  pricingBasisStrategy: PricingBasisStrategy
+}
+
+const BASIS_STRATEGY_LABELS: Record<PricingBasisStrategy, string> = {
+  cheapest: "Cheapest provider",
+  default: "Default (one below highest — recommended)",
+  highest: "Highest provider",
 }
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -66,6 +75,7 @@ function policyToEditableRow(p: PricingPolicy): EditableRow {
       p.convenienceFeeType === "percentage"
         ? basisPointsToPercent(p.convenienceFeeValue)
         : koboToNaira(p.convenienceFeeValue),
+    pricingBasisStrategy: p.pricingBasisStrategy ?? "default",
   }
 }
 
@@ -126,6 +136,7 @@ export default function PricingPoliciesPage() {
             row.convenienceFeeType === "percentage"
               ? percentToBasisPoints(row.convenienceFeeNaira)
               : nairaToKobo(row.convenienceFeeNaira),
+          pricingBasisStrategy: row.pricingBasisStrategy,
         }),
       })
       const data = await res.json()
@@ -187,6 +198,29 @@ export default function PricingPoliciesPage() {
                 onTypeChange={(t) => updateRow(row.serviceType, { convenienceFeeType: t })}
                 onValueChange={(v) => updateRow(row.serviceType, { convenienceFeeNaira: v })}
               />
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Price shown to customer is based on
+              </label>
+              <select
+                value={row.pricingBasisStrategy}
+                onChange={(e) =>
+                  updateRow(row.serviceType, { pricingBasisStrategy: e.target.value as PricingBasisStrategy })
+                }
+                className="w-full rounded-md border border-border px-3 py-2 text-sm sm:w-auto"
+              >
+                {(Object.keys(BASIS_STRATEGY_LABELS) as PricingBasisStrategy[]).map((strategy) => (
+                  <option key={strategy} value={strategy}>
+                    {BASIS_STRATEGY_LABELS[strategy]}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Controls only what the customer is charged. The order router always tries the cheapest live
+                provider first regardless of this setting.
+              </p>
             </div>
 
             <button

@@ -13,6 +13,10 @@
 // This only renders 'banner'-style items — popups are a separate
 // component (DashboardPopupAnnouncement) sourced from the same API
 // response's `popups` array.
+//
+// Has its own Dismiss button below the strip (session-only, via
+// sessionStorage) — reappears on next login, same as a popup with
+// show_once = 0.
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
@@ -30,10 +34,26 @@ interface Announcement {
   backgroundColor: string | null
 }
 
+const BANNER_DISMISSED_KEY = "zpay_banner_dismissed_session"
+
 export function DashboardAnnouncement() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const [loading, setLoading] = useState(true)
+  // Session-only dismissal for the whole banner strip (not per-slide) —
+  // closing it hides it for the rest of this browser session and it
+  // comes back on next login, same spirit as a popup's show_once = 0.
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    setDismissed(window.sessionStorage.getItem(BANNER_DISMISSED_KEY) === "1")
+  }, [])
+
+  function handleDismiss() {
+    if (typeof window !== "undefined") window.sessionStorage.setItem(BANNER_DISMISSED_KEY, "1")
+    setDismissed(true)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -75,7 +95,7 @@ export function DashboardAnnouncement() {
     return () => clearInterval(timer)
   }, [activeIndex, announcements.length, goTo])
 
-  if (loading || announcements.length === 0) return null
+  if (loading || announcements.length === 0 || dismissed) return null
 
   const current = announcements[activeIndex]
   if (!current.text && !current.imageUrl) return null
@@ -152,6 +172,13 @@ export function DashboardAnnouncement() {
           </div>
         </>
       )}
+
+      <button
+        onClick={handleDismiss}
+        className="mt-2 w-full rounded-xl border border-border py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
+      >
+        Dismiss
+      </button>
     </div>
   )
 }

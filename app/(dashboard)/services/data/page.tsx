@@ -108,9 +108,11 @@ export default function DataPage() {
   // sends expectedPriceKobo matching the new price/plan, which lets it
   // through on the next attempt.
   const [confirmState, setConfirmState] = useState<{
+    kind: "price" | "network"
     message: string
     planCode: string
     priceKobo: number
+    detectedNetwork?: string | null
   } | null>(null)
 
   useEffect(() => {
@@ -169,7 +171,7 @@ export default function DataPage() {
     setConfirmState(null)
   }
 
-  async function submitPurchase(expectedPriceKobo: number | undefined, useplanCode: string) {
+  async function submitPurchase(expectedPriceKobo: number | undefined, useplanCode: string, confirmNetworkMismatch: boolean) {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
 
@@ -182,9 +184,38 @@ export default function DataPage() {
         planCode: useplanCode,
         transactionPin: pin,
         expectedPriceKobo,
+        confirmNetworkMismatch,
       }),
     })
     return res.json()
+  }
+
+  // Reads whatever confirmation gate the server just returned (price
+  // change, plan unavailable, or network mismatch) and sets confirmState
+  // accordingly. Returns true if a gate fired (caller should stop and
+  // let the user act on it), false if the purchase actually went through
+  // or failed for an unrelated reason.
+  function handleGateResponse(data: any, fallbackPlanCode: string): boolean {
+    if (data.requiresNetworkConfirmation) {
+      setConfirmState({
+        kind: "network",
+        message: `This number looks like it's on ${data.detectedNetwork ?? "a different network"}, not ${network}. Data sent to the wrong network cannot be refunded.`,
+        planCode: fallbackPlanCode,
+        priceKobo: selectedVariant?.priceKobo ?? 0,
+        detectedNetwork: data.detectedNetwork ?? null,
+      })
+      return true
+    }
+    if (data.requiresPriceConfirmation || data.planUnavailable) {
+      setConfirmState({
+        kind: "price",
+        message: data.message,
+        planCode: data.suggestedPlanCode ?? fallbackPlanCode,
+        priceKobo: data.actualPriceKobo ?? data.suggestedPriceKobo,
+      })
+      return true
+    }
+    return false
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -192,27 +223,11 @@ export default function DataPage() {
     setResult(null)
     setConfirmState(null)
 
-    if (networkMismatch) {
-      const proceed = window.confirm(
-        `This number looks like it's on ${detected}, not ${network}. Buy anyway?`,
-      )
-      if (!proceed) return
-    }
-
     setLoading(true)
-    const data = await submitPurchase(selectedVariant?.priceKobo, planCode)
+    const data = await submitPurchase(selectedVariant?.priceKobo, planCode, false)
     setLoading(false)
 
-    // Price changed or the plan just went unavailable — show the
-    // confirm step instead of an error. Nothing has been charged.
-    if (data.requiresPriceConfirmation || data.planUnavailable) {
-      setConfirmState({
-        message: data.message,
-        planCode: data.suggestedPlanCode ?? planCode,
-        priceKobo: data.actualPriceKobo ?? data.suggestedPriceKobo,
-      })
-      return
-    }
+    if (handleGateResponse(data, planCode)) return
 
     setResult({ success: data.success, message: data.message ?? data.error })
     if (data.success) { setPhone(""); setPin("") }
@@ -222,20 +237,15 @@ export default function DataPage() {
     if (!confirmState) return
     setLoading(true)
     setResult(null)
-    const data = await submitPurchase(confirmState.priceKobo, confirmState.planCode)
+    const data = await submitPurchase(
+      confirmState.priceKobo,
+      confirmState.planCode,
+      confirmState.kind === "network",
+    )
     setLoading(false)
     setConfirmState(null)
 
-    if (data.requiresPriceConfirmation || data.planUnavailable) {
-      // Changed again between confirm and resubmit — rare, but handle
-      // it the same way rather than silently charging a third price.
-      setConfirmState({
-        message: data.message,
-        planCode: data.suggestedPlanCode ?? confirmState.planCode,
-        priceKobo: data.actualPriceKobo ?? data.suggestedPriceKobo,
-      })
-      return
-    }
+    if (handleGateResponse(data, confirmState.planCode)) return
 
     setResult({ success: data.success, message: data.message ?? data.error })
     if (data.success) { setPhone(""); setPin("") }
@@ -251,7 +261,30 @@ export default function DataPage() {
         </p>
       )}
 
-      {confirmState && (
+      {confirmState && confirmState.kind === "network" && (
+        <div className="mb-4 rounded-md border border-destructive bg-destructive/10 p-3 text-sm">
+          <p className="mb-2 font-medium text-destructive">{confirmState.message}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={loading}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+            >
+              {loading ? "Processing..." : `Confirm and buy for ${network} anyway`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmState(null)}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-secondary"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {confirmState && confirmState.kind === "price" && (
         <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
           <p className="mb-2">{confirmState.message}</p>
           <div className="flex gap-2">
@@ -383,7 +416,7 @@ export default function DataPage() {
           </div>
         )}
 
-        <button type="submit" disabled={loading || !planCode || !user?.hasTransactionPin}
+        <button type="submit" disabled={loading || !!confirmState || !planCode || !user?.hasTransactionPin}
           className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
           {loading ? "Processing..." : "Buy data"}
         </button>

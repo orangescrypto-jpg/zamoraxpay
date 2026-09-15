@@ -17,6 +17,7 @@ import { sendPurchaseReceiptEmail } from "@/src/services/email"
 import { isFeatureEnabled } from "@/src/services/config"
 import { awardCashbackForOrder } from "@/src/services/cashback"
 import { maybeAwardReferralBonus } from "@/src/services/referral"
+import { detectNetwork, matchesSelectedNetwork } from "@/lib/networkDetect"
 import type { VtuServiceType } from "@/src/types"
 import type { VtuDeliveredData } from "@/src/services/providers/vtu/types"
 
@@ -40,6 +41,11 @@ export interface PurchaseFlowParams {
   // charged. Optional so existing callers that don't send it keep
   // working exactly as before (no confirmation gate).
   expectedPriceKobo?: number
+  // Explicit "yes, charge this network anyway" from the customer,
+  // after seeing requiresNetworkConfirmation on a prior response for
+  // this exact (networkOrBiller, recipient) pair. Only meaningful for
+  // airtime/data — see step 3d below.
+  confirmNetworkMismatch?: boolean
 }
 
 export interface PurchaseFlowResult {
@@ -70,6 +76,15 @@ export interface PurchaseFlowResult {
   planUnavailable?: boolean
   suggestedPlanCode?: string
   suggestedPriceKobo?: number
+  // True when the recipient number's detected network doesn't match
+  // networkOrBiller for airtime/data — nothing charged yet. The caller
+  // must resubmit with confirmNetworkMismatch: true to actually pay
+  // for this exact (network, recipient) pair. This is the server-side
+  // backstop for the frontend's dismissible mismatch warning — money
+  // sent to the wrong network's airtime/data is not recoverable via
+  // refund, so the gate lives here too, not only in the UI.
+  requiresNetworkConfirmation?: boolean
+  detectedNetwork?: string | null
 }
 
 export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<PurchaseFlowResult> {
@@ -131,6 +146,30 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
       message: "This plan's price has changed since you loaded the page. Please confirm the new price to continue.",
       requiresPriceConfirmation: true,
       actualPriceKobo: pricing.chargeAmountKobo,
+    }
+  }
+
+  // 3d. Network-match gate — airtime/data only, checked BEFORE any
+  // order is created or wallet debited. Airtime/data sent to the
+  // wrong network is delivered correctly (to that network) and is not
+  // refundable — it's not a failed transaction, it's money spent on
+  // the wrong thing. The frontend already warns on a detected
+  // mismatch, but that warning is a dismissible confirm() dialog and
+  // can be tapped past by accident, or bypassed entirely by any
+  // non-UI caller — so the same check is enforced here too. Only
+  // fires on a *confident* mismatch (unrecognized/ported prefixes are
+  // let through, same as the frontend) and only blocks once: the
+  // caller resubmits with confirmNetworkMismatch: true to proceed.
+  if (
+    (params.serviceType === "airtime" || params.serviceType === "data") &&
+    !params.confirmNetworkMismatch &&
+    !matchesSelectedNetwork(params.recipient, params.networkOrBiller as any)
+  ) {
+    return {
+      success: false,
+      message: `This number looks like it's on ${detectNetwork(params.recipient)}, not ${params.networkOrBiller}. Confirm to purchase for ${params.networkOrBiller} anyway.`,
+      requiresNetworkConfirmation: true,
+      detectedNetwork: detectNetwork(params.recipient),
     }
   }
 

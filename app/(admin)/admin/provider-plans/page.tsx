@@ -92,6 +92,7 @@ export default function ProviderPlanMappingsPage() {
     | "vtugate-cable"
     | "clubkonnect-cable"
     | "clubkonnect-exam-pin"
+    | "cheapdatahub-exam-pin"
   const [syncingProvider, setSyncingProvider] = useState<SyncKey | null>(null)
   const [syncResults, setSyncResults] = useState<
     Record<SyncKey, { fetched?: number; created?: number; updated?: number; skipped?: number; error?: string } | null>
@@ -104,6 +105,7 @@ export default function ProviderPlanMappingsPage() {
     "vtugate-cable": null,
     "clubkonnect-cable": null,
     "clubkonnect-exam-pin": null,
+    "cheapdatahub-exam-pin": null,
   })
 
   // VTUGate cable sync needs a real smartcard per biller (no
@@ -695,6 +697,39 @@ export default function ProviderPlanMappingsPage() {
                   updated
                   {syncResults["clubkonnect-exam-pin"]!.skipped
                     ? `, ${syncResults["clubkonnect-exam-pin"]!.skipped} skipped`
+                    : ""}
+                  .
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — CheapDataHub (Exam Pins)</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Pulls CheapDataHub's live exam PIN product list and prices (via GET /exam-pin/products/) and upserts
+            them into the mappings below (service_type "exam_pin"). Uses the API key saved on the Providers page.
+          </p>
+          <button
+            onClick={() => syncProvider("cheapdatahub-exam-pin")}
+            disabled={syncingProvider === "cheapdatahub-exam-pin"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "cheapdatahub-exam-pin" ? "Syncing..." : "Sync from CheapDataHub (Exam Pins)"}
+          </button>
+
+          {syncResults["cheapdatahub-exam-pin"] && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults["cheapdatahub-exam-pin"]!.error ? (
+                <p className="text-destructive">{syncResults["cheapdatahub-exam-pin"]!.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults["cheapdatahub-exam-pin"]!.fetched} products —{" "}
+                  {syncResults["cheapdatahub-exam-pin"]!.created} new, {syncResults["cheapdatahub-exam-pin"]!.updated}{" "}
+                  updated
+                  {syncResults["cheapdatahub-exam-pin"]!.skipped
+                    ? `, ${syncResults["cheapdatahub-exam-pin"]!.skipped} skipped`
                     : ""}
                   .
                 </p>

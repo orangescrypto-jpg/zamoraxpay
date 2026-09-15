@@ -1,7 +1,12 @@
 // app/api/admin/pricing-policies/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth-server"
-import { listPricingPolicies, updatePricingPolicy, type FeeType } from "@/src/services/pricingPolicies"
+import {
+  listPricingPolicies,
+  updatePricingPolicy,
+  type FeeType,
+  type PricingBasisStrategy,
+} from "@/src/services/pricingPolicies"
 import { reconcilePricingFromMappings } from "@/src/services/pricingReconcile"
 import type { VtuServiceType } from "@/src/types"
 
@@ -29,6 +34,7 @@ export async function POST(req: NextRequest) {
     const wholesaleFeeValue = Number(body.wholesaleFeeValue)
     const convenienceFeeType = body.convenienceFeeType as FeeType
     const convenienceFeeValue = Number(body.convenienceFeeValue)
+    const pricingBasisStrategy = (body.pricingBasisStrategy ?? "default") as PricingBasisStrategy
 
     if (!serviceType) {
       return NextResponse.json({ error: "serviceType is required" }, { status: 400 })
@@ -38,6 +44,12 @@ export async function POST(req: NextRequest) {
     }
     if (![retailFeeType, wholesaleFeeType, convenienceFeeType].every((t) => t === "flat" || t === "percentage")) {
       return NextResponse.json({ error: "Fee type must be 'flat' or 'percentage'" }, { status: 400 })
+    }
+    if (!["cheapest", "default", "highest"].includes(pricingBasisStrategy)) {
+      return NextResponse.json(
+        { error: "pricingBasisStrategy must be 'cheapest', 'default', or 'highest'" },
+        { status: 400 },
+      )
     }
 
     await updatePricingPolicy(
@@ -49,6 +61,7 @@ export async function POST(req: NextRequest) {
         wholesaleFeeValue,
         convenienceFeeType,
         convenienceFeeValue,
+        pricingBasisStrategy,
       },
       auth.uid,
     )

@@ -4,10 +4,15 @@
 // mechanics as the header BannerSlider. Images render at their
 // natural aspect ratio (no forced crop or letterbox) so any upload
 // size displays correctly; only the text-only fallback (no image)
-// uses a fixed 3:1 shape since it has no natural size of its own.
-// Admin can set text, an image, or both per slide — the link is
-// optional per slide, so this doubles as a plain announcement when
-// there's nothing to click through to.
+// uses a fixed 3:1 shape since it has no natural size of its own —
+// backgroundColor (admin-set, optional) overrides the default navy
+// fill for that fallback. Admin can set text, an image, or both per
+// slide — the link is optional per slide, so this doubles as a plain
+// announcement when there's nothing to click through to.
+//
+// This only renders 'banner'-style items — popups are a separate
+// component (DashboardPopupAnnouncement) sourced from the same API
+// response's `popups` array.
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
@@ -22,6 +27,7 @@ interface Announcement {
   text: string | null
   imageUrl: string | null
   linkUrl: string | null
+  backgroundColor: string | null
 }
 
 export function DashboardAnnouncement() {
@@ -89,7 +95,10 @@ export function DashboardAnnouncement() {
           className="block h-auto w-full"
         />
       ) : (
-        <div className="flex aspect-[3/1] w-full items-center bg-[#0F1E4D] px-4">
+        <div
+          className="flex aspect-[3/1] w-full items-center px-4"
+          style={{ backgroundColor: current.backgroundColor || "#0F1E4D" }}
+        >
           <p className="text-sm font-medium leading-snug text-white sm:text-base">{current.text}</p>
         </div>
       )}

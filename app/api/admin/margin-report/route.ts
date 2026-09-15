@@ -42,7 +42,17 @@ export async function GET(req: NextRequest) {
        LIMIT ?`,
       [...orderParams, limit],
     )
-    const orders = (ordersResult.results ?? []).map((r: any) => ({
+    const orders: {
+      orderId: string
+      serviceType: string
+      networkOrBiller: string
+      planCode: string
+      providerUsed: string
+      chargedKobo: number
+      actualCostKobo: number
+      marginKobo: number
+      createdAt: string
+    }[] = (ordersResult.results ?? []).map((r: any) => ({
       orderId: r.id,
       serviceType: r.service_type,
       networkOrBiller: r.network_or_biller,

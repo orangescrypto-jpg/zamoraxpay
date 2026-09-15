@@ -29,7 +29,7 @@
 
 import { getVtuAdapter } from "@/src/services/providers/vtu/registry"
 import { getActiveVtuProviders, getVtuProviderCredentials } from "@/src/services/config"
-import { getPlanProviderOptions } from "@/src/services/providerPlanMappings"
+import { getLivePlanProviderOptions } from "@/src/services/providerPlanMappings"
 import type { VtuPurchaseRequest, VtuPurchaseResult, VtuDeliveredData } from "@/src/services/providers/vtu/types"
 
 const SERVICE_LABEL: Record<string, string> = {
@@ -61,6 +61,13 @@ export interface VtuRouterResult {
   message: string
   deliveredData?: VtuDeliveredData
   attempts: VtuRouterAttemptLog[]
+  // What providerUsed's mapped cost was for this exact plan, at the
+  // moment it was tried — null when there was no cost mapping for the
+  // candidate that succeeded (priority-order fallback with no
+  // provider_plan_mappings row, or the order failed outright). This is
+  // what lets purchaseFlow.ts record real per-order margin instead of
+  // only the plan-level pricing-basis estimate.
+  providerCostKobo: number | null
 }
 
 interface RouteCandidate {
@@ -81,6 +88,10 @@ interface RouteCandidate {
   // those providers, providerPlanId from provider_plan_mappings is
   // used to override networkOrBiller instead of planCode.
   networkOrBillerOverride?: string
+  // This candidate's actual mapped provider cost for this plan, when
+  // it came from a cost-based (mapped) route — undefined for
+  // priority-order fallback candidates with no mapping at all.
+  providerCostKobo?: number
 }
 
 // Providers whose plan-mapping override target is networkOrBiller
@@ -92,7 +103,6 @@ const EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS = new Set(["pairgate", "vtugate"])
 
 async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promise<RouteCandidate[]> {
   const activeProviders = await getActiveVtuProviders(req.serviceType, nativeDB)
-  const activeProviderKeys = new Set<string>(activeProviders.map((p) => p.providerKey))
 
   // Cost-based routing applies to plan-coded services where we
   // actually have a planCode to look up:
@@ -113,11 +123,15 @@ async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promi
       req.serviceType === "epin" ||
       req.serviceType === "electricity")
   ) {
-    const options = await getPlanProviderOptions(req.serviceType, req.networkOrBiller, req.planCode, nativeDB)
-    const enabledOptions = options.filter((o) => activeProviderKeys.has(o.providerKey))
+    // getLivePlanProviderOptions already excludes anything the admin
+    // has toggled off (vtu_provider_configs.is_enabled) as well as
+    // inactive mappings — same source pricingReconcile.ts now reads,
+    // so routing and pricing can never see a different set of live
+    // providers for the same plan.
+    const enabledOptions = await getLivePlanProviderOptions(req.serviceType, req.networkOrBiller, req.planCode, nativeDB)
 
     if (enabledOptions.length > 0) {
-      // getPlanProviderOptions already returns cheapest-first. Any
+      // getLivePlanProviderOptions already returns cheapest-first. Any
       // enabled provider NOT covered by a mapping is appended after,
       // in admin priority order, as a last-resort fallback using our
       // own planCode (best-effort — may not match that provider's
@@ -135,11 +149,11 @@ async function resolveCandidates(req: VtuPurchaseRequest, nativeDB?: any): Promi
             // exam_pin's provider_id. providerPlanId here is used only
             // to pick and cost-rank the provider; it's never sent to
             // the adapter as an override.
-            return { providerKey: o.providerKey }
+            return { providerKey: o.providerKey, providerCostKobo: o.providerCostKobo }
           }
           return req.serviceType === "exam_pin" && EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS.has(o.providerKey)
-            ? { providerKey: o.providerKey, networkOrBillerOverride: o.providerPlanId }
-            : { providerKey: o.providerKey, planCodeOverride: o.providerPlanId }
+            ? { providerKey: o.providerKey, networkOrBillerOverride: o.providerPlanId, providerCostKobo: o.providerCostKobo }
+            : { providerKey: o.providerKey, planCodeOverride: o.providerPlanId, providerCostKobo: o.providerCostKobo }
         }),
         ...unmapped.map((p) => ({ providerKey: p.providerKey })),
       ]
@@ -165,6 +179,7 @@ export async function executeVtuPurchase(
       providerReference: null,
       message: `No enabled VTU provider supports "${req.serviceType}". An admin must enable at least one provider for this service in the Admin Panel.`,
       attempts,
+      providerCostKobo: null,
     }
   }
 
@@ -213,6 +228,7 @@ export async function executeVtuPurchase(
         message: result.message,
         deliveredData: result.deliveredData,
         attempts,
+        providerCostKobo: candidate.providerCostKobo ?? null,
       }
     }
 
@@ -228,5 +244,6 @@ export async function executeVtuPurchase(
     providerReference: null,
     message: serviceUnavailableMessage(req.serviceType),
     attempts,
+    providerCostKobo: null,
   }
 }

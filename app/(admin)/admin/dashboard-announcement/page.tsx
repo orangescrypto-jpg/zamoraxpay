@@ -22,6 +22,7 @@ interface AdminAnnouncement {
   background_color: string | null
   audience: Audience
   show_once: number
+  show_always: number
 }
 
 export default function AdminDashboardAnnouncementPage() {
@@ -34,6 +35,7 @@ export default function AdminDashboardAnnouncementPage() {
   const [draftBackgroundColor, setDraftBackgroundColor] = useState("#0F1E4D")
   const [draftAudience, setDraftAudience] = useState<Audience>("all")
   const [draftShowOnce, setDraftShowOnce] = useState(false)
+  const [draftShowAlways, setDraftShowAlways] = useState(false)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -70,6 +72,7 @@ export default function AdminDashboardAnnouncementPage() {
         backgroundColor: draftBackgroundColor || null,
         audience: draftAudience,
         showOnce: draftDisplayStyle === "popup" ? draftShowOnce : false,
+        showAlways: draftDisplayStyle === "popup" ? draftShowAlways : false,
       }),
     })
 
@@ -80,6 +83,7 @@ export default function AdminDashboardAnnouncementPage() {
     setDraftBackgroundColor("#0F1E4D")
     setDraftAudience("all")
     setDraftShowOnce(false)
+    setDraftShowAlways(false)
     loadAnnouncements()
   }
 
@@ -126,10 +130,13 @@ export default function AdminDashboardAnnouncementPage() {
       <h1 className="mb-1 text-2xl font-heading font-bold">Dashboard Announcement</h1>
       <p className="mb-6 text-sm text-muted-foreground">
         Banner items show as a strip between the wallet balance card and Quick actions, and
-        auto-rotate every 5 seconds if there's more than one. Popup items show as a centered modal
-        once the dashboard loads — only the first eligible popup shows at a time. Use text, an
-        image, or both per item; the link is optional. Audience lets you target retail or reseller
-        users only, or leave it as "Everyone". Use the arrows below to reorder banner items.
+        auto-rotate every 5 seconds if there's more than one; a Dismiss button hides it for the
+        rest of the session. Popup items show as a centered modal once the dashboard loads — only
+        the first eligible popup shows at a time, and it also has its own Dismiss button below the
+        content. Use text, an image, or both per item; the link is optional. Audience lets you
+        target retail or reseller users only, or leave it as "Everyone". "Always show" makes a
+        popup reappear on every dashboard refresh regardless of dismissal — separate from login
+        state. Use the arrows below to reorder banner items.
       </p>
 
       {/* Add new announcement */}
@@ -215,17 +222,35 @@ export default function AdminDashboardAnnouncementPage() {
         </div>
 
         {draftDisplayStyle === "popup" && (
-          <div className="mb-3 flex items-center gap-2">
-            <input
-              id="show-once"
-              type="checkbox"
-              checked={draftShowOnce}
-              onChange={(e) => setDraftShowOnce(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
-            />
-            <label htmlFor="show-once" className="text-sm text-secondary">
-              Show only once per user (otherwise reappears every login)
-            </label>
+          <div className="mb-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                id="show-once"
+                type="checkbox"
+                checked={draftShowOnce}
+                disabled={draftShowAlways}
+                onChange={(e) => setDraftShowOnce(e.target.checked)}
+                className="h-4 w-4 rounded border-border disabled:opacity-50"
+              />
+              <label htmlFor="show-once" className="text-sm text-secondary">
+                Show only once per user (otherwise reappears every login)
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="show-always"
+                type="checkbox"
+                checked={draftShowAlways}
+                onChange={(e) => {
+                  setDraftShowAlways(e.target.checked)
+                  if (e.target.checked) setDraftShowOnce(false)
+                }}
+                className="h-4 w-4 rounded border-border"
+              />
+              <label htmlFor="show-always" className="text-sm text-secondary">
+                Always show on every dashboard refresh (ignores dismissal, not tied to login/logout)
+              </label>
+            </div>
           </div>
         )}
 
@@ -280,7 +305,12 @@ export default function AdminDashboardAnnouncementPage() {
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium capitalize text-muted-foreground">
                     {item.audience === "all" ? "Everyone" : item.audience}
                   </span>
-                  {item.display_style === "popup" && item.show_once === 1 && (
+                  {item.display_style === "popup" && item.show_always === 1 && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      Always shows
+                    </span>
+                  )}
+                  {item.display_style === "popup" && item.show_always !== 1 && item.show_once === 1 && (
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                       Once only
                     </span>

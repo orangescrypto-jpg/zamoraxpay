@@ -89,7 +89,7 @@ export function DashboardPopupAnnouncement() {
       )}
       {popup.text && (
         <div className="px-5 py-4">
-          <p className="text-sm font-medium leading-snug text-white sm:text-base">{popup.text}</p>
+          <p className="whitespace-pre-wrap text-sm font-medium leading-snug text-white sm:text-base">{popup.text}</p>
         </div>
       )}
     </div>

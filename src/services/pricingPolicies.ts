@@ -20,6 +20,7 @@ import { d1Query } from "@/lib/d1"
 import type { VtuServiceType } from "@/src/types"
 
 export type FeeType = "flat" | "percentage"
+export type PricingBasisStrategy = "cheapest" | "default" | "highest"
 
 export interface PricingPolicy {
   serviceType: VtuServiceType
@@ -29,6 +30,7 @@ export interface PricingPolicy {
   wholesaleFeeValue: number
   convenienceFeeType: FeeType
   convenienceFeeValue: number
+  pricingBasisStrategy: PricingBasisStrategy
   updatedBy: string | null
   updatedAt: string
 }
@@ -68,6 +70,7 @@ export async function updatePricingPolicy(
     wholesaleFeeValue: number
     convenienceFeeType: FeeType
     convenienceFeeValue: number
+    pricingBasisStrategy: PricingBasisStrategy
   },
   adminUserId: string,
   nativeDB?: any,
@@ -77,6 +80,7 @@ export async function updatePricingPolicy(
       retail_fee_type = ?, retail_fee_value = ?,
       wholesale_fee_type = ?, wholesale_fee_value = ?,
       convenience_fee_type = ?, convenience_fee_value = ?,
+      pricing_basis_strategy = ?,
       updated_by = ?, updated_at = datetime('now')
      WHERE service_type = ?`,
     [
@@ -86,6 +90,7 @@ export async function updatePricingPolicy(
       params.wholesaleFeeValue,
       params.convenienceFeeType,
       params.convenienceFeeValue,
+      params.pricingBasisStrategy,
       adminUserId,
       params.serviceType,
     ],
@@ -102,6 +107,7 @@ function rowToPolicy(row: any): PricingPolicy {
     wholesaleFeeValue: row.wholesale_fee_value,
     convenienceFeeType: row.convenience_fee_type,
     convenienceFeeValue: row.convenience_fee_value,
+    pricingBasisStrategy: (row.pricing_basis_strategy ?? "default") as PricingBasisStrategy,
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
   }

@@ -1,10 +1,15 @@
 // app/api/admin/dashboard-announcement/route.ts
-// Admin CRUD for the dashboard announcement strip (shown between
-// wallet balance and Quick actions on /dashboard only). Text and
-// image are both optional independently — admin can use one, the
-// other, or both — but at least one is required so there's something
-// to render. Link is always optional; when absent the strip renders
-// as plain non-clickable text/image.
+// Admin CRUD for the dashboard announcement system. Two display
+// styles share one table: 'banner' (the original strip shown between
+// wallet balance and Quick actions) and 'popup' (a modal shown once
+// per session, or once-ever per browser if show_once is set — see
+// DashboardPopupAnnouncement.tsx). Text and image are both optional
+// independently — admin can use one, the other, or both — but at
+// least one is required so there's something to render. Link is
+// always optional; when absent the item renders as plain
+// non-clickable text/image. audience filters which users see it:
+// 'all' | 'retail' | 'reseller' (matches users.tier exactly — there
+// is no 'user' tier in this codebase).
 //
 // Image upload is a separate concern: the admin UI uploads to R2 via
 // the existing /api/admin/upload route first, then calls this route
@@ -13,7 +18,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
 import { requireAdmin } from "@/lib/auth-server"
-import { d1Query } from "@/lib/db"
+import { d1Query } from "@/lib/d1"
+
+const VALID_DISPLAY_STYLES = new Set(["banner", "popup"])
+const VALID_AUDIENCES = new Set(["all", "retail", "reseller"])
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req)
@@ -28,17 +36,53 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.error
 
   try {
-    const { text, imageUrl, linkUrl, sortOrder, startsAt, endsAt } = await req.json()
+    const {
+      text,
+      imageUrl,
+      linkUrl,
+      sortOrder,
+      startsAt,
+      endsAt,
+      displayStyle,
+      backgroundColor,
+      audience,
+      showOnce,
+    } = await req.json()
 
     if (!text && !imageUrl) {
       return NextResponse.json({ error: "Provide text, an image, or both" }, { status: 400 })
     }
 
+    const style = displayStyle ?? "banner"
+    if (!VALID_DISPLAY_STYLES.has(style)) {
+      return NextResponse.json({ error: "displayStyle must be 'banner' or 'popup'" }, { status: 400 })
+    }
+
+    const targetAudience = audience ?? "all"
+    if (!VALID_AUDIENCES.has(targetAudience)) {
+      return NextResponse.json({ error: "audience must be 'all', 'retail', or 'reseller'" }, { status: 400 })
+    }
+
     const id = randomUUID()
     await d1Query(
-      `INSERT INTO dashboard_announcements (id, text, image_url, link_url, sort_order, starts_at, ends_at, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, text ?? null, imageUrl ?? null, linkUrl ?? null, sortOrder ?? 0, startsAt ?? null, endsAt ?? null, auth.uid],
+      `INSERT INTO dashboard_announcements
+         (id, text, image_url, link_url, sort_order, starts_at, ends_at, created_by,
+          display_style, background_color, audience, show_once)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        text ?? null,
+        imageUrl ?? null,
+        linkUrl ?? null,
+        sortOrder ?? 0,
+        startsAt ?? null,
+        endsAt ?? null,
+        auth.uid,
+        style,
+        backgroundColor ?? null,
+        targetAudience,
+        showOnce ? 1 : 0,
+      ],
     )
 
     return NextResponse.json({ success: true, id })
@@ -52,8 +96,28 @@ export async function PATCH(req: NextRequest) {
   if (!auth.ok) return auth.error
 
   try {
-    const { id, text, imageUrl, linkUrl, sortOrder, isActive, startsAt, endsAt } = await req.json()
+    const {
+      id,
+      text,
+      imageUrl,
+      linkUrl,
+      sortOrder,
+      isActive,
+      startsAt,
+      endsAt,
+      displayStyle,
+      backgroundColor,
+      audience,
+      showOnce,
+    } = await req.json()
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 })
+
+    if (displayStyle !== undefined && !VALID_DISPLAY_STYLES.has(displayStyle)) {
+      return NextResponse.json({ error: "displayStyle must be 'banner' or 'popup'" }, { status: 400 })
+    }
+    if (audience !== undefined && !VALID_AUDIENCES.has(audience)) {
+      return NextResponse.json({ error: "audience must be 'all', 'retail', or 'reseller'" }, { status: 400 })
+    }
 
     const sets: string[] = []
     const values: unknown[] = []
@@ -65,6 +129,10 @@ export async function PATCH(req: NextRequest) {
     if (isActive !== undefined) { sets.push("is_active = ?"); values.push(isActive ? 1 : 0) }
     if (startsAt !== undefined) { sets.push("starts_at = ?"); values.push(startsAt) }
     if (endsAt !== undefined) { sets.push("ends_at = ?"); values.push(endsAt) }
+    if (displayStyle !== undefined) { sets.push("display_style = ?"); values.push(displayStyle) }
+    if (backgroundColor !== undefined) { sets.push("background_color = ?"); values.push(backgroundColor) }
+    if (audience !== undefined) { sets.push("audience = ?"); values.push(audience) }
+    if (showOnce !== undefined) { sets.push("show_once = ?"); values.push(showOnce ? 1 : 0) }
 
     if (sets.length === 0) return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
 

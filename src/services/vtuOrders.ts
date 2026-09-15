@@ -58,13 +58,22 @@ export async function finalizeOrder(
     deliveredData?: VtuDeliveredData
     attempts: VtuRouterAttemptLog[]
     failureReason?: string
+    // What providerUsed actually cost us for THIS specific order (its
+    // provider_plan_mappings.provider_cost_kobo at purchase time) —
+    // independent of what pricing_rules charged the customer. Lets
+    // the admin margin view show real per-order profit/loss instead
+    // of only the plan-level pricing-basis estimate. Null when the
+    // order failed entirely (no provider fulfilled it) or the
+    // fulfilling provider had no cost mapping to look up (unmapped
+    // fallback route).
+    actualProviderCostKobo?: number | null
   },
   nativeDB?: any,
 ): Promise<void> {
   await d1Query(
     `UPDATE vtu_orders SET
       status = ?, provider_used = ?, provider_reference = ?, provider_attempts = ?,
-      delivered_data = ?, failure_reason = ?, updated_at = datetime('now')
+      delivered_data = ?, failure_reason = ?, actual_provider_cost_kobo = ?, updated_at = datetime('now')
      WHERE id = ?`,
     [
       result.status,
@@ -73,6 +82,7 @@ export async function finalizeOrder(
       JSON.stringify(result.attempts),
       result.deliveredData ? JSON.stringify(result.deliveredData) : null,
       result.failureReason ?? null,
+      result.actualProviderCostKobo ?? null,
       orderId,
     ],
     nativeDB,

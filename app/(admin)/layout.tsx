@@ -24,6 +24,7 @@ const NAV_ITEMS: { href: string; label: string; minRole: "moderator" | "admin" |
   { href: "/admin/provider-plans", label: "Provider Plans", minRole: "admin" },
   { href: "/admin/pricing", label: "Pricing", minRole: "admin" },
   { href: "/admin/pricing-policies", label: "Pricing Policies", minRole: "admin" },
+  { href: "/admin/margin-report", label: "Margin Report", minRole: "admin" },
   { href: "/admin/banners", label: "Banners", minRole: "admin" },
   { href: "/admin/dashboard-announcement", label: "Dashboard Announcement", minRole: "admin" },
   { href: "/admin/pages", label: "Site Pages", minRole: "admin" },

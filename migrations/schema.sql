@@ -222,6 +222,7 @@ CREATE TABLE IF NOT EXISTS vtu_orders (
   failure_reason    TEXT,
   is_auto_reload    INTEGER NOT NULL DEFAULT 0,
   auto_reload_rule_id TEXT,
+  actual_provider_cost_kobo INTEGER, -- real cost of whichever provider fulfilled THIS order (null if failed / unmapped fallback) — compare against amount_kobo for real per-order margin
   created_at        TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -483,6 +484,12 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
   retail_price_kobo INTEGER NOT NULL,
   wholesale_price_kobo INTEGER NOT NULL,
   convenience_fee_kobo INTEGER NOT NULL DEFAULT 0,
+  auto_priced       INTEGER NOT NULL DEFAULT 1, -- 1 = pricingReconcile.ts owns this row; 0 = admin manually overrode it, reconcile skips it
+  pricing_basis_provider_key TEXT,    -- which live provider's cost this price was built from
+  pricing_basis_cost_kobo    INTEGER, -- that provider's cost at last reconcile
+  cheapest_live_cost_kobo    INTEGER, -- true cheapest live cost at last reconcile (normal-case actual cost)
+  worst_live_cost_kobo       INTEGER, -- priciest live provider's cost at last reconcile (true worst-case exposure)
+  live_provider_count        INTEGER, -- how many live (enabled + active-mapping) providers this plan had at last reconcile
   is_active         INTEGER NOT NULL DEFAULT 1,
   updated_by        TEXT,
   updated_at        TEXT NOT NULL DEFAULT (datetime('now'))

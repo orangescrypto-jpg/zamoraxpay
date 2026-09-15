@@ -99,7 +99,7 @@ export function DashboardAnnouncement() {
           className="flex aspect-[3/1] w-full items-center px-4"
           style={{ backgroundColor: current.backgroundColor || "#0F1E4D" }}
         >
-          <p className="text-sm font-medium leading-snug text-white sm:text-base">{current.text}</p>
+          <p className="whitespace-pre-wrap text-sm font-medium leading-snug text-white sm:text-base">{current.text}</p>
         </div>
       )}
       {current.imageUrl && current.text && (

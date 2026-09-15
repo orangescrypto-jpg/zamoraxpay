@@ -11,11 +11,13 @@
 //   - starts_at / ends_at window
 //   - audience: 'all' always included; 'retail'/'reseller' only
 //     included for users whose users.tier matches
-// Popup dismissal (show_once) is NOT tracked here — there is no
-// per-user dismissal table, so that's handled client-side via
-// localStorage in DashboardPopupAnnouncement.tsx. This route always
-// returns popups that pass the filters above; the client decides
-// whether to actually display one it already recorded as dismissed.
+// Popup dismissal (show_once / show_always) is NOT tracked here —
+// there is no per-user dismissal table, so that's handled client-side
+// in DashboardPopupAnnouncement.tsx. This route always returns popups
+// that pass the filters above; the client decides whether to actually
+// display one it already recorded as dismissed. show_always items are
+// never recorded as dismissed client-side, so they resurface on every
+// dashboard load/refresh regardless of login state.
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth-server"
@@ -30,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   const now = new Date().toISOString()
   const result = await d1Query(
-    `SELECT id, text, image_url, link_url, sort_order, display_style, background_color, show_once
+    `SELECT id, text, image_url, link_url, sort_order, display_style, background_color, show_once, show_always
      FROM dashboard_announcements
      WHERE is_active = 1
        AND (starts_at IS NULL OR starts_at <= ?)
@@ -49,6 +51,7 @@ export async function GET(req: NextRequest) {
     linkUrl: row.link_url,
     backgroundColor: row.background_color,
     showOnce: row.show_once === 1,
+    showAlways: row.show_always === 1,
   })
 
   const announcements = rows.filter((r) => r.display_style !== "popup").map(toItem)

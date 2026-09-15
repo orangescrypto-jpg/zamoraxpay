@@ -75,6 +75,28 @@ export async function hasLiveRoute(
   return options.some((o) => activeKeys.has(o.providerKey as VtuProviderKey))
 }
 
+// Same as getPlanProviderOptions, but filtered to only mappings whose
+// provider is currently enabled in vtu_provider_configs — i.e. the
+// exact candidate list the router would actually try right now, cheapest
+// first. This is the shared source pricingReconcile.ts prices from and
+// vtuRouter.ts routes with, so toggling a provider off changes price and
+// routing together, never one without the other.
+export async function getLivePlanProviderOptions(
+  serviceType: VtuServiceType,
+  networkOrBiller: string,
+  planCode: string,
+  nativeDB?: any,
+): Promise<ProviderPlanMapping[]> {
+  const options = await getPlanProviderOptions(serviceType, networkOrBiller, planCode, nativeDB)
+  if (options.length === 0) return []
+  const { getActiveVtuProviders } = await import("@/src/services/config")
+  const activeProviders = await getActiveVtuProviders(serviceType, nativeDB)
+  const activeKeys = new Set<string>(activeProviders.map((p) => p.providerKey))
+  // options already arrives cheapest-first from getPlanProviderOptions;
+  // filtering preserves that order.
+  return options.filter((o) => activeKeys.has(o.providerKey as VtuProviderKey))
+}
+
 // Full admin listing (optionally filtered), including inactive rows,
 // for the admin plan-mapping management screen.
 export async function listPlanMappings(

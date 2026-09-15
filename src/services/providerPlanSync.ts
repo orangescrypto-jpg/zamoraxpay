@@ -120,6 +120,60 @@ function canonicalizedPlanCode(label: string, networkOrBiller: string, serviceTy
   return planCode
 }
 
+// exam_pin's ONLY two valid logical plan codes — the exact strings the
+// customer-facing Buy Exam PIN page hardcodes and filters on
+// (app/(dashboard)/services/exam-pin/page.tsx), and the exact strings
+// the purchase route validates (app/api/vtu/exam-pin/route.ts) and
+// passes through as planCode. pricing_rules / provider_plan_mappings
+// MUST be keyed on one of these two values for a synced exam_pin plan
+// to ever be visible or purchasable — nothing else the customer page
+// requests will ever match.
+//
+// Every provider names these two products differently in their own
+// catalog text ("WAEC Registration PIN" vs "WAEC Result Checker PIN",
+// "Result Checker" vs "Scratch Card", "DE"/"Direct Entry" for JAMB
+// registration-style products, etc.) — this classifies a provider's
+// raw label/description into our two canonical codes instead of
+// storing the provider's own wording or numeric ID as plan_code (the
+// previous bug: ClubKonnect stored PRODUCT_CODE, VTUGate stored
+// product_code, neither of which is ever "registration" or
+// "result_checker", so no synced row could ever match what the buy
+// page asks for, no matter how many times reconcile ran).
+//
+// providerPlanId (stored separately) still carries the provider's own
+// raw code/id and is what's actually sent at purchase time — see
+// vtuRouter.ts's planCodeOverride / networkOrBillerOverride, which
+// substitute providerPlanId back in right before calling the adapter.
+// Remapping plan_code here to our logical value never touches that.
+// The only exam boards the customer-facing Buy Exam PIN page offers
+// (see EXAM_BODIES in app/(dashboard)/services/exam-pin/page.tsx).
+// Used to detect which board a provider's row/label refers to when
+// the provider doesn't give a clean separate field for it.
+const EXAM_BOARDS = ["WAEC", "NECO", "JAMB", "NABTEB"]
+
+function classifyExamPinType(rawText: string): "registration" | "result_checker" | null {
+  const text = rawText.toLowerCase()
+
+  // Result-checker / scratch-card wording — used AFTER the exam to
+  // check results. Check this first: some labels contain both
+  // "result" and "registration"-adjacent words (e.g. "WAEC Result
+  // Checker (for registered candidates)"), and "result checker" is
+  // the more specific, unambiguous signal.
+  if (/result\s*-?checker|scratch\s*-?card|checker\s*pin|check\s*(your\s*)?result/.test(text)) {
+    return "result_checker"
+  }
+
+  // Registration / direct-entry wording — used to register for or
+  // sit the exam. JAMB's registration-style products are often
+  // labeled "DE" (Direct Entry), "UTME", or "Registration" rather
+  // than the word "registration" itself.
+  if (/registration|reg\s*-?pin|\bde\b|direct\s*entry|\butme\b|mock/.test(text)) {
+    return "registration"
+  }
+
+  return null
+}
+
 interface ParsedPlan {
   network: string
   planId: string
@@ -391,13 +445,24 @@ export async function syncClubkonnectExamPinPrices(
         skipped++
         continue
       }
-      const existing = await findMappingByNaturalKey("exam_pin", examBoard, examType, "clubkonnect", nativeDB)
+      // plan_code must be OUR logical pin type ("registration" /
+      // "result_checker"), not ClubKonnect's own PRODUCT_CODE — see
+      // classifyExamPinType. Classify from PRODUCT_DESCRIPTION (falls
+      // back to the code itself if description is missing); an
+      // unrecognized product is skipped rather than stored under a
+      // plan_code the buy page can never request.
+      const examPinType = classifyExamPinType(String(product?.PRODUCT_DESCRIPTION ?? examType))
+      if (!examPinType) {
+        skipped++
+        continue
+      }
+      const existing = await findMappingByNaturalKey("exam_pin", examBoard, examPinType, "clubkonnect", nativeDB)
       await upsertPlanMapping(
         {
           id: existing?.id,
           serviceType: "exam_pin",
           networkOrBiller: examBoard,
-          planCode: examType,
+          planCode: examPinType,
           providerKey: "clubkonnect",
           providerPlanId: examType,
           providerCostKobo: costKobo,
@@ -480,18 +545,27 @@ export async function syncCheapdatahubExamPinPrices(
       continue
     }
     const rawLabel = product?.description ?? product?.product_name ?? ""
-    const planCode = rawLabel ? canonicalizedPlanCode(String(rawLabel), examBoard, "exam_pin") : `cdh-${productId}`
-    if (isNumericJunkPlanCode(planCode)) {
+    // plan_code must be OUR logical pin type ("registration" /
+    // "result_checker") — see classifyExamPinType. Previously ran
+    // through canonicalizedPlanCode (a size/validity-aware slugifier
+    // meant for data/cable), which for exam_pin just falls through to
+    // a cleaned slug of the raw label — never matching what the buy
+    // page requests. Classify from whatever label text is available;
+    // an unrecognized product is skipped rather than stored under a
+    // plan_code that can never be looked up.
+    const labelForClassification = String(rawLabel || examBoard)
+    const examPinType = classifyExamPinType(labelForClassification)
+    if (!examPinType) {
       skipped++
       continue
     }
-    const existing = await findMappingByNaturalKey("exam_pin", examBoard, planCode, "cheapdatahub", nativeDB)
+    const existing = await findMappingByNaturalKey("exam_pin", examBoard, examPinType, "cheapdatahub", nativeDB)
     await upsertPlanMapping(
       {
         id: existing?.id,
         serviceType: "exam_pin",
         networkOrBiller: examBoard,
-        planCode,
+        planCode: examPinType,
         providerKey: "cheapdatahub",
         providerPlanId: productId,
         providerCostKobo: costKobo,
@@ -656,13 +730,21 @@ export async function syncVtugateDataPlans(
 // docs). No smartcard/customer input needed — this is a genuine
 // list-everything sync, unlike cable below.
 //
-// planCode is stored as product_code (e.g. "waec") since that's what
-// vtugate.ts's exam_pin purchase path sends through as
-// req.networkOrBiller, not req.planCode — but provider_plan_mappings
-// keys on (serviceType, networkOrBiller, planCode, providerKey), so we
-// store product_code in both networkOrBiller and planCode to satisfy
-// that natural key without inventing a new lookup shape. providerPlanId
-// carries the numeric service_id VTUGate needs at purchase time.
+// networkOrBiller must be the real exam board ("WAEC"/"NECO"/"JAMB"/
+// "NABTEB") — that's what the customer-facing Buy Exam PIN page sends
+// as examBody and what getLivePlanProviderOptions matches on — and
+// planCode must be OUR logical pin type ("registration" /
+// "result_checker") — see classifyExamPinType. Previously this stored
+// VTUGate's raw product_code in BOTH fields, which meant a synced row
+// could never match what the buy page actually requests, regardless
+// of how many times reconcile ran.
+//
+// providerPlanId still carries VTUGate's numeric service_id, which is
+// what vtuRouter.ts's EXAM_PIN_NETWORK_OVERRIDE_PROVIDERS swaps back
+// into req.networkOrBiller right before calling the adapter (VTUGate's
+// exam_pin purchase path has no separate plan-id field — it reads the
+// product/service identifier off networkOrBiller instead of planCode).
+// That override is unaffected by fixing planCode/networkOrBiller here.
 export async function syncVtugateExamPinPrices(
   adminUserId: string,
   credentials: { apiKey?: string; baseUrl?: string } = {},
@@ -719,14 +801,28 @@ export async function syncVtugateExamPinPrices(
       continue
     }
 
+    // Derive the real exam board and pin type from whatever text this
+    // row gives us — product_code itself (e.g. "waec-de",
+    // "neco-result-checker") plus service_name/edu_type as fallbacks.
+    // Both must resolve or this row can never be looked up by the buy
+    // page, so an unrecognized row is skipped rather than stored under
+    // a networkOrBiller/planCode combination nothing will ever request.
+    const classificationText = `${productCode} ${row.service_name ?? ""} ${row.edu_type ?? ""}`
+    const examBoard = EXAM_BOARDS.find((board) => classificationText.toUpperCase().includes(board))
+    const examPinType = classifyExamPinType(classificationText)
+    if (!examBoard || !examPinType) {
+      skipped++
+      continue
+    }
+
     const providerPlanId = String(serviceId)
-    const existing = await findMappingByNaturalKey("exam_pin", productCode, productCode, "vtugate", nativeDB)
+    const existing = await findMappingByNaturalKey("exam_pin", examBoard, examPinType, "vtugate", nativeDB)
     await upsertPlanMapping(
       {
         id: existing?.id,
         serviceType: "exam_pin",
-        networkOrBiller: productCode,
-        planCode: productCode,
+        networkOrBiller: examBoard,
+        planCode: examPinType,
         providerKey: "vtugate",
         providerPlanId,
         providerCostKobo: costKobo,

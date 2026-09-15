@@ -2,8 +2,10 @@
 // Admin CRUD for the dashboard announcement system. Two display
 // styles share one table: 'banner' (the original strip shown between
 // wallet balance and Quick actions) and 'popup' (a modal shown once
-// per session, or once-ever per browser if show_once is set — see
-// DashboardPopupAnnouncement.tsx). Text and image are both optional
+// per session, once-ever per browser if show_once is set, or on every
+// dashboard load/refresh if show_always is set — see
+// DashboardPopupAnnouncement.tsx). show_always overrides show_once
+// when both are set. Text and image are both optional
 // independently — admin can use one, the other, or both — but at
 // least one is required so there's something to render. Link is
 // always optional; when absent the item renders as plain
@@ -47,6 +49,7 @@ export async function POST(req: NextRequest) {
       backgroundColor,
       audience,
       showOnce,
+      showAlways,
     } = await req.json()
 
     if (!text && !imageUrl) {
@@ -64,11 +67,16 @@ export async function POST(req: NextRequest) {
     }
 
     const id = randomUUID()
+    // showAlways takes priority over showOnce when both are somehow set —
+    // "always show on every dashboard load" is a stronger guarantee than
+    // "show once ever", so a conflicting showOnce is ignored in that case.
+    const resolvedShowAlways = showAlways ? 1 : 0
+    const resolvedShowOnce = resolvedShowAlways ? 0 : showOnce ? 1 : 0
     await d1Query(
       `INSERT INTO dashboard_announcements
          (id, text, image_url, link_url, sort_order, starts_at, ends_at, created_by,
-          display_style, background_color, audience, show_once)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          display_style, background_color, audience, show_once, show_always)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         text ?? null,
@@ -81,7 +89,8 @@ export async function POST(req: NextRequest) {
         style,
         backgroundColor ?? null,
         targetAudience,
-        showOnce ? 1 : 0,
+        resolvedShowOnce,
+        resolvedShowAlways,
       ],
     )
 
@@ -109,6 +118,7 @@ export async function PATCH(req: NextRequest) {
       backgroundColor,
       audience,
       showOnce,
+      showAlways,
     } = await req.json()
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 })
 
@@ -132,7 +142,17 @@ export async function PATCH(req: NextRequest) {
     if (displayStyle !== undefined) { sets.push("display_style = ?"); values.push(displayStyle) }
     if (backgroundColor !== undefined) { sets.push("background_color = ?"); values.push(backgroundColor) }
     if (audience !== undefined) { sets.push("audience = ?"); values.push(audience) }
-    if (showOnce !== undefined) { sets.push("show_once = ?"); values.push(showOnce ? 1 : 0) }
+    // showAlways wins over showOnce if both arrive in the same request —
+    // see the same note in POST.
+    if (showAlways !== undefined) {
+      sets.push("show_always = ?")
+      values.push(showAlways ? 1 : 0)
+      if (showAlways) { sets.push("show_once = ?"); values.push(0) }
+    }
+    if (showOnce !== undefined && showAlways === undefined) {
+      sets.push("show_once = ?")
+      values.push(showOnce ? 1 : 0)
+    }
 
     if (sets.length === 0) return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
 

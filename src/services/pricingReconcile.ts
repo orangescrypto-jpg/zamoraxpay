@@ -14,17 +14,24 @@
 //
 // What it does, per distinct (network_or_biller, plan_code) under
 // that service_type:
-//   - Finds the cheapest ACTIVE provider_plan_mappings row for that
-//     plan (same query, same "cheapest first" ordering, that the VTU
-//     router itself uses at purchase time — see
-//     getPlanProviderOptions in providerPlanMappings.ts — so pricing
-//     and routing can never disagree about which provider is the cost
-//     basis).
+//   - Finds every LIVE provider_plan_mappings row for that plan —
+//     "live" meaning both is_active on the mapping AND the provider is
+//     currently enabled in vtu_provider_configs (see
+//     getLivePlanProviderOptions in providerPlanMappings.ts, cheapest-
+//     first) — the exact same source the VTU router uses at purchase
+//     time, so pricing and routing always agree on who's actually in
+//     the running, and toggling a provider off takes effect on both at
+//     once.
+//   - Prices off selectPricingBasis(options) — NOT the cheapest.
+//     1 live provider: that provider's cost. 2+: one below the
+//     highest (the priciest with exactly 2 providers; the second-
+//     priciest with 3+). This bounds the loss on a fallback order
+//     instead of pricing at the cheapest and eating the full gap.
 //   - If no pricing_rules row exists yet for that plan, creates one,
-//     auto_priced = 1, priced from cheapest cost + the service's
+//     auto_priced = 1, priced from the basis cost + the service's
 //     policy fees.
 //   - If a pricing_rules row exists and auto_priced = 1, recalculates
-//     retail/wholesale/convenience from the CURRENT cheapest cost +
+//     retail/wholesale/convenience from the CURRENT basis cost +
 //     CURRENT policy fees and overwrites it.
 //   - If a pricing_rules row exists and auto_priced = 0 (an admin
 //     manually edited this specific plan — a bonus price, a special
@@ -43,8 +50,9 @@
 // and may still use that column however the admin set it by hand.
 
 import { d1Query } from "@/lib/d1"
+import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
-import { getPlanProviderOptions } from "@/src/services/providerPlanMappings"
+import { getLivePlanProviderOptions } from "@/src/services/providerPlanMappings"
 import { getPricingPolicy, applyFee } from "@/src/services/pricingPolicies"
 
 export interface ReconcileResult {
@@ -53,6 +61,42 @@ export interface ReconcileResult {
   updated: number
   skippedManual: number
   skippedNoCost: number
+}
+
+// The provider cost basis a plan's customer price is built from. The
+// router ALWAYS tries cheapest-live-provider first, regardless of
+// this setting — this only controls what the customer is CHARGED, so
+// a normal successful (cheapest-provider) order keeps a cushion
+// instead of zero margin, and the loss on a fallback order is capped
+// by design rather than open-ended.
+//
+//   - 1 live provider  -> that provider's cost (nothing to hedge
+//     against — there's no fallback that could ever happen).
+//   - 2 live providers -> the pricier of the two (which, with exactly
+//     two, is also "one below the highest" — same rule, same result).
+//   - 3+ live providers -> one below the highest (second-most-
+//     expensive), NOT the average and NOT the cheapest. This bounds
+//     the worst case (router falls all the way to the priciest
+//     provider) to just the gap between the two priciest options,
+//     while still pricing well below the priciest provider itself for
+//     every more-likely outcome.
+function selectPricingBasis(
+  options: { providerKey: string; providerCostKobo: number }[],
+): { providerCostKobo: number; providerKey: string; basisRank: "only" | "second-cheapest-of-two" | "second-highest" } {
+  // options arrives cheapest-first (see getLivePlanProviderOptions).
+  const n = options.length
+  if (n === 1) {
+    return { providerCostKobo: options[0].providerCostKobo, providerKey: options[0].providerKey, basisRank: "only" }
+  }
+  // Index n-2 is "one below the highest" for any n >= 2 — for n === 2
+  // that IS the highest (index 1), matching the explicit two-provider
+  // rule; for n >= 3 it's the second-most-expensive.
+  const basis = options[n - 2]
+  return {
+    providerCostKobo: basis.providerCostKobo,
+    providerKey: basis.providerKey,
+    basisRank: n === 2 ? "second-cheapest-of-two" : "second-highest",
+  }
 }
 
 export async function reconcilePricingFromMappings(
@@ -85,15 +129,18 @@ export async function reconcilePricingFromMappings(
   for (const { network_or_biller: networkOrBiller, plan_code: planCode } of distinctPlans) {
     result.scanned++
 
-    // Cheapest-first, same query the router uses — the floor both
-    // systems agree on.
-    const options = await getPlanProviderOptions(serviceType, networkOrBiller, planCode, nativeDB)
-    const cheapest = options[0]
-    if (!cheapest) {
+    // Live options only — excludes any provider the admin has
+    // toggled off, not just inactive mappings. Same source the router
+    // uses for its own candidate list, so a toggle changes price and
+    // routing together, never one without the other.
+    const options = await getLivePlanProviderOptions(serviceType, networkOrBiller, planCode, nativeDB)
+    if (options.length === 0) {
       result.skippedNoCost++
       continue
     }
-    const providerCostKobo = cheapest.providerCostKobo
+    const cheapestCostKobo = options[0].providerCostKobo
+    const basis = selectPricingBasis(options)
+    const providerCostKobo = basis.providerCostKobo
 
     const existingResult = await d1Query(
       `SELECT id, auto_priced FROM pricing_rules
@@ -118,23 +165,59 @@ export async function reconcilePricingFromMappings(
     const retailPriceKobo = providerCostKobo + retailFee + convenienceFee
     const wholesalePriceKobo = providerCostKobo + wholesaleFee + convenienceFee
 
+    // pricing_basis_* columns record WHY this price is what it is —
+    // which provider/cost the price was built from (basis), vs the
+    // true cheapest live cost right now, vs the worst live cost
+    // (what a full fallback-to-the-end would actually cost). This is
+    // what powers the admin margin-tracking view: pricingBasisCostKobo
+    // is what the customer is effectively covering; cheapestCostKobo
+    // is the normal-case actual cost; worstCostKobo is the true
+    // worst-case exposure if every other provider also fails.
+    const worstCostKobo = options[options.length - 1].providerCostKobo
+
     if (existing) {
       await d1Query(
         `UPDATE pricing_rules SET
           retail_price_kobo = ?, wholesale_price_kobo = ?, convenience_fee_kobo = 0,
+          pricing_basis_provider_key = ?, pricing_basis_cost_kobo = ?,
+          cheapest_live_cost_kobo = ?, worst_live_cost_kobo = ?, live_provider_count = ?,
           updated_by = ?, updated_at = datetime('now')
          WHERE id = ?`,
-        [retailPriceKobo, wholesalePriceKobo, adminUserId, existing.id],
+        [
+          retailPriceKobo,
+          wholesalePriceKobo,
+          basis.providerKey,
+          providerCostKobo,
+          cheapestCostKobo,
+          worstCostKobo,
+          options.length,
+          adminUserId,
+          existing.id,
+        ],
         nativeDB,
       )
       result.updated++
     } else {
-      const { randomUUID } = await import("crypto")
       await d1Query(
         `INSERT INTO pricing_rules
-          (id, service_type, network_or_biller, plan_code, retail_price_kobo, wholesale_price_kobo, convenience_fee_kobo, auto_priced, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?)`,
-        [randomUUID(), serviceType, networkOrBiller, planCode, retailPriceKobo, wholesalePriceKobo, adminUserId],
+          (id, service_type, network_or_biller, plan_code, retail_price_kobo, wholesale_price_kobo,
+           convenience_fee_kobo, auto_priced, pricing_basis_provider_key, pricing_basis_cost_kobo,
+           cheapest_live_cost_kobo, worst_live_cost_kobo, live_provider_count, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?)`,
+        [
+          randomUUID(),
+          serviceType,
+          networkOrBiller,
+          planCode,
+          retailPriceKobo,
+          wholesalePriceKobo,
+          basis.providerKey,
+          providerCostKobo,
+          cheapestCostKobo,
+          worstCostKobo,
+          options.length,
+          adminUserId,
+        ],
         nativeDB,
       )
       result.created++

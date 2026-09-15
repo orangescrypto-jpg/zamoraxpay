@@ -13,7 +13,7 @@
 
 import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
-import type { VtuServiceType } from "@/src/types"
+import type { VtuServiceType, VtuProviderKey } from "@/src/types"
 import { canonicalPlanKey, normalizeNetworkOrBiller } from "@/src/services/planNormalization"
 
 export interface ProviderPlanMapping {
@@ -72,7 +72,7 @@ export async function hasLiveRoute(
   const { getActiveVtuProviders } = await import("@/src/services/config")
   const activeProviders = await getActiveVtuProviders(serviceType, nativeDB)
   const activeKeys = new Set<string>(activeProviders.map((p) => p.providerKey))
-  return options.some((o) => activeKeys.has(o.providerKey))
+  return options.some((o) => activeKeys.has(o.providerKey as VtuProviderKey))
 }
 
 // Full admin listing (optionally filtered), including inactive rows,

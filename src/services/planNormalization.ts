@@ -357,6 +357,30 @@ export function canonicalPlanKey(
   networkOrBiller: string,
   serviceType: string,
 ): { planCode: string; confident: boolean } {
+  // exam_pin has exactly two valid plan_codes — "registration" and
+  // "result_checker" (see classifyExamPinType in providerPlanSync.ts,
+  // and the fixed set the Buy Exam PIN page/purchase route validate
+  // against). These MUST survive normalization byte-for-byte: the
+  // generic fallback below (cleanToken) treats "_" as a non-
+  // alphanumeric separator and rewrites it to "-", silently turning
+  // "result_checker" into "result-checker" on every write path that
+  // calls this function (upsertPlanMapping AND upsertPricingRule both
+  // do). That mismatch is invisible in the admin UI — the mapping and
+  // the pricing rule both look consistent with each other, both show
+  // a live price — but neither one is the string the customer-facing
+  // page or purchase route ever requests, so the plan is permanently
+  // unmatchable no matter how many times it's synced or hand-edited.
+  // Checking for the exact already-canonical values first (case/
+  // whitespace-insensitive) means any caller that already has the
+  // right value passes through untouched, before cleanToken gets a
+  // chance to corrupt it.
+  if (serviceType === "exam_pin") {
+    const normalized = rawLabel.trim().toLowerCase()
+    if (normalized === "registration" || normalized === "result_checker") {
+      return { planCode: normalized, confident: true }
+    }
+  }
+
   const parsed = parsePlanIdentity(rawLabel, networkOrBiller, serviceType)
 
   if (!parsed.confident) {

@@ -47,6 +47,17 @@ export interface VtuDeliveredData {
 
 export interface VtuPurchaseResult {
   success: boolean
+  // True when the provider accepted the request (debit is final, do
+  // NOT retry another provider) but has NOT confirmed actual delivery
+  // yet — e.g. "processing", "successful & processing", "processing-api".
+  // Only meaningful when success is true. Omitted/false means the
+  // provider's purchase response itself was a confirmed final delivery.
+  // The router carries this through so purchaseFlow.ts can record the
+  // order as "pending" (not "success") and the reconciliation cron can
+  // resolve it later via checkStatus — this is what actually prevents
+  // "site says successful, provider still processing" for ANY adapter,
+  // not just the ones that happened to be checked by hand.
+  isPending?: boolean
   providerReference?: string
   message: string
   deliveredData?: VtuDeliveredData // customer-facing PIN/token data, when the provider returns it synchronously

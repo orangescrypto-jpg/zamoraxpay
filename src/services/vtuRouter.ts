@@ -56,6 +56,16 @@ export interface VtuRouterAttemptLog {
 
 export interface VtuRouterResult {
   success: boolean
+  // True when the fulfilling provider accepted the request but hasn't
+  // confirmed actual delivery yet (e.g. Pairgate's "successful &
+  // processing", VTU.ng's "processing-api"). success is also true in
+  // this case (the debit is final, a fallback chain must not re-try a
+  // provider that already accepted the order) — isPending is the flag
+  // that tells purchaseFlow.ts to hold cashback/referral and park the
+  // order as "pending" instead of "success" until reconciliation
+  // confirms it one way or the other. Always false when success is
+  // false.
+  isPending: boolean
   providerUsed: string | null
   providerReference: string | null
   message: string
@@ -175,6 +185,7 @@ export async function executeVtuPurchase(
   if (candidates.length === 0) {
     return {
       success: false,
+      isPending: false,
       providerUsed: null,
       providerReference: null,
       message: `No enabled VTU provider supports "${req.serviceType}". An admin must enable at least one provider for this service in the Admin Panel.`,
@@ -223,6 +234,7 @@ export async function executeVtuPurchase(
     if (result.success) {
       return {
         success: true,
+        isPending: !!result.isPending,
         providerUsed: candidate.providerKey,
         providerReference: result.providerReference ?? null,
         message: result.message,
@@ -240,6 +252,7 @@ export async function executeVtuPurchase(
 
   return {
     success: false,
+    isPending: false,
     providerUsed: null,
     providerReference: null,
     message: serviceUnavailableMessage(req.serviceType),

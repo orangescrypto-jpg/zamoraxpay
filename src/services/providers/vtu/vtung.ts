@@ -228,6 +228,11 @@ export const vtungAdapter: IVtuProviderAdapter = {
       if (ok) {
         return {
           success: true,
+          // "processing-api" is an accepted-but-not-yet-delivered
+          // state (see comment above) — only "completed-api" (or any
+          // other non-processing status VTU.ng returns) is a confirmed
+          // final delivery.
+          isPending: status === "processing-api",
           providerReference: data?.request_id ?? req.internalReference,
           message: json?.message ?? "Purchase successful via VTU.ng",
           deliveredData:

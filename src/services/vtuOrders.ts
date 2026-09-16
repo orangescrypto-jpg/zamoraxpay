@@ -52,7 +52,12 @@ export async function createPendingOrder(
 export async function finalizeOrder(
   orderId: string,
   result: {
-    status: "success" | "failed"
+    // "pending": the provider accepted the order but hasn't confirmed
+    // actual delivery yet (see VtuPurchaseResult.isPending) — the
+    // debit is final and stays, but cashback/referral are held and
+    // the order sits here until the reconciliation cron (see
+    // reconcileOrderStatus below) resolves it to "success" or "failed".
+    status: "success" | "failed" | "pending"
     providerUsed: string | null
     providerReference: string | null
     deliveredData?: VtuDeliveredData
@@ -91,6 +96,50 @@ export async function finalizeOrder(
 
 export async function markOrderRefunded(orderId: string, nativeDB?: any): Promise<void> {
   await d1Query("UPDATE vtu_orders SET status = 'refunded', updated_at = datetime('now') WHERE id = ?", [orderId], nativeDB)
+}
+
+// Every order left in "pending" status — any provider, any service
+// type. Provider-neutral by construction: this just reads whatever
+// finalizeOrder wrote, it doesn't know or care which adapter produced
+// it. Used by the reconciliation cron. olderThanMinutes skips
+// brand-new pending orders that genuinely haven't had time to resolve
+// yet, so the cron doesn't hammer a provider's status endpoint on an
+// order that was created 10 seconds ago.
+export async function getPendingOrders(olderThanMinutes = 2, limit = 100, nativeDB?: any) {
+  const result = await d1Query(
+    `SELECT * FROM vtu_orders
+     WHERE status = 'pending'
+       AND provider_reference IS NOT NULL
+       AND datetime(created_at) <= datetime('now', ?)
+     ORDER BY created_at ASC
+     LIMIT ?`,
+    [`-${olderThanMinutes} minutes`, limit],
+    nativeDB,
+  )
+  return result.results ?? []
+}
+
+// Applies a reconciliation outcome (from checkStatus) to a pending
+// order. Same status column every finalizeOrder write already uses —
+// provider-neutral, driven entirely by the VtuStatusResult shape every
+// adapter returns.
+export async function resolvePendingOrder(
+  orderId: string,
+  result: { status: "success" | "failed"; deliveredData?: VtuDeliveredData; failureReason?: string },
+  nativeDB?: any,
+): Promise<void> {
+  await d1Query(
+    `UPDATE vtu_orders SET
+      status = ?, delivered_data = COALESCE(?, delivered_data), failure_reason = ?, updated_at = datetime('now')
+     WHERE id = ? AND status = 'pending'`,
+    [
+      result.status,
+      result.deliveredData ? JSON.stringify(result.deliveredData) : null,
+      result.failureReason ?? null,
+      orderId,
+    ],
+    nativeDB,
+  )
 }
 
 // Used by the Pairgate webhook to resolve which order a callback

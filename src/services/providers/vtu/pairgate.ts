@@ -143,8 +143,20 @@ export const pairgateAdapter: IVtuProviderAdapter = {
       const ok = res.ok && json?.status === "success" && (data?.status === true || data?.test_mode === true)
 
       if (ok) {
+        // Electricity tokens & exam pins are delivered asynchronously
+        // via webhook — the purchase call only confirms debit +
+        // processing started (see file header). Data/cable/airtime
+        // messages containing "processing" mean the same thing for
+        // this provider. Either way this is NOT a confirmed final
+        // delivery yet.
+        const msg = (data?.message ?? "").toLowerCase()
+        const isPending =
+          req.serviceType === "electricity" ||
+          req.serviceType === "exam_pin" ||
+          msg.includes("processing")
         return {
           success: true,
+          isPending,
           providerReference: data?.reference_code ?? data?.reference ?? req.internalReference,
           message: data?.message ?? "Purchase successful via Pairgate",
           raw: json,

@@ -111,9 +111,15 @@ export const vtpassAdapter: IVtuProviderAdapter = {
       const json = (await res.json()) as any
       const code = json?.code
 
-      if (res.ok && (code === "000" || json?.content?.transactions?.status === "delivered")) {
+      const txnStatus = json?.content?.transactions?.status
+      if (res.ok && (code === "000" || txnStatus === "delivered")) {
+        // code "000" alone means VTpass accepted and is processing —
+        // txnStatus "delivered" is their actual confirmed-delivery
+        // marker. Only "delivered" counts as final; anything else
+        // (including no status field at all yet) is still pending.
         return {
           success: true,
+          isPending: txnStatus !== "delivered",
           providerReference: json?.content?.transactions?.transactionId ?? req.internalReference,
           message: "Purchase successful via VTpass",
           deliveredData: extractDeliveredData(req, json),

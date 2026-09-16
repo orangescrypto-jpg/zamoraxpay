@@ -156,8 +156,19 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
       const ok = res.ok && (json?.status === true || json?.status === "true" || json?.status === "success")
 
       if (ok) {
+        // json.status only tells us CheapDataHub accepted the request.
+        // A separate string status (data.status / a "processing"
+        // wording in message) is what distinguishes accepted-only from
+        // confirmed delivery — same distinct states checkStatus below
+        // already resolves ("pending"/"processing"/"initiated" vs
+        // "successful"/"success").
+        const subStatus = String(json?.data?.status ?? "").toLowerCase()
+        const msg = (json?.message ?? "").toLowerCase()
+        const isPending =
+          subStatus === "pending" || subStatus === "processing" || subStatus === "initiated" || msg.includes("processing")
         return {
           success: true,
+          isPending,
           providerReference: json.transaction_id ?? json.reference ?? json.data?.reference,
           message: json?.message ?? "Purchase successful via CheapDataHub",
           deliveredData: extractDeliveredData(req, json),

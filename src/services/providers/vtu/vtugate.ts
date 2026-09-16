@@ -265,8 +265,15 @@ function mapPurchaseResult(json: any, extra?: any): VtuPurchaseResult {
     }
   }
 
+  // provider_status: true is VTUGate's own explicit delivery
+  // confirmation (distinct from other providers' ambiguous "accepted"
+  // codes) — but still defensively treat an explicit "processing"
+  // wording in the message as not-yet-final, same pattern used for
+  // every other adapter here.
+  const msg = (json?.message ?? data?.provider_message ?? "").toLowerCase()
   return {
     success: true,
+    isPending: msg.includes("processing"),
     providerReference: data?.external_reference ?? String(data?.transaction_id ?? ""),
     message: json?.message ?? data?.provider_message ?? "Purchase successful via VTUGate",
     deliveredData: buildDeliveredData(data),

@@ -252,8 +252,13 @@ export const clubkonnectAdapter: IVtuProviderAdapter = {
         }
       }
 
+      // ORDER_RECEIVED / statuscode "100" means ClubKonnect accepted
+      // the order, not that it delivered — only ORDER_COMPLETED /
+      // statuscode "200" is a confirmed final delivery.
+      const isCompleted = json?.statuscode === "200" || json?.status === "ORDER_COMPLETED"
       return {
         success: true,
+        isPending: !isCompleted,
         providerReference: json?.orderid ? String(json.orderid) : requestId,
         message: json?.remark ?? json?.status ?? "Order received by ClubKonnect",
         deliveredData,

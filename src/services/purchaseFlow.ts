@@ -56,6 +56,11 @@ export interface PurchaseFlowResult {
   newBalanceKobo?: number
   cashbackEarnedKobo?: number
   deliveredData?: VtuDeliveredData
+  // True when the provider accepted the order but hasn't confirmed
+  // actual delivery yet — order is saved as "pending", cashback/referral
+  // held, and the reconciliation cron will resolve it. The frontend
+  // should show this as "processing", not "successful".
+  isPending?: boolean
   // True when expectedPriceKobo was sent and didn't match the price
   // just resolved for this exact planCode — nothing was charged, no
   // order/pending record was created. actualPriceKobo is what it would
@@ -263,8 +268,13 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     contactPhone: user.phone ?? undefined,
   })
 
+  // A router success with isPending means the provider accepted the
+  // order but hasn't confirmed actual delivery — the customer must
+  // NOT be told "successful" yet, and cashback/referral must wait
+  // until the reconciliation cron resolves this to a real outcome.
+  const isPending = routerResult.success && routerResult.isPending
   await finalizeOrder(orderId, {
-    status: routerResult.success ? "success" : "failed",
+    status: !routerResult.success ? "failed" : isPending ? "pending" : "success",
     providerUsed: routerResult.providerUsed,
     providerReference: routerResult.providerReference,
     deliveredData: routerResult.deliveredData,
@@ -290,6 +300,12 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
       relatedOrderId: orderId,
     })
     newBalanceKobo = refund.newBalanceKobo
+  } else if (isPending) {
+    // Debit stands (provider accepted the order — do not refund a
+    // request that's genuinely in flight). Cashback and referral are
+    // held until the reconciliation cron confirms delivery, so a
+    // provider that never actually delivers can't still pay out
+    // rewards on it.
   } else {
     const cashback = await awardCashbackForOrder({
       userId: params.userId,
@@ -309,8 +325,10 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     )
   }
 
-  // 8. Fire-and-forget receipt email.
-  if (user.email) {
+  // 8. Fire-and-forget receipt email. Not sent for a pending order —
+  // the reconciliation cron sends it once the outcome is actually known,
+  // so the customer never gets a premature "successful" or "failed" email.
+  if (user.email && !isPending) {
     sendPurchaseReceiptEmail(user.email, {
       serviceType: params.serviceType,
       recipient: params.recipient,
@@ -322,14 +340,17 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
   return {
     success: routerResult.success,
     orderId,
-    message: routerResult.success
-      ? cashbackEarnedKobo > 0
-        ? `Purchase successful — you earned ₦${(cashbackEarnedKobo / 100).toLocaleString()} cashback`
-        : "Purchase successful"
-      : `${routerResult.message} Your wallet has been refunded.`,
+    message: isPending
+      ? "Your order has been received and is processing. We'll update you shortly."
+      : routerResult.success
+        ? cashbackEarnedKobo > 0
+          ? `Purchase successful — you earned ₦${(cashbackEarnedKobo / 100).toLocaleString()} cashback`
+          : "Purchase successful"
+        : `${routerResult.message} Your wallet has been refunded.`,
     chargedAmountKobo: pricing.chargeAmountKobo,
     newBalanceKobo,
     cashbackEarnedKobo,
     deliveredData: routerResult.success ? routerResult.deliveredData : undefined,
+    isPending,
   }
 }

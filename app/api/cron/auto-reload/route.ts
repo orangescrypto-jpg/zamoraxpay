@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { d1Query } from "@/lib/db"
 import { runPurchaseFlow } from "@/src/services/purchaseFlow"
 import { hashPin } from "@/src/services/pin"
+import { verifyCronAuth } from "@/src/services/cronAuth"
 
 function computeNextRun(frequency: string, from: Date): string {
   const next = new Date(from)
@@ -22,12 +23,8 @@ function computeNextRun(frequency: string, from: Date): string {
 }
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization")
-  const expectedSecret = process.env.CRON_SECRET
-
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const authError = await verifyCronAuth(req)
+  if (authError) return authError
 
   const now = new Date().toISOString()
   const dueRules = await d1Query(

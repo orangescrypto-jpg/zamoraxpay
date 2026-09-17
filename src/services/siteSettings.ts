@@ -51,3 +51,21 @@ export async function updateSetting(key: string, value: string, adminUserId: str
     nativeDB,
   )
 }
+
+// cron_secret is deliberately kept out of getAllSettings/GET /api/admin/settings —
+// it's an auth credential, not a displayable setting, and must never be sent
+// back to the browser. Only this getter (used by cron routes) and the
+// dedicated rotate endpoint (write-only) touch it.
+export async function getCronSecret(nativeDB?: any): Promise<string | null> {
+  return getSetting("cron_secret", nativeDB)
+}
+
+export async function setCronSecret(value: string, adminUserId: string, nativeDB?: any): Promise<void> {
+  await d1Query(
+    `INSERT INTO site_settings (key, label, description, value, value_type, updated_by, updated_at)
+     VALUES ('cron_secret', 'Cron Secret', 'Bearer token required by scheduled job endpoints. Write-only — never displayed.', ?, 'text', ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by, updated_at = datetime('now')`,
+    [value, adminUserId],
+    nativeDB,
+  )
+}

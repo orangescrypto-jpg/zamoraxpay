@@ -24,14 +24,11 @@ import { awardCashbackForOrder } from "@/src/services/cashback"
 import { maybeAwardReferralBonus } from "@/src/services/referral"
 import { sendPurchaseReceiptEmail } from "@/src/services/email"
 import { d1Query } from "@/lib/d1"
+import { verifyCronAuth } from "@/src/services/cronAuth"
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization")
-  const expectedSecret = process.env.CRON_SECRET
-
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const authError = await verifyCronAuth(req)
+  if (authError) return authError
 
   const pendingOrders = await getPendingOrders(2, 100)
   const results: Array<{ orderId: string; providerUsed: string | null; resolvedTo: string; message: string }> = []

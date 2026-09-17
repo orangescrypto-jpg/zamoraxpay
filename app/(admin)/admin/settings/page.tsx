@@ -127,6 +127,94 @@ export default function AdminSettingsPage() {
       ))}
 
       <StreakTiersSection />
+      <CronSecretSection />
+    </div>
+  )
+}
+
+function CronSecretSection() {
+  const [value, setValue] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<"idle" | "success" | "error">("idle")
+  const [error, setError] = useState<string | null>(null)
+
+  async function getAuthHeader() {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    return { Authorization: `Bearer ${session?.access_token}` }
+  }
+
+  function generate() {
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    setValue(Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(""))
+    setStatus("idle")
+  }
+
+  async function save() {
+    setSaving(true)
+    setStatus("idle")
+    setError(null)
+    const headers = await getAuthHeader()
+    const res = await fetch("/api/admin/cron-secret", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ value }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) {
+      setStatus("error")
+      setError(data.error ?? "Save failed")
+      return
+    }
+    setStatus("success")
+    setValue("")
+  }
+
+  return (
+    <div>
+      <h2 className="mb-3 font-heading font-semibold text-secondary">Cron Secret</h2>
+      <div className="rounded-lg border border-border bg-white p-4 space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Bearer token required by scheduled job endpoints (auto-reload, reconcile-pending-orders,
+          weekend-bonus). Write-only — the current value is never shown here. Rotating it invalidates
+          the old value immediately, so update your cron provider's header at the same time.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value)
+              setStatus("idle")
+            }}
+            placeholder="Paste or generate a new secret"
+            className="flex-1 rounded-md border border-border px-3 py-1.5 text-sm font-mono"
+          />
+          <button
+            onClick={generate}
+            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-secondary"
+          >
+            Generate
+          </button>
+        </div>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        {status === "success" && (
+          <p className="text-xs text-green-600">
+            Saved. Update the Authorization header in cron-job.org for every job now.
+          </p>
+        )}
+        <div className="flex justify-end">
+          <button
+            onClick={save}
+            disabled={saving || value.length < 24}
+            className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save New Secret"}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

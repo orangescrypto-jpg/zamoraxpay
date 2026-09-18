@@ -119,16 +119,21 @@ sw.addEventListener("push", (event) => {
     data.body = event.data.text();
   }
 
-  event.waitUntil(
-    sw.registration.showNotification(data.title, {
-      body: data.body,
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      tag: data.tag ?? "zamoraxpay-notification",
-      data: { url: data.url ?? "/" },
-      vibrate: [200, 100, 200],
-    })
-  );
+  const options = {
+    body: data.body,
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: data.tag ?? "zamoraxpay-notification",
+    data: { url: data.url ?? "/" },
+    vibrate: [200, 100, 200],
+  };
+  // Large banner-style image, shown inline in the notification body —
+  // only rendered on platforms that support it (e.g. Android Chrome);
+  // harmlessly ignored elsewhere (e.g. iOS Safari), so it's always safe
+  // to include when the payload provides one.
+  if (data.image) options.image = data.image;
+
+  event.waitUntil(sw.registration.showNotification(data.title, options));
 });
 
 // ── Notification click ─────────────────────────────────────────────────────

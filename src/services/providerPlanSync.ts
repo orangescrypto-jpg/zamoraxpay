@@ -37,7 +37,7 @@
 // so electricity remains configured manually via pricing_rules.
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
-import { upsertPlanMapping, findMappingByNaturalKey } from "@/src/services/providerPlanMappings"
+import { upsertPlanMapping, findMappingByNaturalKey, findMappingByProviderPlanId } from "@/src/services/providerPlanMappings"
 import { canonicalPlanKey } from "@/src/services/planNormalization"
 
 // Every sync function below calls a provider's HTTP API and expects
@@ -1044,7 +1044,17 @@ async function pairgateUpsertPlans(
       counts.skipped++
       continue
     }
-    const existing = await findMappingByNaturalKey(serviceType, network, planCode, "pairgate", nativeDB)
+    // Match by Pairgate's own plan_id FIRST, not by our plan_code —
+    // plan_code is derived text that legitimately changes when the
+    // normalizer improves (exactly what happened here: "110mb" ->
+    // "110mb-1d" once duration parsing was added). Matching on
+    // plan_code alone would never find that old row and would create
+    // an orphaned duplicate instead of updating it in place — which
+    // is exactly the stale-row bug this fixes. Falls back to the
+    // natural-key lookup only for a plan_id genuinely new to us.
+    const existing =
+      (await findMappingByProviderPlanId(serviceType, network, "pairgate", planId, nativeDB)) ??
+      (await findMappingByNaturalKey(serviceType, network, planCode, "pairgate", nativeDB))
     await upsertPlanMapping(
       {
         id: existing?.id,

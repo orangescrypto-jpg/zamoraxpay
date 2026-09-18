@@ -219,7 +219,9 @@ function extractPlanFamily(text: string): string | null {
 }
 
 // Extracts size+unit anywhere in the text: "200mb", "1 GB", "1.5GB",
-// "1.5TB". Returns size normalized to MB. GB/TB use 1000/1,000,000
+// "1.5TB", "500-mb" (dash used as a plain separator), "2-5gb" (dash
+// used AS the decimal point — seen in provider labels like
+// "2-5gb-weekend-plan..." meaning 2.5GB). GB/TB use 1000/1,000,000
 // (not 1024/1,048,576) to match the marketing convention every
 // provider's own labels already use ("1GB" meaning 1000MB in their
 // plan names) — using binary units here would silently make a
@@ -227,8 +229,25 @@ function extractPlanFamily(text: string): string | null {
 // listing of the identical plan, which is the exact bug this
 // normalizer exists to fix. The unit pattern checks "tb" before "gb"/
 // "mb" so "1.5TB" isn't partially matched by a shorter alternative.
+//
+// The dash-as-decimal case is tried FIRST and is deliberately narrow
+// (single digit, dash, single-or-more digits, unit — e.g. "2-5gb",
+// "3-55gb") so it only fires on genuine "N-Mgb" shapes and never on
+// "500-mb" (a bare dash separator, no second digit group before the
+// unit) or on a multi-segment code like "1-5gb-cg" being misread past
+// where it should stop. Without this, "2-5gb-weekend..." was matching
+// the plain pattern as just "5gb" — silently turning a 2.5GB plan
+// into a 5GB one, which is a real correctness bug, not just a missed
+// merge.
 function extractSizeMB(text: string): number | null {
-  const match = text.match(/(\d+(?:\.\d+)?)\s*(tb|gb|mb)\b/i)
+  const decimalDash = text.match(/\b(\d+)-(\d+)(tb|gb|mb)\b/i)
+  if (decimalDash) {
+    const value = parseFloat(`${decimalDash[1]}.${decimalDash[2]}`)
+    const unit = decimalDash[3].toLowerCase()
+    const mb = unit === "tb" ? value * 1_000_000 : unit === "gb" ? value * 1000 : value
+    return Math.round(mb)
+  }
+  const match = text.match(/(\d+(?:\.\d+)?)[\s-]*(tb|gb|mb)\b/i)
   if (!match) return null
   const value = parseFloat(match[1])
   const unit = match[2].toLowerCase()
@@ -240,9 +259,12 @@ function extractSizeMB(text: string): number | null {
 }
 
 // Extracts validity anywhere in the text: "1 Day", "1day", "7Days",
-// "Daily", "30 days", "1 Month", "2 Weeks". Normalized to days.
-// "Daily"/"1 day" both mean 1 day — deliberately treated as equal
-// since that's a wording difference, not a different validity.
+// "Daily", "30 days", "1 Month", "2 Weeks", "500-mb-weekly-sme"
+// (bare "weekly"/"monthly" with no leading number, implying 1 of that
+// unit — same convention "Daily" already gets). "Daily"/"1 day" both
+// mean 1 day — deliberately treated as equal since that's a wording
+// difference, not a different validity; "Weekly"/"1 week" and
+// "Monthly"/"1 month" now follow the identical pattern.
 function extractValidityDays(text: string): number | null {
   const lower = text.toLowerCase()
 
@@ -253,12 +275,15 @@ function extractValidityDays(text: string): number | null {
 
   const weeks = lower.match(/(\d+)\s*[- ]?\s*(week|weeks|wk)/i)
   if (weeks) return parseInt(weeks[1], 10) * 7
+  if (/\bweekly\b/.test(lower)) return 7
 
   const months = lower.match(/(\d+)\s*[- ]?\s*(month|months|mo\b)/i)
   if (months) return parseInt(months[1], 10) * 30
+  if (/\bmonthly\b/.test(lower)) return 30
 
   return null
 }
+
 
 function extractCategory(text: string): string {
   for (const { key, re } of CATEGORY_PATTERNS) {

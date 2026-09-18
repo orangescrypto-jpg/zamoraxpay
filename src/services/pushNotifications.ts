@@ -78,7 +78,7 @@ async function configureWebPush(nativeDB?: any): Promise<boolean> {
   const privateKey = await getVapidPrivateKey(nativeDB)
   if (!publicKey || !privateKey) return false
 
-  const contactEmail = (await getSetting("vapid_contact_email", nativeDB)) || "support@zamoraxpay.com"
+  const contactEmail = (await getSetting("vapid_contact_email", nativeDB)) || "ZamoraxLogic@gmail.com"
   webpush.setVapidDetails(`mailto:${contactEmail}`, publicKey, privateKey)
   return true
 }

@@ -1008,3 +1008,52 @@ Once submitted, your result will display on screen. We recommend taking a screen
   'Step-by-step guide to checking your WAEC result using a result checker PIN.',
   datetime('now')
 );
+
+-- =====================================================================
+-- PUSH NOTIFICATIONS
+-- Web push subscriptions, per-trigger delivery log (idempotency), and
+-- the feature flags / settings that drive the re-engagement cron
+-- (see app/api/cron/re-engagement/route.ts and
+-- src/services/reEngagementNotifications.ts).
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id                TEXT PRIMARY KEY,
+  user_id           TEXT NOT NULL REFERENCES users(id),
+  endpoint          TEXT NOT NULL UNIQUE,
+  p256dh            TEXT NOT NULL,
+  auth              TEXT NOT NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
+
+-- One row per (user, trigger, day) send — the UNIQUE constraint is what
+-- makes claimTriggerSlot() in reEngagementNotifications.ts safe to call
+-- repeatedly: a second cron run the same day for the same user/trigger
+-- fails the insert and is treated as "already sent, skip".
+CREATE TABLE IF NOT EXISTS push_notification_log (
+  id                TEXT PRIMARY KEY,
+  user_id           TEXT NOT NULL REFERENCES users(id),
+  trigger_key       TEXT NOT NULL,       -- e.g. 'streak_at_risk', 'winback_7'
+  period_key        TEXT NOT NULL,       -- YYYY-MM-DD the trigger fired for
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, trigger_key, period_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_notification_log_user_id ON push_notification_log(user_id);
+
+INSERT OR IGNORE INTO feature_flags (key, label, description, is_enabled) VALUES
+  ('push_streak_at_risk', 'Streak At Risk', 'Notify users whose daily streak will lapse if they don''t check in today.', 1),
+  ('push_unclaimed_reward', 'Unclaimed Reward', 'Notify users who have an unclaimed cashback, referral, or streak reward.', 1),
+  ('push_wallet_idle', 'Idle Wallet Balance', 'Notify users with a funded wallet who haven''t made a purchase in a while.', 1),
+  ('push_weekend_bonus_live', 'Weekend Bonus Live', 'Notify users the moment their weekend bonus is credited.', 1),
+  ('push_referral_nudge', 'Referral Nudge', 'Nudge users who have a referral code but haven''t referred anyone yet.', 1),
+  ('push_inactivity_winback', 'Inactivity Win-Back', 'Notify users who have gone quiet (7/14/30 days) with a comeback message.', 1);
+
+INSERT OR IGNORE INTO site_settings (key, label, description, value, value_type) VALUES
+  ('push_unclaimed_reward_min_age_days', 'Unclaimed Reward Min Age (days)', 'How many days a reward must sit unclaimed before we nudge about it.', '3', 'number'),
+  ('push_wallet_idle_min_balance_kobo', 'Idle Wallet Min Balance (kobo)', 'Minimum wallet balance (in kobo) to qualify for the idle-wallet nudge.', '50000', 'number'),
+  ('push_wallet_idle_days', 'Idle Wallet Inactivity Window (days)', 'Days with no purchase before a funded wallet is considered idle.', '5', 'number'),
+  ('vapid_contact_email', 'VAPID Contact Email', 'Contact email sent to push services (mailto:) alongside VAPID keys.', 'support@zamoraxpay.com', 'text');

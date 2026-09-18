@@ -13,23 +13,7 @@ export async function verifyCronAuth(req: NextRequest): Promise<NextResponse | n
   const expectedSecret = (await getCronSecret()) || process.env.CRON_SECRET
 
   if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
-    // TEMPORARY DEBUG — remove after confirming the mismatch.
-    // Shows lengths only, never the actual secret values, so this is
-    // safe to leave in a response body briefly but should still be
-    // deleted once the real cause is found.
-    return NextResponse.json(
-      {
-        error: "Unauthorized",
-        debug: {
-          receivedHeaderPresent: !!authHeader,
-          receivedHeaderLength: authHeader?.length ?? 0,
-          expectedSecretPresent: !!expectedSecret,
-          expectedSecretLength: expectedSecret?.length ?? 0,
-          receivedStartsWithBearer: authHeader?.startsWith("Bearer ") ?? false,
-        },
-      },
-      { status: 401 },
-    )
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   return null

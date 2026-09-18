@@ -187,15 +187,19 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
  * Requests notification permission, subscribes the current service
  * worker registration to push using the server's VAPID public key, and
  * posts the subscription to /api/push/subscribe so the backend can
- * target this device. Call with the user's Supabase access token
- * (needed because the subscribe endpoint is auth-gated per user).
+ * target this device. accessToken is optional — pass the user's
+ * Supabase access token when they're logged in so the subscription can
+ * also be used for user-targeted sends later; omit it (or pass
+ * undefined) for anonymous/logged-out subscribers, who still receive
+ * broadcast notifications (new blog posts, promos) but not
+ * account-specific ones.
  *
  * Returns false (and does nothing destructive) if push isn't supported,
  * permission is denied, or the server has no VAPID key configured yet —
  * so callers can show/hide a "enable notifications" toggle based on the
  * boolean rather than needing try/catch at every call site.
  */
-export async function subscribeToPush(accessToken: string): Promise<boolean> {
+export async function subscribeToPush(accessToken?: string): Promise<boolean> {
   if (typeof window === "undefined") return false
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false
 
@@ -218,17 +222,25 @@ export async function subscribeToPush(accessToken: string): Promise<boolean> {
   }
 
   const json = subscription.toJSON()
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    headers,
     body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
   })
 
   return res.ok
 }
 
-/** Unsubscribes this device from push, both locally and on the server. */
-export async function unsubscribeFromPush(accessToken: string): Promise<void> {
+/**
+ * Unsubscribes this device from push, both locally and on the server.
+ * accessToken is optional, same as subscribeToPush — the unsubscribe
+ * endpoint identifies the subscription by its unique push endpoint, not
+ * by user, so it works for anonymous subscribers too.
+ */
+export async function unsubscribeFromPush(accessToken?: string): Promise<void> {
   if (typeof window === "undefined") return
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return
 
@@ -239,9 +251,12 @@ export async function unsubscribeFromPush(accessToken: string): Promise<void> {
   const endpoint = subscription.endpoint
   await subscription.unsubscribe()
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+
   await fetch("/api/push/unsubscribe", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    headers,
     body: JSON.stringify({ endpoint }),
   }).catch(() => {})
 }

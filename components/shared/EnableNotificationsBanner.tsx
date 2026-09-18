@@ -205,7 +205,7 @@ export function EnableNotificationsBanner() {
       <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-primary-foreground">
         {bannerContent}
       </div>
-      <div className="sticky bottom-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-primary-foreground">
+      <div className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-primary-foreground">
         {bannerContent}
       </div>
     </>

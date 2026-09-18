@@ -197,14 +197,12 @@ export async function updatePost(
   }>,
   nativeDB?: any,
 ): Promise<void> {
-  // Read current status/flag BEFORE the update so we can tell whether
-  // this call is the one that actually transitions the post into
-  // "published" (only that transition should ever trigger a broadcast —
-  // re-saving an already-published post must not re-notify).
+  // Read current status BEFORE the update so we know if this save is
+  // keeping the post published (status omitted on this call) vs a
+  // fresh publish (status explicitly set to "published" here).
   const before = await d1Query("SELECT status, send_push, push_sent_at FROM blog_posts WHERE id = ?", [id], nativeDB)
   const beforeRow = before.results?.[0] as any
   const wasPublished = beforeRow?.status === "published"
-  const alreadySent = !!beforeRow?.push_sent_at
 
   const sets: string[] = []
   const values: unknown[] = []
@@ -243,14 +241,16 @@ export async function updatePost(
 
   await d1Query(`UPDATE blog_posts SET ${sets.join(", ")} WHERE id = ?`, values, nativeDB)
 
-  // Broadcast only on the actual draft -> published transition, only
-  // when the notify flag is on for this save, and only once per post
-  // (guarded by push_sent_at, checked against the pre-update row so a
-  // double-click or retry can't double-send).
-  const nowPublishing = updates.status === "published" && !wasPublished
-  const wantsPush = updates.sendPush !== undefined ? updates.sendPush : !!beforeRow?.send_push
+  // Broadcast whenever this save leaves the post published AND the admin
+  // explicitly checked "send push" on THIS save (updates.sendPush === true).
+  // Unlike createPost's one-shot case, edits can re-notify every time the
+  // box is checked — the admin controls it directly, so no once-per-post
+  // guard here. Carrying over an old checked flag from a previous save
+  // does NOT re-fire; only an explicit true on this request does.
+  const isPublished = updates.status === "published" || (wasPublished && updates.status === undefined)
+  const wantsPushNow = updates.sendPush === true
 
-  if (nowPublishing && wantsPush && !alreadySent) {
+  if (isPublished && wantsPushNow) {
     const row = await d1Query("SELECT title, excerpt, slug, cover_image_url FROM blog_posts WHERE id = ?", [id], nativeDB)
     const post = row.results?.[0] as any
     if (post) {

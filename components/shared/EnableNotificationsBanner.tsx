@@ -13,8 +13,10 @@
 // Dismiss is stored in localStorage (not sessionStorage) since this can
 // now be shown to the same anonymous visitor across many separate
 // sessions — a session-scoped dismiss would just re-nag them every
-// visit. Re-shows automatically after 14 days, same spirit as the PWA
-// install banner's reshow window.
+// visit. Dismiss is permanent: it does not reshow after any window.
+// The only way the banner comes back is if the visitor clears their
+// browser storage or actually enables notifications and later revokes
+// them.
 //
 // If the browser/OS permission is "denied", there's no programmatic
 // way back — the browser will never re-prompt, and re-calling
@@ -32,17 +34,17 @@ import { subscribeToPush } from "@/hooks/usePWA"
 
 const DISMISSED_KEY = "zpay_push_banner_dismissed_at"
 const DENIED_DISMISSED_KEY = "zpay_push_denied_hint_dismissed_at"
-const RESHOW_AFTER_SEC = 60 * 60 * 24 * 14
 
 type PushState = "checking" | "unsupported" | "prompt" | "subscribing" | "subscribed" | "denied"
 type BrowserKind = "chrome" | "firefox" | "safari" | "edge" | "other"
 
 function canShow(key: string): boolean {
   if (typeof window === "undefined") return false
-  const dismissedAt = window.localStorage.getItem(key)
-  if (!dismissedAt) return true
-  const elapsed = (Date.now() - parseInt(dismissedAt, 10)) / 1000
-  return elapsed > RESHOW_AFTER_SEC
+  // Once dismissed, stays dismissed permanently — no reshow window.
+  // Only actually enabling notifications (state becomes "subscribed")
+  // makes the banner go away for good in a meaningful sense; dismiss
+  // just means "don't ask me again."
+  return !window.localStorage.getItem(key)
 }
 
 function detectBrowser(): BrowserKind {

@@ -29,6 +29,7 @@ const GROUPS: { title: string; keys: string[] }[] = [
     ],
   },
   { title: "WhatsApp Support", keys: ["whatsapp_support_enabled", "whatsapp_support_number"] },
+  { title: "Support", keys: ["support_url", "support_email"] },
   { title: "Signup Bonus", keys: ["signup_bonus_amount_kobo"] },
   {
     title: "Deposit Bonus",

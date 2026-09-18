@@ -980,6 +980,7 @@ interface PairgatePlanEntry {
   plan_id?: string | number
   name?: string
   price?: number | string
+  duration?: number | string
 }
 
 function parsePairgatePlansByProvider(json: any): Record<string, PairgatePlanEntry[]> {
@@ -1018,7 +1019,27 @@ async function pairgateUpsertPlans(
     // providerPlanLabel) so plan_code is a stable human-readable
     // identifier instead of the raw numeric plan_id or price. Only
     // fall back to the prefixed numeric ID if Pairgate sent no name.
-    const planCode = entry.name ? canonicalizedPlanCode(entry.name, network, serviceType) : `pg-${planId}`
+    //
+    // Pairgate's /data-plans response carries validity as a SEPARATE
+    // `duration` field (see docs excerpt above the interface) — it is
+    // NOT embedded in `entry.name` for many plans (e.g. "110MB",
+    // "150MB (AWOOF)", "1GB Social Plan Platforms" all omit it). The
+    // canonical-key parser only reads the text it's given, so passing
+    // entry.name alone silently drops validity for every such plan —
+    // these then fail confident parsing downstream (no validity found)
+    // and can never merge with the same real plan synced from another
+    // provider that does spell out the day count. Appending "<N>days"
+    // when Pairgate supplies a duration (and only then — never invent
+    // one) lets the existing parser pick it up exactly as if the
+    // provider had written it inline, with no change needed to
+    // planNormalization.ts itself.
+    const durationNum =
+      typeof entry.duration === "string" ? parseFloat(entry.duration) : entry.duration
+    const nameWithDuration =
+      entry.name && typeof durationNum === "number" && !Number.isNaN(durationNum) && durationNum > 0
+        ? `${entry.name} ${durationNum}days`
+        : entry.name
+    const planCode = nameWithDuration ? canonicalizedPlanCode(nameWithDuration, network, serviceType) : `pg-${planId}`
     if (isNumericJunkPlanCode(planCode)) {
       counts.skipped++
       continue
@@ -1033,7 +1054,11 @@ async function pairgateUpsertPlans(
         providerKey: "pairgate",
         providerPlanId: planId,
         providerCostKobo: costKobo,
-        providerPlanLabel: entry.name ?? null,
+        // Store the duration-augmented label, not just entry.name, so
+        // provider_plan_label stays a faithful record of what actually
+        // produced planCode — useful for debugging/re-running the
+        // migration later without needing to re-fetch from Pairgate.
+        providerPlanLabel: nameWithDuration ?? null,
       },
       adminUserId,
       nativeDB,

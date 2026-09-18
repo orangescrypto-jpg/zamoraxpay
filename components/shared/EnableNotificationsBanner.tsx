@@ -15,33 +15,71 @@
 // sessions — a session-scoped dismiss would just re-nag them every
 // visit. Re-shows automatically after 14 days, same spirit as the PWA
 // install banner's reshow window.
+//
+// If the browser/OS permission is "denied", there's no programmatic
+// way back — the browser will never re-prompt, and re-calling
+// Notification.requestPermission() just resolves to "denied" again
+// instantly with no UI. So instead of hiding entirely, this shows a
+// quieter, separately-dismissible hint pointing the visitor to their
+// browser's own site-settings toggle, since that's the only real path
+// back to re-enabling.
 "use client"
 
 import { useEffect, useState } from "react"
-import { Bell, X } from "lucide-react"
+import { Bell, BellOff, X } from "lucide-react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { subscribeToPush } from "@/hooks/usePWA"
 
 const DISMISSED_KEY = "zpay_push_banner_dismissed_at"
+const DENIED_DISMISSED_KEY = "zpay_push_denied_hint_dismissed_at"
 const RESHOW_AFTER_SEC = 60 * 60 * 24 * 14
 
 type PushState = "checking" | "unsupported" | "prompt" | "subscribing" | "subscribed" | "denied"
+type BrowserKind = "chrome" | "firefox" | "safari" | "edge" | "other"
 
-function canShow(): boolean {
+function canShow(key: string): boolean {
   if (typeof window === "undefined") return false
-  const dismissedAt = window.localStorage.getItem(DISMISSED_KEY)
+  const dismissedAt = window.localStorage.getItem(key)
   if (!dismissedAt) return true
   const elapsed = (Date.now() - parseInt(dismissedAt, 10)) / 1000
   return elapsed > RESHOW_AFTER_SEC
+}
+
+function detectBrowser(): BrowserKind {
+  if (typeof navigator === "undefined") return "other"
+  const ua = navigator.userAgent
+  if (/Edg\//.test(ua)) return "edge"
+  if (/Firefox\//.test(ua)) return "firefox"
+  if (/Chrome\//.test(ua) || /CriOS\//.test(ua)) return "chrome"
+  if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) return "safari"
+  return "other"
+}
+
+const UNBLOCK_STEPS: Record<BrowserKind, string> = {
+  chrome: "Tap the lock/info icon next to the address bar → Permissions → Notifications → Allow.",
+  edge: "Tap the lock/info icon next to the address bar → Permissions for this site → Notifications → Allow.",
+  firefox: "Tap the lock icon next to the address bar → Permissions → Notifications → Allow.",
+  safari: "Open Settings → Safari → Notifications (or Websites → Notifications) and allow this site.",
+  other: "Open your browser's site settings for this page and allow Notifications.",
 }
 
 export function EnableNotificationsBanner() {
   const [state, setState] = useState<PushState>("checking")
   const [dismissed, setDismissed] = useState(true) // default hidden until checked, avoids a flash
   const [error, setError] = useState<string | null>(null)
+  const [browser, setBrowser] = useState<BrowserKind>("other")
 
   useEffect(() => {
-    setDismissed(!canShow())
+    setBrowser(detectBrowser())
+  }, [])
+
+  useEffect(() => {
+    // Two independent dismiss windows: the normal "enable notifications"
+    // prompt (DISMISSED_KEY) and the separate "notifications are
+    // blocked, here's how to unblock" hint (DENIED_DISMISSED_KEY) — a
+    // user dismissing one shouldn't affect the other, since they're
+    // shown at different points and mean different things.
+    setDismissed(!canShow(DISMISSED_KEY))
   }, [])
 
   useEffect(() => {
@@ -116,9 +154,38 @@ export function EnableNotificationsBanner() {
     setDismissed(true)
   }
 
-  if (state === "checking" || state === "unsupported" || state === "subscribed" || state === "denied" || dismissed) {
+  function handleDismissDeniedHint() {
+    if (typeof window !== "undefined") window.localStorage.setItem(DENIED_DISMISSED_KEY, Date.now().toString())
+    setDismissed(true)
+  }
+
+  if (state === "checking" || state === "unsupported" || state === "subscribed") {
     return null
   }
+
+  if (state === "denied") {
+    if (!canShow(DENIED_DISMISSED_KEY)) return null
+
+    return (
+      <div className="sticky top-0 z-50 flex items-start justify-between gap-3 bg-secondary px-4 py-2.5 text-white">
+        <div className="flex min-w-0 items-start gap-2">
+          <BellOff className="mt-0.5 h-4.5 w-4.5 flex-shrink-0 opacity-80" />
+          <p className="text-xs leading-snug opacity-90">
+            <span className="font-medium">Notifications are blocked for this site.</span> {UNBLOCK_STEPS[browser]}
+          </p>
+        </div>
+        <button
+          onClick={handleDismissDeniedHint}
+          aria-label="Dismiss"
+          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-70 hover:bg-white/10 hover:opacity-100"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    )
+  }
+
+  if (dismissed) return null
 
   return (
     <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-primary-foreground">

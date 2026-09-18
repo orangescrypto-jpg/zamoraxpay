@@ -51,6 +51,49 @@ const CATEGORY_LABELS: Record<string, string> = {
 function categoryLabel(category: string): string {
   return CATEGORY_LABELS[category] ?? category.charAt(0).toUpperCase() + category.slice(1)
 }
+// Validity-bucket tabs shown above the plan picker, same idea as
+// Pairgate's own Daily/Weekly/Monthly/Yearly split. Buckets are
+// derived purely from the validity already encoded in each group's
+// plan_code (via the leading "<size>mb-<days>d" shape canonicalPlanKey
+// produces) — no new data, no server change, just a client-side
+// re-bucketing of what listPlanGroups already returns. "Hot Data"
+// (Pairgate's default landing tab) isn't reproduced here since it's
+// a provider-curated/promoted subset, not a validity bucket; every
+// plan is reachable from exactly one of the four tabs below by its
+// real validity, so nothing is hidden.
+type ValidityBucket = "daily" | "weekly" | "monthly" | "yearly"
+const BUCKET_LABELS: Record<ValidityBucket, string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+  yearly: "Yearly",
+}
+const BUCKET_ORDER: ValidityBucket[] = ["daily", "weekly", "monthly", "yearly"]
+
+// Pulls the validity-day count out of a group's own plan_code, the
+// same "<size>mb-<days>d..." shape labelFromPlanCode already parses
+// (and the "<family>-<days>d..." shape for named plan families like
+// Collabo). Returns null when the code doesn't carry a parseable day
+// count at all — those groups fall back to "daily" (see bucketFor)
+// rather than being silently dropped from every tab.
+function validityDaysFromPlanCode(code: string): number | null {
+  const match = code.match(/-(\d+)d(?:-[a-z0-9_+]+)*$/i) ?? code.match(/^(?:\d+mb|[a-z][a-z0-9]*)-(\d+)d/i)
+  if (!match) return null
+  return parseInt(match[1], 10)
+}
+
+// Boundaries mirror common Nigerian VTU provider conventions (Pairgate
+// included): 1-6 days = Daily, 7-27 = Weekly, 28-89 = Monthly, 90+ =
+// Yearly. A 7-day plan reads as "Weekly" to a customer even though
+// it's also "7 days", so the cut sits at 7, not "over 7".
+function bucketFor(days: number | null): ValidityBucket {
+  if (days === null) return "daily"
+  if (days < 7) return "daily"
+  if (days < 28) return "weekly"
+  if (days < 90) return "monthly"
+  return "yearly"
+}
+
 function labelFromPlanCode(code: string): string {
   const match = code.match(/^(\d+)mb-(\d+)d((?:-[a-z_+]+)*)$/i)
   if (!match) return code
@@ -96,6 +139,7 @@ export default function DataPage() {
   const [groups, setGroups] = useState<PlanGroup[]>([])
   const [plansLoading, setPlansLoading] = useState(true)
   const [plansError, setPlansError] = useState<string | null>(null)
+  const [bucket, setBucket] = useState<ValidityBucket>("daily")
   const [groupKey, setGroupKey] = useState("")
   const [planCode, setPlanCode] = useState("")
   const [pin, setPin] = useState("")
@@ -145,8 +189,21 @@ export default function DataPage() {
         const loadedGroups: PlanGroup[] = data.groups ?? []
         setGroups(loadedGroups)
         if (loadedGroups.length) {
-          setGroupKey(loadedGroups[0].groupKey)
-          setPlanCode(loadedGroups[0].variants[0].planCode)
+          // Land on whichever bucket actually has plans for this
+          // network, preferring Daily when it does (matches habit —
+          // daily plans are the most frequently bought) rather than
+          // always defaulting to Daily and showing an empty tab.
+          const firstNonEmpty =
+            BUCKET_ORDER.find((b) =>
+              loadedGroups.some((g) => bucketFor(validityDaysFromPlanCode(g.groupKey.split(":").pop() ?? g.groupKey)) === b),
+            ) ?? "daily"
+          setBucket(firstNonEmpty)
+          const firstInBucket =
+            loadedGroups.find(
+              (g) => bucketFor(validityDaysFromPlanCode(g.groupKey.split(":").pop() ?? g.groupKey)) === firstNonEmpty,
+            ) ?? loadedGroups[0]
+          setGroupKey(firstInBucket.groupKey)
+          setPlanCode(firstInBucket.variants[0].planCode)
         }
       } catch {
         if (!cancelled) setPlansError("Could not load data plans")
@@ -159,6 +216,16 @@ export default function DataPage() {
     return () => { cancelled = true }
   }, [network])
 
+  // groupKey is shaped "<network>:<base-plan-code>" (see
+  // listPlanGroups/splitPlanCodeForGrouping in pricing.ts) — validity
+  // lives in the part after the colon, so strip the network prefix
+  // before parsing days out of it.
+  function bucketOfGroup(g: PlanGroup): ValidityBucket {
+    const codePart = g.groupKey.includes(":") ? g.groupKey.split(":").slice(1).join(":") : g.groupKey
+    return bucketFor(validityDaysFromPlanCode(codePart))
+  }
+  const groupsInBucket = groups.filter((g) => bucketOfGroup(g) === bucket)
+
   const selectedGroup = groups.find((g) => g.groupKey === groupKey)
   const selectedVariant = selectedGroup?.variants.find((v) => v.planCode === planCode)
 
@@ -169,6 +236,16 @@ export default function DataPage() {
     setGroupKey(g.groupKey)
     setPlanCode(g.variants[0].planCode) // default to the cheapest variant in the group
     setConfirmState(null)
+  }
+
+  // Switching tabs re-picks groupKey/planCode from whatever's now
+  // visible so the form never keeps a hidden-tab selection active
+  // (which would let someone submit a plan they can no longer see).
+  function selectBucket(b: ValidityBucket) {
+    setBucket(b)
+    const inBucket = groups.filter((g) => bucketOfGroup(g) === b)
+    if (inBucket.length) selectGroup(inBucket[0])
+    else { setGroupKey(""); setPlanCode(""); setConfirmState(null) }
   }
 
   async function submitPurchase(expectedPriceKobo: number | undefined, useplanCode: string, confirmNetworkMismatch: boolean) {
@@ -353,6 +430,22 @@ export default function DataPage() {
 
         <div>
           <label className="mb-1 block text-sm font-medium text-secondary">Data plan</label>
+
+          {!plansLoading && !plansError && groups.length > 0 && (
+            <div className="mb-2 grid grid-cols-4 gap-1.5">
+              {BUCKET_ORDER.map((b) => (
+                <button
+                  type="button"
+                  key={b}
+                  onClick={() => selectBucket(b)}
+                  className={`rounded-md border py-1.5 text-xs font-medium ${bucket === b ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"}`}
+                >
+                  {BUCKET_LABELS[b]}
+                </button>
+              ))}
+            </div>
+          )}
+
           {plansLoading ? (
             <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">Loading plans…</div>
           ) : plansError ? (
@@ -361,13 +454,17 @@ export default function DataPage() {
             <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
               No data plans are configured for {network} yet.
             </div>
+          ) : groupsInBucket.length === 0 ? (
+            <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
+              No {BUCKET_LABELS[bucket].toLowerCase()} plans for {network} right now — try another tab.
+            </div>
           ) : (
             <select value={groupKey} onChange={(e) => {
-              const g = groups.find((x) => x.groupKey === e.target.value)
+              const g = groupsInBucket.find((x) => x.groupKey === e.target.value)
               if (g) selectGroup(g)
             }}
               className="w-full rounded-md border border-border px-3 py-2 text-sm">
-              {groups.map((g) => (
+              {groupsInBucket.map((g) => (
                 <option key={g.groupKey} value={g.groupKey}>
                   {labelFromPlanCode(g.variants[0].planCode)} - from {formatNaira(g.cheapestPriceKobo)}
                 </option>

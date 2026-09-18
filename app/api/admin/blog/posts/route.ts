@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { slug, title, excerpt, contentMarkdown, coverImageUrl, category, authorName, metaDescription, status } = body
+    const { slug, title, excerpt, contentMarkdown, coverImageUrl, category, authorName, metaDescription, status, sendPush } = body
 
     if (!slug || !title || !contentMarkdown) {
       return NextResponse.json({ error: "slug, title, and contentMarkdown are required" }, { status: 400 })
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
         authorName,
         metaDescription,
         status: status === "published" ? "published" : "draft",
+        sendPush: !!sendPush,
       },
       auth.uid,
     )

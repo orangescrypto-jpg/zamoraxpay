@@ -30,6 +30,7 @@ export interface PushPayload {
   body: string
   url?: string
   tag?: string
+  image?: string // large hero image shown in the notification body (Android Chrome; ignored where unsupported, e.g. iOS Safari)
 }
 
 export async function getVapidPublicKey(nativeDB?: any): Promise<string | null> {

@@ -10,13 +10,10 @@
 // logged in, their session token is attached too, so the subscription
 // is also usable for account-specific sends later.
 //
-// Dismiss is stored in localStorage (not sessionStorage) since this can
-// now be shown to the same anonymous visitor across many separate
-// sessions — a session-scoped dismiss would just re-nag them every
-// visit. Dismiss is permanent: it does not reshow after any window.
-// The only way the banner comes back is if the visitor clears their
-// browser storage or actually enables notifications and later revokes
-// them.
+// Dismiss is NOT persisted anywhere (no localStorage, no sessionStorage).
+// It only hides the banner for the current page render — a reload or a
+// new visit shows it again. It keeps re-showing until the visitor
+// actually enables notifications (state becomes "subscribed").
 //
 // If the browser/OS permission is "denied", there's no programmatic
 // way back — the browser will never re-prompt, and re-calling
@@ -32,20 +29,8 @@ import { Bell, BellOff, X } from "lucide-react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { subscribeToPush } from "@/hooks/usePWA"
 
-const DISMISSED_KEY = "zpay_push_banner_dismissed_at"
-const DENIED_DISMISSED_KEY = "zpay_push_denied_hint_dismissed_at"
-
 type PushState = "checking" | "unsupported" | "prompt" | "subscribing" | "subscribed" | "denied"
 type BrowserKind = "chrome" | "firefox" | "safari" | "edge" | "other"
-
-function canShow(key: string): boolean {
-  if (typeof window === "undefined") return false
-  // Once dismissed, stays dismissed permanently — no reshow window.
-  // Only actually enabling notifications (state becomes "subscribed")
-  // makes the banner go away for good in a meaningful sense; dismiss
-  // just means "don't ask me again."
-  return !window.localStorage.getItem(key)
-}
 
 function detectBrowser(): BrowserKind {
   if (typeof navigator === "undefined") return "other"
@@ -67,21 +52,13 @@ const UNBLOCK_STEPS: Record<BrowserKind, string> = {
 
 export function EnableNotificationsBanner() {
   const [state, setState] = useState<PushState>("checking")
-  const [dismissed, setDismissed] = useState(true) // default hidden until checked, avoids a flash
+  const [dismissed, setDismissed] = useState(false)
+  const [deniedHintDismissed, setDeniedHintDismissed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [browser, setBrowser] = useState<BrowserKind>("other")
 
   useEffect(() => {
     setBrowser(detectBrowser())
-  }, [])
-
-  useEffect(() => {
-    // Two independent dismiss windows: the normal "enable notifications"
-    // prompt (DISMISSED_KEY) and the separate "notifications are
-    // blocked, here's how to unblock" hint (DENIED_DISMISSED_KEY) — a
-    // user dismissing one shouldn't affect the other, since they're
-    // shown at different points and mean different things.
-    setDismissed(!canShow(DISMISSED_KEY))
   }, [])
 
   useEffect(() => {
@@ -152,13 +129,11 @@ export function EnableNotificationsBanner() {
   }
 
   function handleDismiss() {
-    if (typeof window !== "undefined") window.localStorage.setItem(DISMISSED_KEY, Date.now().toString())
     setDismissed(true)
   }
 
   function handleDismissDeniedHint() {
-    if (typeof window !== "undefined") window.localStorage.setItem(DENIED_DISMISSED_KEY, Date.now().toString())
-    setDismissed(true)
+    setDeniedHintDismissed(true)
   }
 
   if (state === "checking" || state === "unsupported" || state === "subscribed") {
@@ -166,7 +141,7 @@ export function EnableNotificationsBanner() {
   }
 
   if (state === "denied") {
-    if (!canShow(DENIED_DISMISSED_KEY)) return null
+    if (deniedHintDismissed) return null
 
     return (
       <div className="sticky top-0 z-50 flex items-start justify-between gap-3 bg-secondary px-4 py-2.5 text-white">

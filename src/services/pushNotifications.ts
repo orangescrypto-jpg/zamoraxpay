@@ -185,3 +185,55 @@ export async function sendPushToUsers(
   }
   return sent
 }
+
+async function getAllSubscriptions(nativeDB?: any): Promise<PushSubscriptionRecord[]> {
+  const result = await d1Query(
+    "SELECT id, user_id, endpoint, p256dh, auth FROM push_subscriptions",
+    [],
+    nativeDB,
+  )
+  return (result.results ?? []).map((r: any) => ({
+    id: r.id,
+    userId: r.user_id,
+    endpoint: r.endpoint,
+    p256dh: r.p256dh,
+    auth: r.auth,
+  }))
+}
+
+/**
+ * Sends the same push to every subscribed endpoint site-wide, regardless
+ * of user — for broadcasts like "new blog post published" where there's
+ * no target user list, just "everyone who opted in". Unlike
+ * sendPushToUser/sendPushToUsers this queries push_subscriptions
+ * directly instead of looping per user, since a per-user fan-out would
+ * mean one extra query per subscriber for no benefit here. Returns how
+ * many sends succeeded; dead subscriptions are pruned the same way.
+ */
+export async function broadcastPush(payload: PushPayload, nativeDB?: any): Promise<number> {
+  const configured = await configureWebPush(nativeDB)
+  if (!configured) return 0
+
+  const subscriptions = await getAllSubscriptions(nativeDB)
+  if (subscriptions.length === 0) return 0
+
+  let sent = 0
+  for (const sub of subscriptions) {
+    try {
+      await webpush.sendNotification(
+        {
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth },
+        },
+        JSON.stringify(payload),
+      )
+      sent++
+    } catch (err: any) {
+      const statusCode = err?.statusCode
+      if (statusCode === 404 || statusCode === 410) {
+        await removeSubscription(sub.endpoint, nativeDB)
+      }
+    }
+  }
+  return sent
+}

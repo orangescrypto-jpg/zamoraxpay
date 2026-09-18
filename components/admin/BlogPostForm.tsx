@@ -27,6 +27,8 @@ interface BlogPostFormProps {
     authorName: string
     metaDescription: string
     status: "draft" | "published"
+    sendPush?: boolean
+    pushSentAt?: string | null
   }
 }
 
@@ -41,9 +43,14 @@ export function BlogPostForm({ postId, initial }: BlogPostFormProps) {
   const [authorName, setAuthorName] = useState(initial?.authorName ?? "The ZamoraxPay Team")
   const [metaDescription, setMetaDescription] = useState(initial?.metaDescription ?? "")
   const [status, setStatus] = useState<"draft" | "published">(initial?.status ?? "draft")
+  const [sendPush, setSendPush] = useState(initial?.sendPush ?? false)
   const [categories, setCategories] = useState<{ slug: string; label: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Once a push has actually gone out for this post, the checkbox is
+  // locked read-only — re-saving/re-publishing must never re-notify.
+  const pushAlreadySent = !!initial?.pushSentAt
 
   useEffect(() => {
     fetch("/api/blog/categories")
@@ -69,6 +76,7 @@ export function BlogPostForm({ postId, initial }: BlogPostFormProps) {
       authorName,
       metaDescription,
       status,
+      sendPush,
     }
 
     const res = await fetch(postId ? `/api/admin/blog/posts/${postId}` : "/api/admin/blog/posts", {
@@ -144,6 +152,27 @@ export function BlogPostForm({ postId, initial }: BlogPostFormProps) {
             <option value="published">Published</option>
           </select>
         </div>
+      </div>
+
+      <div className="flex items-start gap-2 rounded-md border border-border px-3 py-2.5">
+        <input
+          id="sendPush"
+          type="checkbox"
+          checked={sendPush}
+          disabled={pushAlreadySent}
+          onChange={(e) => setSendPush(e.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-border disabled:opacity-50"
+        />
+        <label htmlFor="sendPush" className="text-sm text-secondary">
+          <span className="font-medium">Notify subscribers</span>
+          <span className="block text-xs text-muted-foreground">
+            {pushAlreadySent
+              ? "A push notification has already been sent for this post."
+              : status === "published"
+                ? "Sends a push notification to everyone subscribed as soon as you save."
+                : "Sends a push notification to everyone subscribed the moment this post is published."}
+          </span>
+        </label>
       </div>
 
       <div>

@@ -24,7 +24,11 @@ function buildSupabaseFromRequest(req: NextRequest) {
   )
 }
 
-async function getUserFromRequest(req: NextRequest) {
+// Exported for routes that need to *optionally* identify the caller
+// without requiring auth — e.g. push subscribe/unsubscribe, which must
+// work for logged-out visitors too but still tags the subscription with
+// a user_id when a valid session happens to be present.
+export async function getUserFromRequest(req: NextRequest) {
   const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization")
   const bearerToken = authHeader?.toLowerCase().startsWith("bearer ")
     ? authHeader.slice(7).trim()

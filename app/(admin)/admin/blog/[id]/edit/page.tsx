@@ -30,6 +30,8 @@ export default function EditBlogPostPage({ params }: { params: Promise<{ id: str
           authorName: post.authorName ?? "",
           metaDescription: post.metaDescription ?? "",
           status: post.status,
+          sendPush: !!post.sendPush,
+          pushSentAt: post.pushSentAt ?? null,
         })
       }
       setLoading(false)

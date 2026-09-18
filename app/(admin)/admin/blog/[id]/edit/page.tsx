@@ -30,7 +30,12 @@ export default function EditBlogPostPage({ params }: { params: Promise<{ id: str
           authorName: post.authorName ?? "",
           metaDescription: post.metaDescription ?? "",
           status: post.status,
-          sendPush: !!post.sendPush,
+          // Always start unchecked on the edit form: with edits now able
+          // to re-broadcast on every save where this is checked, carrying
+          // the original publish-time flag forward would silently
+          // re-notify subscribers on an unrelated typo fix. The admin
+          // re-checks it explicitly when a given save should notify.
+          sendPush: false,
           pushSentAt: post.pushSentAt ?? null,
         })
       }

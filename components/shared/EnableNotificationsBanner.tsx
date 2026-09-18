@@ -10,6 +10,14 @@
 // logged in, their session token is attached too, so the subscription
 // is also usable for account-specific sends later.
 //
+// Renders TWICE on screen at once: sticky at the top (existing) and
+// sticky at the bottom (new). Both come from this one component so
+// they always reflect the same state — dismissing one dismisses both,
+// enabling from either marks both subscribed. Only the "prompt" banner
+// is duplicated top+bottom; the "denied" hint still only shows at the
+// top, since two identical unblock-instructions banners on screen at
+// once would be redundant clutter rather than a helpful nudge.
+//
 // Dismiss is NOT persisted anywhere (no localStorage, no sessionStorage).
 // It only hides the banner for the current page render — a reload or a
 // new visit shows it again. It keeps re-showing until the visitor
@@ -164,8 +172,8 @@ export function EnableNotificationsBanner() {
 
   if (dismissed) return null
 
-  return (
-    <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-primary-foreground">
+  const bannerContent = (
+    <>
       <div className="flex min-w-0 items-center gap-2">
         <Bell className="h-5 w-5 flex-shrink-0" />
         <div className="min-w-0">
@@ -189,6 +197,17 @@ export function EnableNotificationsBanner() {
           <X className="h-4 w-4" />
         </button>
       </div>
-    </div>
+    </>
+  )
+
+  return (
+    <>
+      <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-primary-foreground">
+        {bannerContent}
+      </div>
+      <div className="sticky bottom-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-primary-foreground">
+        {bannerContent}
+      </div>
+    </>
   )
 }

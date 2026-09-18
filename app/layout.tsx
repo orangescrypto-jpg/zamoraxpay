@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner"
 import PWAInstallBanner from "@/components/shared/PWAInstallBanner"
+import { EnableNotificationsBanner } from "@/components/shared/EnableNotificationsBanner"
 import WhatsAppSupportButton from "@/components/shared/WhatsAppSupportButton"
 import { AdSenseLoader } from "@/components/shared/AdSenseLoader"
 
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-body`}>
         <PWAInstallBanner />
+        <EnableNotificationsBanner />
         <Header />
         <main className="min-h-screen">{children}</main>
         <Footer />

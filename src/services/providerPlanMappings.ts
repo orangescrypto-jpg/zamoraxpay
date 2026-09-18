@@ -155,6 +155,35 @@ export async function findMappingByNaturalKey(
   return row ? rowToMapping(row) : null
 }
 
+// Look up a mapping by the PROVIDER's own stable identifier instead
+// of our plan_code. Needed because plan_code is derived text that can
+// legitimately change under a sync fix (e.g. the same Pairgate plan
+// re-canonicalizing from "110mb" to "110mb-1d" once validity parsing
+// improved) — findMappingByNaturalKey alone would never find that old
+// row (different plan_code = no UNIQUE-constraint match = no ON
+// CONFLICT), so a normalizer improvement silently creates a second,
+// orphaned row instead of updating the first. Matching on
+// (service_type, network_or_biller, provider_key, provider_plan_id)
+// survives a plan_code change because the provider's own ID for that
+// plan doesn't change just because our label of it got better.
+export async function findMappingByProviderPlanId(
+  serviceType: VtuServiceType,
+  networkOrBiller: string,
+  providerKey: string,
+  providerPlanId: string,
+  nativeDB?: any,
+): Promise<ProviderPlanMapping | null> {
+  const normalizedNetwork = normalizeNetworkOrBiller(networkOrBiller)
+  const result = await d1Query(
+    `SELECT * FROM provider_plan_mappings
+     WHERE service_type = ? AND network_or_biller = ? AND provider_key = ? AND provider_plan_id = ?`,
+    [serviceType, normalizedNetwork, providerKey, providerPlanId],
+    nativeDB,
+  )
+  const row = (result.results ?? [])[0]
+  return row ? rowToMapping(row) : null
+}
+
 export async function upsertPlanMapping(
   params: {
     id?: string

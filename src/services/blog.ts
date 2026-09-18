@@ -3,6 +3,7 @@
 
 import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
+import { broadcastPush } from "@/src/services/pushNotifications"
 
 export interface BlogPost {
   id: string
@@ -16,6 +17,8 @@ export interface BlogPost {
   authorName: string | null
   metaDescription: string | null
   publishedAt: string | null
+  sendPush: boolean
+  pushSentAt: string | null
 }
 
 function mapRow(r: any): BlogPost {
@@ -31,6 +34,8 @@ function mapRow(r: any): BlogPost {
     authorName: r.author_name,
     metaDescription: r.meta_description,
     publishedAt: r.published_at,
+    sendPush: !!r.send_push,
+    pushSentAt: r.push_sent_at,
   }
 }
 
@@ -138,6 +143,7 @@ export async function createPost(
     authorName?: string
     metaDescription?: string
     status: "draft" | "published"
+    sendPush?: boolean
   },
   adminUserId: string,
   nativeDB?: any,
@@ -145,8 +151,8 @@ export async function createPost(
   const id = randomUUID()
   await d1Query(
     `INSERT INTO blog_posts
-      (id, slug, title, excerpt, content_markdown, cover_image_url, category, status, author_name, meta_description, published_at, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, slug, title, excerpt, content_markdown, cover_image_url, category, status, author_name, meta_description, published_at, created_by, send_push)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       params.slug,
@@ -160,9 +166,19 @@ export async function createPost(
       params.metaDescription ?? null,
       params.status === "published" ? new Date().toISOString() : null,
       adminUserId,
+      params.sendPush ? 1 : 0,
     ],
     nativeDB,
   )
+
+  // Fire the broadcast immediately if this post is being created
+  // already-published with the notify flag checked — createPost is the
+  // only path for a brand-new post to go live, so there's no separate
+  // "just published" transition to catch the way updatePost has to.
+  if (params.status === "published" && params.sendPush) {
+    await broadcastPostPublished(id, params.title, params.excerpt ?? null, params.slug, nativeDB)
+  }
+
   return id
 }
 
@@ -177,9 +193,19 @@ export async function updatePost(
     authorName: string
     metaDescription: string
     status: "draft" | "published"
+    sendPush: boolean
   }>,
   nativeDB?: any,
 ): Promise<void> {
+  // Read current status/flag BEFORE the update so we can tell whether
+  // this call is the one that actually transitions the post into
+  // "published" (only that transition should ever trigger a broadcast —
+  // re-saving an already-published post must not re-notify).
+  const before = await d1Query("SELECT status, send_push, push_sent_at FROM blog_posts WHERE id = ?", [id], nativeDB)
+  const beforeRow = before.results?.[0] as any
+  const wasPublished = beforeRow?.status === "published"
+  const alreadySent = !!beforeRow?.push_sent_at
+
   const sets: string[] = []
   const values: unknown[] = []
 
@@ -201,6 +227,11 @@ export async function updatePost(
     }
   }
 
+  if (updates.sendPush !== undefined) {
+    sets.push("send_push = ?")
+    values.push(updates.sendPush ? 1 : 0)
+  }
+
   if (updates.status === "published") {
     sets.push("published_at = COALESCE(published_at, datetime('now'))")
   }
@@ -211,6 +242,55 @@ export async function updatePost(
   values.push(id)
 
   await d1Query(`UPDATE blog_posts SET ${sets.join(", ")} WHERE id = ?`, values, nativeDB)
+
+  // Broadcast only on the actual draft -> published transition, only
+  // when the notify flag is on for this save, and only once per post
+  // (guarded by push_sent_at, checked against the pre-update row so a
+  // double-click or retry can't double-send).
+  const nowPublishing = updates.status === "published" && !wasPublished
+  const wantsPush = updates.sendPush !== undefined ? updates.sendPush : !!beforeRow?.send_push
+
+  if (nowPublishing && wantsPush && !alreadySent) {
+    const row = await d1Query("SELECT title, excerpt, slug FROM blog_posts WHERE id = ?", [id], nativeDB)
+    const post = row.results?.[0] as any
+    if (post) {
+      await broadcastPostPublished(id, post.title, post.excerpt, post.slug, nativeDB)
+    }
+  }
+}
+
+/**
+ * Sends "new post published" to every subscribed device site-wide and
+ * marks push_sent_at so neither createPost nor updatePost fire it again
+ * for this post. Best-effort — if broadcastPush fails (VAPID not
+ * configured, etc.) the post save itself has already succeeded, so this
+ * only logs rather than throwing back through to the caller.
+ */
+async function broadcastPostPublished(
+  id: string,
+  title: string,
+  excerpt: string | null,
+  slug: string,
+  nativeDB?: any,
+): Promise<void> {
+  try {
+    await broadcastPush(
+      {
+        title: "New on the ZamoraxPay blog",
+        body: excerpt || title,
+        url: `/blog/${slug}`,
+        tag: `blog-${id}`,
+      },
+      nativeDB,
+    )
+  } catch (err) {
+    console.error("broadcastPostPublished failed for post", id, err)
+  } finally {
+    // Mark sent even on failure so a misconfigured VAPID key doesn't
+    // cause a retry storm on every subsequent edit of this post — an
+    // admin can always re-check the box on a fresh publish if needed.
+    await d1Query("UPDATE blog_posts SET push_sent_at = datetime('now') WHERE id = ?", [id], nativeDB)
+  }
 }
 
 export async function deletePost(id: string, nativeDB?: any): Promise<void> {

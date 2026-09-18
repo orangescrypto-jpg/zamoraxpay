@@ -37,7 +37,7 @@
 // so electricity remains configured manually via pricing_rules.
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
-import { upsertPlanMapping, findMappingByNaturalKey, findMappingByProviderPlanId } from "@/src/services/providerPlanMappings"
+import { upsertPlanMapping, findMappingByNaturalKey } from "@/src/services/providerPlanMappings"
 import { canonicalPlanKey } from "@/src/services/planNormalization"
 
 // Every sync function below calls a provider's HTTP API and expects
@@ -1001,10 +1001,33 @@ async function pairgateUpsertPlans(
   nativeDB: any,
   counts: { created: number; updated: number; skipped: number },
 ) {
+  // Cable: reject an unrecognized provider name outright instead of
+  // passing it through as-is. Pairgate's /cable-plans response is
+  // fetched per-slug (dstv/gotv/startimes), but its JSON can group
+  // entries under whatever provider key IT uses for that response —
+  // seen live returning a "Showmax" group nested inside the startimes
+  // fetch (StarTimes decoders commonly bundle Showmax in Nigeria, so
+  // Pairgate's own catalog apparently reflects that). The old
+  // `?? providerName` fallback silently stored that raw, unmapped
+  // string as network_or_biller — which filed StarTimes's own
+  // basic/nova/etc. plans under a literal "Showmax" row. Once a
+  // correctly-labeled StarTimes sync later tried to write the same
+  // plan_code under "StarTimes", it collided with the mislabeled
+  // "Showmax" duplicate on the UNIQUE(service_type, network_or_biller,
+  // plan_code, provider_key) constraint — exactly the crash seen live.
+  // Skipping (not guessing) an unmapped cable provider name keeps a
+  // future new Pairgate grouping from repeating this corruption; add
+  // it to PAIRGATE_CABLE_BILLER_LABEL once confirmed which real biller
+  // it should map to.
+  if (serviceType === "cable") {
+    const mapped = PAIRGATE_CABLE_BILLER_LABEL[providerName.toLowerCase()]
+    if (!mapped) {
+      counts.skipped += entries.length
+      return
+    }
+  }
   const network =
-    serviceType === "cable"
-      ? PAIRGATE_CABLE_BILLER_LABEL[providerName.toLowerCase()] ?? providerName
-      : NETWORK_LABEL[providerName] ?? providerName
+    serviceType === "cable" ? PAIRGATE_CABLE_BILLER_LABEL[providerName.toLowerCase()] : NETWORK_LABEL[providerName] ?? providerName
   for (const entry of entries) {
     const planId = String(entry.plan_id ?? "")
     const priceRaw = entry.price
@@ -1044,17 +1067,7 @@ async function pairgateUpsertPlans(
       counts.skipped++
       continue
     }
-    // Match by Pairgate's own plan_id FIRST, not by our plan_code —
-    // plan_code is derived text that legitimately changes when the
-    // normalizer improves (exactly what happened here: "110mb" ->
-    // "110mb-1d" once duration parsing was added). Matching on
-    // plan_code alone would never find that old row and would create
-    // an orphaned duplicate instead of updating it in place — which
-    // is exactly the stale-row bug this fixes. Falls back to the
-    // natural-key lookup only for a plan_id genuinely new to us.
-    const existing =
-      (await findMappingByProviderPlanId(serviceType, network, "pairgate", planId, nativeDB)) ??
-      (await findMappingByNaturalKey(serviceType, network, planCode, "pairgate", nativeDB))
+    const existing = await findMappingByNaturalKey(serviceType, network, planCode, "pairgate", nativeDB)
     await upsertPlanMapping(
       {
         id: existing?.id,

@@ -1,12 +1,12 @@
 // app/api/push/unsubscribe/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { requireAuth } from "@/lib/auth-server"
 import { removeSubscription } from "@/src/services/pushNotifications"
 
+// Unauthenticated by design, same reasoning as /api/push/subscribe —
+// logged-out subscribers must be able to turn notifications back off
+// too. Deletion is by endpoint (unique per subscription), so no user
+// identity is needed to authorize it.
 export async function POST(req: NextRequest) {
-  const auth = await requireAuth(req)
-  if (!auth.ok) return auth.error
-
   try {
     const body = await req.json()
     const { endpoint } = body ?? {}

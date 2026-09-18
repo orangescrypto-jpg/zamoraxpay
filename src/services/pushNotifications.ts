@@ -83,8 +83,15 @@ async function configureWebPush(nativeDB?: any): Promise<boolean> {
   return true
 }
 
+/**
+ * Upserts a push subscription. userId is null for anonymous/logged-out
+ * subscribers (banner shown outside the dashboard); when the person
+ * later logs in on the same device, the caller can re-call this with
+ * their uid so the row is claimed and future user-targeted sends (not
+ * just broadcasts) can reach them too.
+ */
 export async function saveSubscription(
-  userId: string,
+  userId: string | null,
   subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
   nativeDB?: any,
 ): Promise<void> {

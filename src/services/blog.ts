@@ -176,7 +176,7 @@ export async function createPost(
   // only path for a brand-new post to go live, so there's no separate
   // "just published" transition to catch the way updatePost has to.
   if (params.status === "published" && params.sendPush) {
-    await broadcastPostPublished(id, params.title, params.excerpt ?? null, params.slug, nativeDB)
+    await broadcastPostPublished(id, params.title, params.excerpt ?? null, params.slug, params.coverImageUrl ?? null, nativeDB)
   }
 
   return id
@@ -251,10 +251,10 @@ export async function updatePost(
   const wantsPush = updates.sendPush !== undefined ? updates.sendPush : !!beforeRow?.send_push
 
   if (nowPublishing && wantsPush && !alreadySent) {
-    const row = await d1Query("SELECT title, excerpt, slug FROM blog_posts WHERE id = ?", [id], nativeDB)
+    const row = await d1Query("SELECT title, excerpt, slug, cover_image_url FROM blog_posts WHERE id = ?", [id], nativeDB)
     const post = row.results?.[0] as any
     if (post) {
-      await broadcastPostPublished(id, post.title, post.excerpt, post.slug, nativeDB)
+      await broadcastPostPublished(id, post.title, post.excerpt, post.slug, post.cover_image_url, nativeDB)
     }
   }
 }
@@ -271,6 +271,7 @@ async function broadcastPostPublished(
   title: string,
   excerpt: string | null,
   slug: string,
+  coverImageUrl: string | null,
   nativeDB?: any,
 ): Promise<void> {
   try {
@@ -280,6 +281,7 @@ async function broadcastPostPublished(
         body: excerpt || title,
         url: `/blog/${slug}`,
         tag: `blog-${id}`,
+        image: coverImageUrl ?? undefined,
       },
       nativeDB,
     )

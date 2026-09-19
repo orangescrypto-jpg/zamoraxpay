@@ -114,6 +114,8 @@ export default function AdminUsersPage() {
                 <dl className="grid grid-cols-2 gap-y-1 text-sm">
                   <dt className="text-muted-foreground">Phone</dt>
                   <dd className="text-right">{u.phone}</dd>
+                  <dt className="text-muted-foreground">Email</dt>
+                  <dd className="text-right break-all">{u.email ?? "—"}</dd>
                   <dt className="text-muted-foreground">Tier</dt>
                   <dd className="text-right capitalize">{u.tier}</dd>
                   <dt className="text-muted-foreground">Balance</dt>
@@ -135,6 +137,7 @@ export default function AdminUsersPage() {
                 <tr>
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Tier</th>
                   <th className="px-4 py-3">Balance</th>
                   <th className="px-4 py-3">Status</th>
@@ -151,6 +154,7 @@ export default function AdminUsersPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3">{u.phone}</td>
+                    <td className="px-4 py-3">{u.email ?? "—"}</td>
                     <td className="px-4 py-3 capitalize">{u.tier}</td>
                     <td className="px-4 py-3">{formatNaira(u.balanceKobo)}</td>
                     <td className="px-4 py-3">

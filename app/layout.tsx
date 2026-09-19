@@ -3,12 +3,7 @@
 import type { Metadata } from "next"
 import { Inter, Space_Grotesk } from "next/font/google"
 import "./globals.css"
-import { Header } from "@/components/layout/Header"
-import { Footer } from "@/components/layout/Footer"
-import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner"
-import PWAInstallBanner from "@/components/shared/PWAInstallBanner"
-import { EnableNotificationsBanner } from "@/components/shared/EnableNotificationsBanner"
-import WhatsAppSupportButton from "@/components/shared/WhatsAppSupportButton"
+import { SiteChrome } from "@/components/layout/SiteChrome"
 import { AdSenseLoader } from "@/components/shared/AdSenseLoader"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -53,13 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AdSenseLoader />
       </head>
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-body`}>
-        <PWAInstallBanner />
-        <EnableNotificationsBanner />
-        <Header />
-        <main className="min-h-screen">{children}</main>
-        <Footer />
-        <CookieConsentBanner />
-        <WhatsAppSupportButton />
+        <SiteChrome>{children}</SiteChrome>
       </body>
     </html>
   )

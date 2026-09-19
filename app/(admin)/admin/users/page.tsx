@@ -52,85 +52,120 @@ export default function AdminUsersPage() {
     load(search)
   }
 
-  return (
-    <div className="p-6">
-      <h1 className="mb-6 text-2xl font-heading font-bold">Users</h1>
+  const StatusBadge = ({ status }: { status: string }) => (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+        status === "active" ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"
+      }`}
+    >
+      {status}
+    </span>
+  )
 
-      <div className="mb-4 flex gap-2">
+  const ActionButton = ({ u }: { u: AdminUserRow }) =>
+    u.status === "active" ? (
+      <button onClick={() => changeStatus(u.id, "suspended")} className="text-xs text-destructive hover:underline">
+        Suspend
+      </button>
+    ) : (
+      <button onClick={() => changeStatus(u.id, "active")} className="text-xs text-accent hover:underline">
+        Reactivate
+      </button>
+    )
+
+  return (
+    <div className="p-4 sm:p-6">
+      <h1 className="mb-4 text-xl font-heading font-bold sm:mb-6 sm:text-2xl">Users</h1>
+
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load(search)}
           placeholder="Search by phone, email, or name"
-          className="w-full max-w-sm rounded-md border border-border px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm sm:max-w-sm"
         />
-        <button onClick={() => load(search)} className="rounded-md border border-border px-4 py-2 text-sm">
+        <button
+          onClick={() => load(search)}
+          className="w-full rounded-md border border-border px-4 py-2 text-sm sm:w-auto"
+        >
           Search
         </button>
       </div>
 
       {loading ? (
         <p className="text-muted-foreground">Loading...</p>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3">Tier</th>
-                <th className="px-4 py-3">Balance</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Joined</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td className="px-4 py-3 font-medium">
-                    <Link href={`/admin/users/${u.id}`} className="text-primary hover:underline">
-                      {u.fullName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">{u.phone}</td>
-                  <td className="px-4 py-3 capitalize">{u.tier}</td>
-                  <td className="px-4 py-3">{formatNaira(u.balanceKobo)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        u.status === "active"
-                          ? "bg-accent/10 text-accent"
-                          : "bg-destructive/10 text-destructive"
-                      }`}
-                    >
-                      {u.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{formatDate(u.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    {u.status === "active" ? (
-                      <button onClick={() => changeStatus(u.id, "suspended")} className="text-xs text-destructive hover:underline">
-                        Suspend
-                      </button>
-                    ) : (
-                      <button onClick={() => changeStatus(u.id, "active")} className="text-xs text-accent hover:underline">
-                        Reactivate
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                    No users found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      ) : users.length === 0 ? (
+        <div className="rounded-lg border border-border px-4 py-8 text-center text-muted-foreground">
+          No users found.
         </div>
+      ) : (
+        <>
+          {/* Mobile: stacked cards */}
+          <div className="flex flex-col gap-3 sm:hidden">
+            {users.map((u) => (
+              <div key={u.id} className="rounded-lg border border-border p-4">
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <Link href={`/admin/users/${u.id}`} className="font-medium text-primary hover:underline">
+                    {u.fullName}
+                  </Link>
+                  <StatusBadge status={u.status} />
+                </div>
+                <dl className="grid grid-cols-2 gap-y-1 text-sm">
+                  <dt className="text-muted-foreground">Phone</dt>
+                  <dd className="text-right">{u.phone}</dd>
+                  <dt className="text-muted-foreground">Tier</dt>
+                  <dd className="text-right capitalize">{u.tier}</dd>
+                  <dt className="text-muted-foreground">Balance</dt>
+                  <dd className="text-right">{formatNaira(u.balanceKobo)}</dd>
+                  <dt className="text-muted-foreground">Joined</dt>
+                  <dd className="text-right">{formatDate(u.createdAt)}</dd>
+                </dl>
+                <div className="mt-3 border-t border-border pt-2 text-right">
+                  <ActionButton u={u} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop/tablet: table */}
+          <div className="hidden overflow-x-auto rounded-lg border border-border sm:block">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Tier</th>
+                  <th className="px-4 py-3">Balance</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Joined</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td className="px-4 py-3 font-medium">
+                      <Link href={`/admin/users/${u.id}`} className="text-primary hover:underline">
+                        {u.fullName}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3">{u.phone}</td>
+                    <td className="px-4 py-3 capitalize">{u.tier}</td>
+                    <td className="px-4 py-3">{formatNaira(u.balanceKobo)}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={u.status} />
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{formatDate(u.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <ActionButton u={u} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   )

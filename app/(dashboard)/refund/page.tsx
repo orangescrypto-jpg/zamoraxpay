@@ -32,6 +32,7 @@ export default function RefundPage() {
   const [selectedAccount, setSelectedAccount] = useState("")
   const [manualBankCode, setManualBankCode] = useState("")
   const [amount, setAmount] = useState("")
+  const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [withdrawalEnabled, setWithdrawalEnabled] = useState(true)
@@ -85,6 +86,7 @@ export default function RefundPage() {
         accountNumber: source.account_number,
         accountName: source.account_name ?? "",
         bankCode: source.bank_code ?? manualBankCode ?? undefined,
+        transactionPin: pin,
       }),
     })
     const data = await res.json()
@@ -93,6 +95,7 @@ export default function RefundPage() {
 
     if (res.ok && data.success) {
       setAmount("")
+      setPin("")
       load()
     }
   }
@@ -188,9 +191,21 @@ export default function RefundPage() {
             />
           </div>
 
+          <div>
+            <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>
+            <input
+              required
+              type="password"
+              maxLength={4}
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest"
+            />
+          </div>
+
           <button
             type="submit"
-            disabled={loading || !selectedAccount || !amount}
+            disabled={loading || !selectedAccount || !amount || !pin}
             className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
             {loading ? "Submitting..." : "Request refund"}

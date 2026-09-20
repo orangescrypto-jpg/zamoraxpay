@@ -32,10 +32,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { amountKobo, bankName, accountNumber, accountName, bankCode } = await req.json()
+    const { amountKobo, bankName, accountNumber, accountName, bankCode, transactionPin } = await req.json()
 
-    if (!amountKobo || !bankName || !accountNumber || !accountName) {
-      return NextResponse.json({ error: "amountKobo, bankName, accountNumber, and accountName are required" }, { status: 400 })
+    if (!amountKobo || !bankName || !accountNumber || !accountName || !transactionPin) {
+      return NextResponse.json(
+        { error: "amountKobo, bankName, accountNumber, accountName, and transactionPin are required" },
+        { status: 400 },
+      )
     }
 
     const result = await requestWithdrawal({
@@ -45,6 +48,7 @@ export async function POST(req: NextRequest) {
       accountNumber,
       accountName,
       bankCode,
+      transactionPin,
     })
 
     return NextResponse.json(result, { status: result.success ? 200 : 400 })

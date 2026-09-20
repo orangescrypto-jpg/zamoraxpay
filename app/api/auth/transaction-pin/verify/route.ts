@@ -1,8 +1,11 @@
 // app/api/auth/transaction-pin/verify/route.ts
+// Checks a PIN and returns {valid}. This is a direct brute-force oracle
+// (send a guess, learn yes/no), so it goes through the rate limiter:
+// 5 wrong attempts locks the PIN for 30 minutes across ALL PIN checks.
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth-server"
 import { d1Query } from "@/lib/db"
-import { verifyPin } from "@/src/services/pin"
+import { checkPinWithLimit } from "@/src/services/pinGuard"
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
@@ -19,8 +22,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No transaction PIN set for this account" }, { status: 400 })
     }
 
-    const valid = verifyPin(pin, storedHash)
-    return NextResponse.json({ valid })
+    const check = await checkPinWithLimit(auth.uid, String(pin), storedHash)
+
+    // 429 when locked so clients can distinguish "wrong PIN" from "stop".
+    return NextResponse.json(
+      { valid: check.valid, locked: check.locked, attemptsRemaining: check.attemptsRemaining, message: check.message },
+      { status: check.locked ? 429 : 200 },
+    )
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "PIN verification failed" }, { status: 500 })
   }

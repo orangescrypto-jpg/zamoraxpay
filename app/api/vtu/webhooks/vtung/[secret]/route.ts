@@ -151,25 +151,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
   }
 
   const orderId = extractOrderId(reference)
+  const eventType = data?.status ?? payload?.status ?? "unknown"
 
-  await d1Query(
-    "INSERT INTO vtu_webhook_events (id, provider, order_id, event_type, payload) VALUES (?, 'vtung', ?, ?, ?)",
-    [eventId, orderId, data?.status ?? payload?.status ?? "unknown", rawBody],
-  )
+  // Record the idempotency row only AFTER processing succeeds (or after
+  // we've determined there's genuinely nothing to process — no
+  // resolvable order). Recording up front would mark the event
+  // "processed" even if attachDeliveredData then threw, and VTU.ng's
+  // retry — the only other chance to capture the token — would be
+  // silently swallowed by the idempotency check above.
+  async function recordEvent() {
+    await d1Query(
+      "INSERT INTO vtu_webhook_events (id, provider, order_id, event_type, payload) VALUES (?, 'vtung', ?, ?, ?)",
+      [eventId, orderId, eventType, rawBody],
+    )
+  }
 
   if (!orderId) {
     console.error("[vtung webhook] Could not resolve an order from reference:", reference)
+    await recordEvent()
     return NextResponse.json({ received: true, note: "Reference did not match a known order format" })
   }
 
   const order = await getOrderById(orderId)
   if (!order) {
     console.error("[vtung webhook] No matching order found for id:", orderId)
+    await recordEvent()
     return NextResponse.json({ received: true, note: "Order not found" })
   }
 
   const deliveredData = extractDeliveredData(payload)
   if (deliveredData) {
+    // Let this throw on failure — if attaching fails, we must NOT
+    // record the event as processed, or the retry will be dropped by
+    // the idempotency check and the token lost for good.
     await attachDeliveredData(orderId, deliveredData)
   } else {
     console.error(
@@ -179,5 +193,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
     )
   }
 
+  await recordEvent()
   return NextResponse.json({ received: true })
 }

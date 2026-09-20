@@ -33,7 +33,7 @@ import { d1Query } from "@/lib/d1"
 import { isFeatureEnabled, getActiveVtuProviders, getVtuProviderCredentials } from "@/src/services/config"
 import { getSettingNumber } from "@/src/services/siteSettings"
 import { getInternationalTopupAdapter } from "@/src/services/providers/international/registry"
-import { verifyPin } from "@/src/services/pin"
+import { checkPinWithLimit } from "@/src/services/pinGuard"
 import { debitWallet, refundWallet } from "@/src/services/wallet"
 import type { IntlCountry, IntlOperator } from "@/src/services/providers/international/types"
 
@@ -146,8 +146,10 @@ export async function purchaseInternationalTopup(params: PurchaseParams, nativeD
   if (!user.transaction_pin_hash) {
     return { success: false, message: "Please set a transaction PIN before making purchases" }
   }
-  if (!verifyPin(params.transactionPin, user.transaction_pin_hash)) {
-    return { success: false, message: "Incorrect transaction PIN" }
+  // Rate-limited: 5 wrong attempts locks the PIN for 30 minutes.
+  const pinCheck = await checkPinWithLimit(params.userId, params.transactionPin, user.transaction_pin_hash, nativeDB)
+  if (!pinCheck.ok) {
+    return { success: false, message: pinCheck.message }
   }
 
   // 3. Resolve the active provider (neutral — see resolveProvider above).

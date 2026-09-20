@@ -30,6 +30,7 @@ const NAV_ITEMS: { href: string; label: string; minRole: "moderator" | "admin" |
   { href: "/admin/users", label: "Users", minRole: "moderator" },
   { href: "/admin/transactions", label: "Transactions", minRole: "moderator" },
   { href: "/admin/withdrawals", label: "Withdrawals", minRole: "admin" },
+  { href: "/admin/orders-needing-review", label: "Orders Needing Review", minRole: "admin" },
   { href: "/admin/fraud", label: "Fraud", minRole: "moderator" },
   { href: "/admin/staff", label: "Staff Access", minRole: "super_admin" },
 ]

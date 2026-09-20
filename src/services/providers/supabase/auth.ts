@@ -103,11 +103,11 @@ export const AuthService: IAuthService = {
     if (!res.ok) throw new Error(json.error ?? "Reset failed")
   },
 
-  async setTransactionPin(pin: string) {
+  async setTransactionPin(pin: string, currentPin?: string) {
     const res = await fetch("/api/auth/transaction-pin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin }),
+      body: JSON.stringify(currentPin ? { pin, currentPin } : { pin }),
     })
     if (!res.ok) {
       const json = await safeJson(res)

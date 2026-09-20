@@ -30,6 +30,7 @@ import { d1Query } from "@/lib/d1"
 import { getWalletBalance, debitWallet, refundWallet } from "@/src/services/wallet"
 import { findMatchingFundingSource } from "@/src/services/fundingSource"
 import { getSettingNumber, getSetting } from "@/src/services/siteSettings"
+import { checkPinWithLimit } from "@/src/services/pinGuard"
 
 export async function getWithdrawableBalance(userId: string, nativeDB?: any): Promise<number> {
   const [currentBalance, creditSums, debitSum] = await Promise.all([
@@ -75,9 +76,24 @@ export async function requestWithdrawal(
     accountNumber: string
     accountName: string
     bankCode?: string
+    transactionPin: string
   },
   nativeDB?: any,
 ): Promise<WithdrawalRequestResult> {
+  // Verify transaction PIN — same rate-limited check every purchase
+  // route uses. Withdrawals move real money out of the platform, so
+  // this must not be skippable.
+  const userResult = await d1Query("SELECT transaction_pin_hash FROM users WHERE id = ?", [params.userId], nativeDB)
+  const user = userResult.results?.[0]
+  if (!user) return { success: false, message: "User not found" }
+  if (!user.transaction_pin_hash) {
+    return { success: false, message: "Please set a transaction PIN before requesting a refund" }
+  }
+  const pinCheck = await checkPinWithLimit(params.userId, params.transactionPin, user.transaction_pin_hash, nativeDB)
+  if (!pinCheck.ok) {
+    return { success: false, message: pinCheck.message }
+  }
+
   const minAmount = await getSettingNumber("withdrawal_min_amount_kobo", 100000, nativeDB)
   if (params.amountKobo < minAmount) {
     return { success: false, message: `Minimum refund is ₦${(minAmount / 100).toLocaleString()}` }

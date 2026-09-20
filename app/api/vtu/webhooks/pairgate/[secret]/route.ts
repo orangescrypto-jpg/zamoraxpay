@@ -143,25 +143,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
   }
 
   const orderId = extractOrderId(reference)
+  const eventType = payload?.event ?? data?.status ?? "unknown"
 
-  await d1Query(
-    "INSERT INTO vtu_webhook_events (id, provider, order_id, event_type, payload) VALUES (?, 'pairgate', ?, ?, ?)",
-    [eventId, orderId, payload?.event ?? data?.status ?? "unknown", rawBody],
-  )
+  // Record the idempotency row only AFTER processing succeeds (or after
+  // we've determined there's genuinely nothing to process — no
+  // resolvable order). If we recorded it up front and attachDeliveredData
+  // below then threw (transient DB error, etc.), the event would already
+  // read as "processed" and Pairgate's retry — the only other chance to
+  // capture the pin/token — would be silently swallowed by the
+  // idempotency check above. Recording after success means a failed
+  // attempt leaves no row, so a retry is free to try again.
+  async function recordEvent() {
+    await d1Query(
+      "INSERT INTO vtu_webhook_events (id, provider, order_id, event_type, payload) VALUES (?, 'pairgate', ?, ?, ?)",
+      [eventId, orderId, eventType, rawBody],
+    )
+  }
 
   if (!orderId) {
     console.error("[pairgate webhook] Could not resolve an order from reference:", reference)
+    await recordEvent()
     return NextResponse.json({ received: true, note: "Reference did not match a known order format" })
   }
 
   const order = await getOrderById(orderId)
   if (!order) {
     console.error("[pairgate webhook] No matching order found for id:", orderId)
+    await recordEvent()
     return NextResponse.json({ received: true, note: "Order not found" })
   }
 
   const deliveredData = extractDeliveredData(payload)
   if (deliveredData) {
+    // Let this throw on failure — if attaching the delivered data fails,
+    // we must NOT record the event as processed, or Pairgate's retry
+    // will be dropped by the idempotency check and the pin/token lost
+    // for good.
     await attachDeliveredData(orderId, deliveredData)
   } else {
     console.error(
@@ -171,5 +188,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
     )
   }
 
+  await recordEvent()
   return NextResponse.json({ received: true })
 }

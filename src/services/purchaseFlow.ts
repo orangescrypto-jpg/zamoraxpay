@@ -11,7 +11,7 @@ import { createPendingOrder, finalizeOrder } from "@/src/services/vtuOrders"
 import { debitWallet, refundWallet } from "@/src/services/wallet"
 import { executeVtuPurchase } from "@/src/services/vtuRouter"
 import { hasLiveRoute } from "@/src/services/providerPlanMappings"
-import { verifyPin } from "@/src/services/pin"
+import { checkPinWithLimit } from "@/src/services/pinGuard"
 import { d1Query } from "@/lib/d1"
 import { sendPurchaseReceiptEmail } from "@/src/services/email"
 import { isFeatureEnabled } from "@/src/services/config"
@@ -108,8 +108,11 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
   if (!user.transaction_pin_hash) {
     return { success: false, message: "Please set a transaction PIN before making purchases" }
   }
-  if (!verifyPin(params.transactionPin, user.transaction_pin_hash)) {
-    return { success: false, message: "Incorrect transaction PIN" }
+  // Rate-limited: 5 wrong attempts locks the PIN for 30 minutes. Uses
+  // atomic attempt reservation, so parallel guesses cannot bypass it.
+  const pinCheck = await checkPinWithLimit(params.userId, params.transactionPin, user.transaction_pin_hash)
+  if (!pinCheck.ok) {
+    return { success: false, message: pinCheck.message }
   }
 
   // 3. Resolve price (admin-configured, tier-aware).

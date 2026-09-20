@@ -70,6 +70,22 @@ export async function GET(req: NextRequest) {
         continue
       }
 
+      // REFUND FIRST, THEN FLIP STATUS. The refund is idempotent
+      // (ZPREF-<orderId> is unique in the wallet ledger), so it is safe
+      // to run more than once. The status flip is NOT retryable: once an
+      // order leaves 'pending' this cron never looks at it again. The
+      // old order (flip, then refund) meant a failed refund — e.g. a D1
+      // timeout — left the order marked 'failed' with the customer
+      // never refunded and nothing left to retry it.
+      if (statusResult.status === "failed") {
+        await refundWallet({
+          userId: order.user_id,
+          amountKobo: order.amount_kobo,
+          reference: `ZPREF-${order.id}`,
+          relatedOrderId: order.id,
+        })
+      }
+
       await resolvePendingOrder(order.id, {
         status: statusResult.status,
         deliveredData: statusResult.deliveredData,
@@ -79,14 +95,7 @@ export async function GET(req: NextRequest) {
       const userResult = await d1Query("SELECT email, id FROM users WHERE id = ?", [order.user_id])
       const user = userResult.results?.[0]
 
-      if (statusResult.status === "failed") {
-        await refundWallet({
-          userId: order.user_id,
-          amountKobo: order.amount_kobo,
-          reference: `ZPREF-${order.id}`,
-          relatedOrderId: order.id,
-        })
-      } else {
+      if (statusResult.status !== "failed") {
         // Now genuinely confirmed successful — award cashback/referral,
         // same as the synchronous path in purchaseFlow.ts does for an
         // immediately-successful order.

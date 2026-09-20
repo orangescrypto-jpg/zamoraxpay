@@ -17,7 +17,7 @@
 import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
 import { runPurchaseFlow } from "@/src/services/purchaseFlow"
-import { verifyPin } from "@/src/services/pin"
+import { checkPinWithLimit } from "@/src/services/pinGuard"
 import { detectNetwork, type NetworkName } from "@/lib/networkDetect"
 import { getContactBatch } from "@/src/services/contactBatches"
 
@@ -71,8 +71,12 @@ export async function runBulkPurchase(params: BulkPurchaseParams): Promise<BulkP
   if (!pinHash) {
     return { success: false, message: "Please set a transaction PIN before making purchases", successCount: 0, failureCount: 0, totalChargedKobo: 0, items: [] }
   }
-  if (!verifyPin(params.transactionPin, pinHash)) {
-    return { success: false, message: "Incorrect transaction PIN", successCount: 0, failureCount: 0, totalChargedKobo: 0, items: [] }
+  // Rate-limited: 5 wrong attempts locks the PIN for 30 minutes. The
+  // per-item runPurchaseFlow re-check below passes this same, now-verified
+  // PIN, so it resets (never adds to) the failure counter — no false lockout.
+  const pinCheck = await checkPinWithLimit(params.userId, params.transactionPin, pinHash)
+  if (!pinCheck.ok) {
+    return { success: false, message: pinCheck.message, successCount: 0, failureCount: 0, totalChargedKobo: 0, items: [] }
   }
 
   // 2. Load the batch (ownership-checked inside getContactBatch).

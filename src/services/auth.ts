@@ -30,7 +30,9 @@ export interface IAuthService {
   /** Re-sends the signup confirmation link, for a user who didn't receive or lost it. */
   resendConfirmationEmail(email: string): Promise<void>
 
-  setTransactionPin(pin: string): Promise<void>
+  // currentPin is REQUIRED by the server when the account already has a
+  // PIN (changing it); omit it only for first-time setup.
+  setTransactionPin(pin: string, currentPin?: string): Promise<void>
 
   verifyTransactionPin(pin: string): Promise<boolean>
 

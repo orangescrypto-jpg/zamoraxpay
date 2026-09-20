@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileMessage, setProfileMessage] = useState<string | null>(null)
 
+  const [currentPin, setCurrentPin] = useState("")
   const [newPin, setNewPin] = useState("")
   const [savingPin, setSavingPin] = useState(false)
   const [pinMessage, setPinMessage] = useState<string | null>(null)
@@ -34,8 +35,9 @@ export default function SettingsPage() {
     setSavingPin(true)
     setPinMessage(null)
     try {
-      await AuthService.setTransactionPin(newPin)
+      await AuthService.setTransactionPin(newPin, user?.hasTransactionPin ? currentPin : undefined)
       setPinMessage(user?.hasTransactionPin ? "Transaction PIN updated" : "Transaction PIN set")
+      setCurrentPin("")
       setNewPin("")
     } catch (err) {
       setPinMessage(err instanceof Error ? err.message : "Failed to set PIN")
@@ -80,10 +82,21 @@ export default function SettingsPage() {
         <h2 className="mb-3 font-heading font-semibold text-secondary">Transaction PIN</h2>
         <p className="mb-3 text-sm text-muted-foreground">
           {user?.hasTransactionPin
-            ? "Set a new 4-digit PIN used to confirm purchases."
+            ? "Enter your current PIN, then choose a new 4-digit PIN."
             : "Set a 4-digit PIN — required before you can make any purchase."}
         </p>
         {pinMessage && <p className="mb-3 text-sm text-accent">{pinMessage}</p>}
+        {user?.hasTransactionPin && (
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            value={currentPin}
+            onChange={(e) => setCurrentPin(e.target.value)}
+            placeholder="Current 4-digit PIN"
+            className="mb-3 w-full rounded-md border border-border px-3 py-2 text-center tracking-widest"
+          />
+        )}
         <input
           type="password"
           maxLength={4}
@@ -94,7 +107,7 @@ export default function SettingsPage() {
         />
         <button
           onClick={handleSetPin}
-          disabled={savingPin || newPin.length !== 4}
+          disabled={savingPin || newPin.length !== 4 || (!!user?.hasTransactionPin && currentPin.length !== 4)}
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
           {savingPin ? "Saving..." : "Save PIN"}

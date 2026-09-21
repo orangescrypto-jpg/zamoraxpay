@@ -109,7 +109,10 @@ export function ScratchCard({
         const ctx2 = canvas2.getContext("2d")
         ctx2?.clearRect(0, 0, SIZE, SIZE)
       }
-      setTimeout(() => onDone(outcome), 350)
+      // Dwell on the reveal long enough to actually read it before this
+      // component resets itself for the next ticket (see resetKey below) —
+      // there's no longer a separate "Try again" screen holding it up.
+      setTimeout(() => onDone(outcome), 1800)
     }
   }
 

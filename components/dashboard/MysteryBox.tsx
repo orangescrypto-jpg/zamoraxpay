@@ -4,7 +4,7 @@
 // already exists. Same onSpin/onDone contract as SpinWheel so SpinModal can swap it in.
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { SpinOutcome } from "@/components/dashboard/useSpinStatus"
 import type { WheelSpinResult } from "@/components/dashboard/SpinWheel"
 
@@ -15,16 +15,29 @@ export function MysteryBox({
   onDone,
   disabled,
   buttonLabel = "Open the box",
+  resetKey,
 }: {
   onSpin: () => Promise<WheelSpinResult>
   onDone: (outcome: SpinOutcome) => void
   disabled?: boolean
   buttonLabel?: string
+  /** Change this (e.g. to the current ticket id) to reset the box back to
+   *  unopened — otherwise the last reveal stays frozen on screen when a
+   *  new ticket becomes available after this one is used. */
+  resetKey?: string
 }) {
   const [opening, setOpening] = useState(false)
   const [opened, setOpened] = useState(false)
   const [outcome, setOutcome] = useState<SpinOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (resetKey === undefined) return
+    setOpening(false)
+    setOpened(false)
+    setOutcome(null)
+    setError(null)
+  }, [resetKey])
 
   async function handleOpen() {
     if (opening || opened || disabled) return

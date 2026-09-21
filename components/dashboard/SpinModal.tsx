@@ -71,6 +71,7 @@ export function SpinModal({
   const won = result && result.prizeType !== "nothing"
   const remaining = sourceKey ? status.tickets.filter((t) => t.sourceKey === sourceKey).length : status.tickets.length
   const resultTicketsLeft = sourceKey ? status.tickets.filter((t) => t.sourceKey === sourceKey).length : (result?.ticketsLeft ?? 0)
+  const atGlobalLimit = status.spinsLeftToday === 0
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" onClick={onClose}>
@@ -100,7 +101,12 @@ export function SpinModal({
               </p>
             )}
             <div className="mt-6">
-              {ticket ? (
+              {atGlobalLimit ? (
+                <p className="rounded-2xl bg-white/10 px-4 py-8 text-center text-sm text-blue-100">
+                  You&apos;ve used today&apos;s spin limit across all games. Your {actionWord}
+                  {remaining === 1 ? "" : "s"} will be waiting when the limit resets tomorrow.
+                </p>
+              ) : ticket ? (
                 ticket.sourceKey === "scratch_card" ? (
                   <ScratchCard onSpin={doSpin} onDone={handleDone} disabled={!ticket} resetKey={ticket.id} />
                 ) : ticket.sourceKey === "mystery_box" ? (
@@ -112,7 +118,7 @@ export function SpinModal({
                 <p className="py-10 text-center text-sm text-blue-100">No spins available right now.</p>
               )}
             </div>
-            {status.spinsLeftToday !== null && (
+            {status.spinsLeftToday !== null && !atGlobalLimit && (
               <p className="mt-4 text-center text-[11px] text-blue-200/80">{status.spinsLeftToday} spin{status.spinsLeftToday === 1 ? "" : "s"} left today</p>
             )}
           </>
@@ -125,7 +131,7 @@ export function SpinModal({
             {result.wasGuarantee && <p className="mt-2 text-xs text-amber-200">Lucky-streak bonus 🍀</p>}
 
             <div className="mt-6 flex flex-col gap-2">
-              {resultTicketsLeft > 0 && (
+              {resultTicketsLeft > 0 && !atGlobalLimit && (
                 <button
                   onClick={() => setResult(null)}
                   className="rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-6 py-3 text-sm font-extrabold text-white shadow-lg"
@@ -133,13 +139,18 @@ export function SpinModal({
                   Try again ({resultTicketsLeft} left)
                 </button>
               )}
+              {resultTicketsLeft > 0 && atGlobalLimit && (
+                <p className="text-center text-xs text-blue-200/80">
+                  {resultTicketsLeft} more waiting — today&apos;s overall limit is reached, come back tomorrow.
+                </p>
+              )}
               {won && (result.prizeType === "airtime_voucher" || result.prizeType === "data_voucher") && (
                 <Link href="/spin" onClick={onClose} className="rounded-full bg-white px-6 py-3 text-sm font-bold text-[#0F1E4D]">
                   Claim my prize
                 </Link>
               )}
               <button onClick={onClose} className="rounded-full bg-white/15 px-6 py-3 text-sm font-semibold hover:bg-white/25">
-                {resultTicketsLeft > 0 ? "Later" : "Done"}
+                {resultTicketsLeft > 0 && !atGlobalLimit ? "Later" : "Done"}
               </button>
             </div>
           </div>

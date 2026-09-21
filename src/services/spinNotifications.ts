@@ -1,0 +1,106 @@
+// src/services/spinNotifications.ts
+// Service abstraction layer — scheduled Spin & Win housekeeping.
+// Run by /api/cron/spin (safe to run hourly; every push is idempotent per
+// user per day through push_notification_log, same table the other comeback
+// triggers use).
+
+import { randomUUID } from "crypto"
+import { d1Query } from "@/lib/d1"
+import { sendPushToUser } from "@/src/services/pushNotifications"
+import { addHours, dayKeyOf, getSource, getSpinSettings, isSpinEnabled, isWithinWindow, sqlTime, weekdayNameOf, parseWeekdays } from "@/src/services/spinConfig"
+
+/** Inserts the (user, trigger, day) log row. Returns false if it already existed = already nudged today. */
+async function claimSlot(userId: string, triggerKey: string, periodKey: string, nativeDB?: any): Promise<boolean> {
+  try {
+    await d1Query(
+      "INSERT INTO push_notification_log (id, user_id, trigger_key, period_key) VALUES (?, ?, ?, ?)",
+      [randomUUID(), userId, triggerKey, periodKey],
+      nativeDB,
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+export interface SpinCronResult {
+  ticketsExpired: number
+  vouchersExpired: number
+  expiryNudges: number
+  readyNudges: number
+}
+
+export async function runSpinCron(nativeDB?: any): Promise<SpinCronResult> {
+  const result: SpinCronResult = { ticketsExpired: 0, vouchersExpired: 0, expiryNudges: 0, readyNudges: 0 }
+  const now = new Date()
+  const nowSql = sqlTime(now)
+
+  // Housekeeping: tidy statuses. (Spinning already ignores expired tickets by date; this is for reports.)
+  const t = await d1Query("UPDATE spin_tickets SET status = 'expired' WHERE status = 'available' AND expires_at <= ? RETURNING id", [nowSql], nativeDB)
+  result.ticketsExpired = t.results?.length ?? 0
+  const v = await d1Query("UPDATE spin_vouchers SET status = 'expired' WHERE status = 'active' AND expires_at <= ? RETURNING id", [nowSql], nativeDB)
+  result.vouchersExpired = v.results?.length ?? 0
+
+  if (!(await isSpinEnabled(nativeDB))) return result
+  const settings = await getSpinSettings(nativeDB)
+  const today = dayKeyOf(now)
+
+  // "Your spin is about to expire" — users still holding an unused ticket that ends soon.
+  if (settings.pushExpiryNudge) {
+    const soon = sqlTime(addHours(now, settings.pushExpiryWindowHours))
+    const rows = await d1Query(
+      `SELECT t.user_id, COUNT(*) AS n
+         FROM spin_tickets t JOIN spin_sources s ON s.source_key = t.source_key
+        WHERE t.status = 'available' AND t.expires_at > ? AND t.expires_at <= ? AND s.is_enabled = 1
+        GROUP BY t.user_id LIMIT 1000`,
+      [nowSql, soon],
+      nativeDB,
+    )
+    for (const r of rows.results ?? []) {
+      if (!(await claimSlot(r.user_id, "spin_expiring", today, nativeDB))) continue
+      const sent = await sendPushToUser(
+        r.user_id,
+        {
+          title: r.n > 1 ? `${r.n} spins expire soon ⏳` : "Your spin expires soon ⏳",
+          body: "Unused spins disappear. Open the app and spin before it's gone!",
+          url: "/dashboard",
+          tag: "spin-expiring",
+        },
+        nativeDB,
+      ).catch(() => 0)
+      if (sent > 0) result.expiryNudges++
+    }
+  }
+
+  // "Your free spin is ready" — daily reminder for subscribed users who haven't spun today.
+  if (settings.pushAnytimeReady) {
+    let anytimeLive = false
+    for (const key of ["anytime", "weekend"] as const) {
+      const s = await getSource(key, nativeDB)
+      if (!s?.isEnabled || !isWithinWindow(s, now)) continue
+      if (key === "weekend" && !parseWeekdays(s.config.active_weekdays).includes(weekdayNameOf(now).toLowerCase())) continue
+      anytimeLive = true
+    }
+    if (anytimeLive) {
+      const rows = await d1Query(
+        `SELECT DISTINCT p.user_id FROM push_subscriptions p
+          WHERE p.user_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM spin_spins s WHERE s.user_id = p.user_id AND s.day_key = ? AND s.source_key IN ('anytime','weekend'))
+          LIMIT 500`,
+        [today],
+        nativeDB,
+      )
+      for (const r of rows.results ?? []) {
+        if (!(await claimSlot(r.user_id, "spin_daily_ready", today, nativeDB))) continue
+        const sent = await sendPushToUser(
+          r.user_id,
+          { title: "Your free spin is ready 🎡", body: "Spin today for a chance to win. It's gone at midnight!", url: "/dashboard", tag: "spin-ready" },
+          nativeDB,
+        ).catch(() => 0)
+        if (sent > 0) result.readyNudges++
+      }
+    }
+  }
+
+  return result
+}

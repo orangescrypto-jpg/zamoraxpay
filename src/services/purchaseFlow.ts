@@ -17,6 +17,7 @@ import { sendPurchaseReceiptEmail } from "@/src/services/email"
 import { isFeatureEnabled } from "@/src/services/config"
 import { awardCashbackForOrder } from "@/src/services/cashback"
 import { maybeAwardReferralBonus } from "@/src/services/referral"
+import { claimBestCoupon, linkCouponToOrder, releaseCoupon } from "@/src/services/spinVouchers"
 import { detectNetwork, matchesSelectedNetwork } from "@/lib/networkDetect"
 import type { VtuServiceType } from "@/src/types"
 import type { VtuDeliveredData } from "@/src/services/providers/vtu/types"
@@ -55,6 +56,9 @@ export interface PurchaseFlowResult {
   chargedAmountKobo?: number
   newBalanceKobo?: number
   cashbackEarnedKobo?: number
+  // Spin & Win: how much a discount coupon (won on the spin) took off this purchase, in kobo.
+  // 0 / absent when no coupon applied. chargedAmountKobo is already the discounted amount.
+  couponDiscountKobo?: number
   deliveredData?: VtuDeliveredData
   // True when the provider accepted the order but hasn't confirmed
   // actual delivery yet — order is saved as "pending", cashback/referral
@@ -216,20 +220,51 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
     // succeed — the router is the actual source of truth on attempt.
   }
 
+  // 3e. Spin & Win discount coupon. If the customer has a "% off your next purchase"
+  // coupon from the spin that fits this purchase, it is applied automatically. This runs
+  // AFTER the price-confirmation gate above (so the price shown on the buy page is still
+  // the undiscounted one) and immediately before the order is created. The coupon is
+  // claimed atomically (once only) and attached to the order below; if the order fails
+  // for any reason, vtuOrders.ts puts the coupon back so it is never lost.
+  let couponId: string | null = null
+  let couponDiscountKobo = 0
+  try {
+    const coupon = await claimBestCoupon({
+      userId: params.userId,
+      serviceType: params.serviceType,
+      chargeAmountKobo: pricing.chargeAmountKobo,
+    })
+    if (coupon) {
+      couponId = coupon.id
+      couponDiscountKobo = coupon.discountKobo
+      pricing.chargeAmountKobo -= coupon.discountKobo
+    }
+  } catch (err) {
+    // The spin tables may not exist yet, or the lookup failed — a coupon problem must never block a purchase.
+    console.error("[purchaseFlow] coupon lookup failed:", err)
+  }
+
   // 4. Create the pending order record.
-  const orderId = await createPendingOrder({
-    userId: params.userId,
-    serviceType: params.serviceType,
-    networkOrBiller: params.networkOrBiller,
-    recipient: params.recipient,
-    planCode: params.planCode ?? null,
-    amountKobo: pricing.chargeAmountKobo,
-    baseAmountKobo: pricing.baseAmountKobo,
-    convenienceFeeKobo: pricing.convenienceFeeKobo,
-    pricingTier: pricing.tierUsed,
-    isAutoReload: params.isAutoReload,
-    autoReloadRuleId: params.autoReloadRuleId,
-  })
+  let orderId: string
+  try {
+    orderId = await createPendingOrder({
+      userId: params.userId,
+      serviceType: params.serviceType,
+      networkOrBiller: params.networkOrBiller,
+      recipient: params.recipient,
+      planCode: params.planCode ?? null,
+      amountKobo: pricing.chargeAmountKobo,
+      baseAmountKobo: pricing.baseAmountKobo,
+      convenienceFeeKobo: pricing.convenienceFeeKobo,
+      pricingTier: pricing.tierUsed,
+      isAutoReload: params.isAutoReload,
+      autoReloadRuleId: params.autoReloadRuleId,
+    })
+  } catch (err) {
+    if (couponId) await releaseCoupon(couponId).catch(() => undefined)
+    throw err
+  }
+  if (couponId) await linkCouponToOrder(couponId, orderId).catch((err) => console.error("[purchaseFlow] coupon link failed:", err))
 
   // 5. Debit wallet BEFORE attempting fulfillment (never let a user's
   // balance and their order fulfillment race each other).
@@ -348,11 +383,14 @@ export async function runPurchaseFlow(params: PurchaseFlowParams): Promise<Purch
       : routerResult.success
         ? cashbackEarnedKobo > 0
           ? `Purchase successful — you earned ₦${(cashbackEarnedKobo / 100).toLocaleString()} cashback`
-          : "Purchase successful"
+          : couponDiscountKobo > 0
+            ? `Purchase successful — your spin coupon saved you ₦${(couponDiscountKobo / 100).toLocaleString()}`
+            : "Purchase successful"
         : `${routerResult.message} Your wallet has been refunded.`,
     chargedAmountKobo: pricing.chargeAmountKobo,
     newBalanceKobo,
     cashbackEarnedKobo,
+    couponDiscountKobo,
     deliveredData: routerResult.success ? routerResult.deliveredData : undefined,
     isPending,
   }

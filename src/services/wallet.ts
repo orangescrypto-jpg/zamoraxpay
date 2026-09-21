@@ -284,6 +284,12 @@ export async function refundWallet(
   params: { userId: string; amountKobo: number; reference: string; relatedOrderId?: string },
   nativeDB?: any,
 ): Promise<{ newBalanceKobo: number }> {
+  // Nothing to give back (e.g. a voucher-funded order that charged ₦0): report the
+  // current balance instead of letting creditWallet reject a zero amount and leave
+  // the reconcile/orphan refund paths stuck retrying forever.
+  if (!Number.isInteger(params.amountKobo) || params.amountKobo <= 0) {
+    return { newBalanceKobo: await getWalletBalance(params.userId, nativeDB) }
+  }
   return creditWallet(
     {
       userId: params.userId,

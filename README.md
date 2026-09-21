@@ -76,6 +76,15 @@ Auto-reload rules need an external scheduler hitting `/api/cron/auto-reload` per
 - **Cloudflare Cron Trigger** — configure in `wrangler.toml` to fetch the URL hourly.
 - **Any other host** — point any external cron service (GitHub Actions scheduled workflow, cron-job.org, etc.) at the URL with the `Authorization: Bearer <CRON_SECRET>` header.
 
+## Spin & Win
+
+Spin tickets, per-source prize tables, vouchers and coupons. Everything is configured at `/admin/spin` (no redeploy); the master switch is the `spin` feature flag.
+
+- **Database**: run `migrations/spin_and_win.sql` once against your existing D1 database (it is also appended to `migrations/schema.sql` for fresh installs). Safe to re-run.
+- **Cron** (hourly): `/api/cron/spin` marks expired tickets/vouchers and sends the optional "spin expiring" and "free spin ready" pushes. Same `CRON_SECRET` protection and scheduling options as the auto-reload cron above; e.g. Vercel: `{ "crons": [{ "path": "/api/cron/spin", "schedule": "0 * * * *" }] }`.
+- **Prizes are spend-only.** Wallet credit is written as `spin_reward` in the ledger, which the withdrawal calculation excludes. Free airtime/data vouchers and discount coupons can only buy what they are for.
+- **All days and times are UTC**, matching the daily streak.
+
 ## Project structure
 
 - `app/` — Next.js App Router pages and API routes, grouped by route group: `(public)`, `(auth)`, `(dashboard)`, `(admin)`.

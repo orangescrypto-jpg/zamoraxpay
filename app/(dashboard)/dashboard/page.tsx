@@ -28,7 +28,13 @@ import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 import { DashboardAnnouncement } from "@/components/dashboard/DashboardAnnouncement"
-import { DashboardPopupAnnouncement } from "@/components/dashboard/DashboardPopupAnnouncement"
+import {
+  DashboardPopupAnnouncement,
+  type AnnouncementPopupState,
+} from "@/components/dashboard/DashboardPopupAnnouncement"
+import { SpinCard } from "@/components/dashboard/SpinCard"
+import { SpinPopup } from "@/components/dashboard/SpinPopup"
+import { useSpinStatus } from "@/components/dashboard/useSpinStatus"
 
 interface Order {
   id: string
@@ -88,6 +94,7 @@ const WALLET_LABELS: Record<string, string> = {
   cashback: "Cashback",
   referral_bonus: "Referral bonus",
   daily_streak: "Daily check-in reward",
+  spin_reward: "Spin & Win prize",
   reseller_upgrade: "Reseller upgrade",
   admin_adjustment: "Wallet adjustment",
 }
@@ -100,6 +107,8 @@ export default function DashboardPage() {
   const [canCheckInToday, setCanCheckInToday] = useState(false)
   const [nextRewardKobo, setNextRewardKobo] = useState(0)
   const [streakLoaded, setStreakLoaded] = useState(false)
+  const spin = useSpinStatus()
+  const [announcementPopupState, setAnnouncementPopupState] = useState<AnnouncementPopupState>("checking")
 
   useEffect(() => {
     let cancelled = false
@@ -246,7 +255,11 @@ export default function DashboardPage() {
       )}
 
       <DashboardAnnouncement />
-      <DashboardPopupAnnouncement />
+      {/* Spin card: always directly below the announcement banner, above Quick actions. */}
+      <SpinCard spin={spin} />
+      <DashboardPopupAnnouncement onStateChange={setAnnouncementPopupState} />
+      {/* Spin popup waits until the announcement popup is closed so they never stack. */}
+      <SpinPopup spin={spin} blocked={announcementPopupState !== "closed"} />
 
       <div className="mt-9">
         <h2 className="text-[15px] font-semibold text-primary">Quick actions</h2>

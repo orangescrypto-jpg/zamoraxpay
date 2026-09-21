@@ -18,6 +18,7 @@ import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
 import { isFeatureEnabled } from "@/src/services/config"
 import { getSetting, getSettingBoolean, getSettingNumber } from "@/src/services/siteSettings"
+import { onPurchaseSuccess } from "@/src/services/spinTickets"
 
 export interface CashbackCalculation {
   eligible: boolean
@@ -73,6 +74,15 @@ export async function awardCashbackForOrder(
   params: { userId: string; orderId: string; purchaseAmountKobo: number },
   nativeDB?: any,
 ): Promise<CashbackCalculation> {
+  // Spin & Win tickets for this confirmed-successful order (purchase / first-of-day /
+  // monthly-spend sources). This function is already called from every path that
+  // confirms an order as successful, so hooking here covers them all. It never
+  // throws, is idempotent per order, and runs even when cashback is switched off.
+  await onPurchaseSuccess(
+    { userId: params.userId, orderId: params.orderId, amountKobo: params.purchaseAmountKobo },
+    nativeDB,
+  )
+
   const calc = await calculateCashback(params.purchaseAmountKobo, nativeDB)
   if (!calc.eligible) return calc
 

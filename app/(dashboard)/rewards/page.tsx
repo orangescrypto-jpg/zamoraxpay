@@ -118,6 +118,14 @@ export default function RewardsPage() {
         </p>
       </div>
 
+      <Link
+        href="/spin"
+        className="mt-4 flex items-center justify-between rounded-xl border border-border bg-white p-4 text-sm font-semibold text-primary hover:bg-muted"
+      >
+        <span>🎡 Spin &amp; Win — your spins, prizes and history</span>
+        <span className="text-xs text-secondary">View →</span>
+      </Link>
+
       {result && (
         <p className={`mt-4 rounded-md p-3 text-sm ${result.success ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
           {result.message}

@@ -22,6 +22,7 @@
 import { creditWallet } from "@/src/services/wallet"
 import { isFeatureEnabled } from "@/src/services/config"
 import { getSetting, getSettingBoolean, getSettingNumber } from "@/src/services/siteSettings"
+import { onDepositSuccess } from "@/src/services/spinTickets"
 
 export interface DepositBonusCalculation {
   eligible: boolean
@@ -79,6 +80,14 @@ export async function awardDepositBonusForFunding(
   params: { userId: string; depositAmountKobo: number; fundingReference: string },
   nativeDB?: any,
 ): Promise<DepositBonusCalculation> {
+  // Spin & Win: deposit-based spin ticket. Idempotent per funding reference (so the
+  // webhook + verify-on-return race can't double-issue), never throws, and runs even
+  // when the deposit bonus itself is switched off or comes out to zero.
+  await onDepositSuccess(
+    { userId: params.userId, fundingReference: params.fundingReference, depositAmountKobo: params.depositAmountKobo },
+    nativeDB,
+  )
+
   const calc = await calculateDepositBonus(params.depositAmountKobo, nativeDB)
   if (!calc.eligible) return calc
 

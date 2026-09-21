@@ -10,6 +10,7 @@
 import { d1Query } from "@/lib/d1"
 import { getSettingNumber } from "@/src/services/siteSettings"
 import { isFeatureEnabled } from "@/src/services/config"
+import { onReferralQualified } from "@/src/services/spinTickets"
 
 /**
  * Call this after a successful order. Checks whether the purchasing
@@ -36,11 +37,17 @@ export async function maybeAwardReferralBonus(purchasingUserId: string, nativeDB
   // row existing isn't enough proof on its own if this function were
   // ever called more than once per order in some future refactor.
   const successfulOrders = await d1Query(
-    "SELECT COUNT(*) AS count FROM vtu_orders WHERE user_id = ? AND status = 'success'",
+    // Only PAID orders count. Free prize deliveries (amount 0) must not qualify a referral,
+    // or a referred account could win a voucher and trigger the referrer's bonus with no spend.
+    "SELECT COUNT(*) AS count FROM vtu_orders WHERE user_id = ? AND status = 'success' AND amount_kobo > 0",
     [purchasingUserId],
     nativeDB,
   )
   if ((successfulOrders.results?.[0]?.count ?? 0) !== 1) return // not their first successful order
+
+  // Spin & Win: the referrer earns a referral spin ticket for this qualified referral.
+  // Idempotent per referral, independent of the cash bonus amount below, never throws.
+  await onReferralQualified(referral.referrer_user_id, referral.id, nativeDB)
 
   const bonusKobo = await getSettingNumber("referral_bonus_amount_kobo", 20000, nativeDB)
   if (bonusKobo <= 0) return

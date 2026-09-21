@@ -33,6 +33,8 @@ import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
 import { getSettingBoolean, getSettingNumber } from "@/src/services/siteSettings"
 import { isFeatureEnabled } from "@/src/services/config"
+import { onStreakCheckIn } from "@/src/services/spinTickets"
+import { addProtectionTokens, consumeProtectionTokens, getProtectionTokens } from "@/src/services/streakProtection"
 
 export interface StreakTier {
   id: string
@@ -49,6 +51,8 @@ export interface StreakStatus {
   alreadyCheckedInToday: boolean
   nextRewardKobo: number
   graceAvailable: boolean
+  // Free missed days won from the spin. One shield forgives one missed day.
+  protectionTokens: number
 }
 
 export interface CheckInResult {
@@ -56,6 +60,10 @@ export interface CheckInResult {
   message: string
   newStreak?: number
   amountKobo?: number
+  // Bonus spin tickets earned by this check-in (streak-milestone source in /admin/spin).
+  spinTicketsEarned?: number
+  // Streak shields used to save the streak on this check-in.
+  shieldsUsed?: number
 }
 
 /** Today's date as a stable YYYY-MM-DD key, UTC. */
@@ -139,6 +147,7 @@ export async function getStreakStatus(userId: string, nativeDB?: any): Promise<S
     alreadyCheckedInToday,
     nextRewardKobo,
     graceAvailable,
+    protectionTokens: await getProtectionTokens(userId, nativeDB),
   }
 }
 
@@ -171,6 +180,7 @@ export async function checkIn(userId: string, nativeDB?: any): Promise<CheckInRe
   const graceDaysPerWeek = await getSettingNumber("daily_streak_grace_days_per_week", 1, nativeDB)
   let newStreak = 1
   let graceUsedOnDate: string | null = existing?.grace_used_on_date ?? null
+  let shieldsUsed = 0
 
   if (existing?.last_checkin_date) {
     const gap = daysBetween(existing.last_checkin_date, today)
@@ -191,12 +201,24 @@ export async function checkIn(userId: string, nativeDB?: any): Promise<CheckInRe
       // Missed 2+ days, or grace exhausted — streak resets.
       newStreak = 1
     }
+
+    // Spin prize: streak shields. If the streak would reset and the user holds enough
+    // shields to cover EVERY missed day (one shield = one day), spend them and keep
+    // the streak alive. The spend is a single guarded UPDATE, so it can't be used twice.
+    if (newStreak === 1 && gap >= 2 && existing.current_streak >= 1) {
+      const missedDays = gap - 1
+      if (await consumeProtectionTokens(userId, missedDays, nativeDB)) {
+        newStreak = existing.current_streak + 1
+        shieldsUsed = missedDays
+      }
+    }
   }
 
   const tiers = await getActiveTiers(nativeDB)
   const amountKobo = computeRewardForDay(newStreak, tiers)
 
   if (amountKobo <= 0) {
+    if (shieldsUsed > 0) await addProtectionTokens(userId, shieldsUsed, nativeDB).catch(() => undefined) // nothing was recorded — give the shields back
     return { success: false, message: "No reward is configured for this streak day" }
   }
 
@@ -210,6 +232,7 @@ export async function checkIn(userId: string, nativeDB?: any): Promise<CheckInRe
       nativeDB,
     )
   } catch {
+    if (shieldsUsed > 0) await addProtectionTokens(userId, shieldsUsed, nativeDB).catch(() => undefined) // duplicate call — give the shields back
     return { success: false, message: "You've already checked in today. Come back tomorrow." }
   }
 
@@ -227,7 +250,17 @@ export async function checkIn(userId: string, nativeDB?: any): Promise<CheckInRe
     )
   }
 
-  return { success: true, message: `Day ${newStreak} check-in complete!`, newStreak, amountKobo }
+  // Spin & Win: streak-milestone bonus spin (admin sets which days). Never throws and
+  // never affects the check-in itself — the streak reward above is unchanged.
+  const spinTicketsEarned = await onStreakCheckIn(userId, newStreak, today, nativeDB)
+
+  let message = `Day ${newStreak} check-in complete!`
+  if (shieldsUsed > 0) message += ` A streak shield saved your streak.`
+  if (spinTicketsEarned > 0) {
+    message += ` 🎡 You earned ${spinTicketsEarned === 1 ? "a bonus spin" : `${spinTicketsEarned} bonus spins`}!`
+  }
+
+  return { success: true, message, newStreak, amountKobo, spinTicketsEarned, shieldsUsed }
 }
 
 // --- Admin management of reward tiers ---

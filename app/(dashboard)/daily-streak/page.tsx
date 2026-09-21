@@ -5,6 +5,8 @@ import { useEffect, useState } from "react"
 import { Flame, Calendar, Gift } from "lucide-react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { SpinCard } from "@/components/dashboard/SpinCard"
+import { useSpinStatus } from "@/components/dashboard/useSpinStatus"
 
 interface CheckinHistoryRow {
   id: string
@@ -23,6 +25,7 @@ interface StreakData {
   alreadyCheckedInToday: boolean
   nextRewardKobo: number
   graceAvailable: boolean
+  protectionTokens?: number
   unclaimedKobo: number
   history: CheckinHistoryRow[]
 }
@@ -33,6 +36,8 @@ export default function DailyStreakPage() {
   const [checkingIn, setCheckingIn] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  // Re-fetched after every check-in so a milestone bonus spin shows up immediately.
+  const spin = useSpinStatus(result?.message)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -119,6 +124,16 @@ export default function DailyStreakPage() {
         {result && (
           <p className={`mt-3 text-sm ${result.success ? "text-white" : "text-orange-100"}`}>{result.message}</p>
         )}
+
+        {!loading && (data?.protectionTokens ?? 0) > 0 && (
+          <p className="mt-3 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
+            🛡️ {data?.protectionTokens} streak shield{data?.protectionTokens === 1 ? "" : "s"} — saves your streak if you miss a day
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <SpinCard spin={spin} />
       </div>
 
       <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-white p-4">

@@ -8,6 +8,25 @@ import type { VtuServiceType } from "@/src/types"
 import type { VtuRouterAttemptLog } from "@/src/services/vtuRouter"
 import type { VtuDeliveredData } from "@/src/services/providers/vtu/types"
 
+// Spin & Win: a voucher or discount coupon that was attached to an order is put
+// back to 'active' when that order FAILS or is REFUNDED, so a prize is never lost
+// to a failed delivery. Best-effort and silent: the order status change must
+// never depend on it (and it is a harmless no-op if the spin tables don't exist
+// yet or the order had no voucher).
+async function restoreVoucherForOrder(orderId: string, nativeDB?: any): Promise<void> {
+  try {
+    await d1Query(
+      `UPDATE spin_vouchers
+          SET status = 'active', used_at = NULL, used_order_id = NULL, recipient = NULL
+        WHERE used_order_id = ? AND status = 'used'`,
+      [orderId],
+      nativeDB,
+    )
+  } catch {
+    // ignore — see above
+  }
+}
+
 export async function createPendingOrder(
   params: {
     userId: string
@@ -92,10 +111,12 @@ export async function finalizeOrder(
     ],
     nativeDB,
   )
+  if (result.status === "failed") await restoreVoucherForOrder(orderId, nativeDB)
 }
 
 export async function markOrderRefunded(orderId: string, nativeDB?: any): Promise<void> {
   await d1Query("UPDATE vtu_orders SET status = 'refunded', updated_at = datetime('now') WHERE id = ?", [orderId], nativeDB)
+  await restoreVoucherForOrder(orderId, nativeDB)
 }
 
 // Every order left in "pending" status — any provider, any service
@@ -140,6 +161,7 @@ export async function resolvePendingOrder(
     ],
     nativeDB,
   )
+  if (result.status === "failed") await restoreVoucherForOrder(orderId, nativeDB)
 }
 
 // Used by the Pairgate webhook to resolve which order a callback

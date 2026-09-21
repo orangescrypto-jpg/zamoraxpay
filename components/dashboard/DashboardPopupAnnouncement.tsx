@@ -50,7 +50,16 @@ function markDismissed(item: PopupAnnouncement) {
   store.setItem(key, "1")
 }
 
-export function DashboardPopupAnnouncement() {
+// "checking" until the announcement request finishes, then "open" (a popup is showing)
+// or "closed" (none to show / dismissed). The dashboard uses this so the Spin popup
+// waits its turn and never stacks on top of this one.
+export type AnnouncementPopupState = "checking" | "open" | "closed"
+
+export function DashboardPopupAnnouncement({
+  onStateChange,
+}: {
+  onStateChange?: (state: AnnouncementPopupState) => void
+} = {}) {
   const [popup, setPopup] = useState<PopupAnnouncement | null>(null)
 
   useEffect(() => {
@@ -66,9 +75,16 @@ export function DashboardPopupAnnouncement() {
         const data = await res.json()
         const popups: PopupAnnouncement[] = data.popups ?? []
         const next = popups.find((p) => !isDismissed(p))
-        if (!cancelled && next) setPopup(next)
+        if (cancelled) return
+        if (next && (next.text || next.imageUrl)) {
+          setPopup(next)
+          onStateChange?.("open")
+        } else {
+          onStateChange?.("closed")
+        }
       } catch {
         // silent — popup is non-critical, dashboard should never break on this
+        if (!cancelled) onStateChange?.("closed")
       }
     }
 
@@ -84,6 +100,7 @@ export function DashboardPopupAnnouncement() {
   function handleDismiss() {
     if (popup) markDismissed(popup)
     setPopup(null)
+    onStateChange?.("closed")
   }
 
   const body = (

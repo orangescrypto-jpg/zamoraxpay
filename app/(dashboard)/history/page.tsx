@@ -53,6 +53,7 @@ const WALLET_TYPE_LABELS: Record<string, string> = {
   reseller_upgrade: "Reseller Upgrade",
   admin_adjustment: "Adjustment",
   deposit_bonus: "Deposit Bonus",
+  spin_reward: "Spin & Win Prize",
   korapay_charge: "Deposit Charges",
 }
 

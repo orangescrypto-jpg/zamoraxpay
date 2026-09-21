@@ -10,7 +10,20 @@ import { ScratchCard } from "@/components/dashboard/ScratchCard"
 import { MysteryBox } from "@/components/dashboard/MysteryBox"
 import { spinAuthHeaders, timeLeft, type SpinApi, type SpinOutcome } from "@/components/dashboard/useSpinStatus"
 
-export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () => void; spin: SpinApi }) {
+export function SpinModal({
+  open,
+  onClose,
+  spin,
+  sourceKey,
+}: {
+  open: boolean
+  onClose: () => void
+  spin: SpinApi
+  /** Restrict this modal to tickets from one source (used by the Play & Earn hub, which
+   *  lists multiple games at once). Omit to use the first available ticket of any source
+   *  (used by the dashboard popup/card, which only ever surfaces one game at a time). */
+  sourceKey?: string
+}) {
   const [result, setResult] = useState<SpinOutcome | null>(null)
   const [, setTick] = useState(0)
   const { status, refresh } = spin
@@ -28,7 +41,7 @@ export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () 
 
   if (!open || !status?.enabled) return null
 
-  const ticket = status.tickets[0]
+  const ticket = sourceKey ? status.tickets.find((t) => t.sourceKey === sourceKey) : status.tickets[0]
   const segments = ticket ? status.wheels[ticket.sourceKey] ?? [] : []
   const isScratch = ticket?.sourceKey === "scratch_card"
   const isBox = ticket?.sourceKey === "mystery_box"
@@ -56,7 +69,8 @@ export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () 
   }
 
   const won = result && result.prizeType !== "nothing"
-  const remaining = status.tickets.length
+  const remaining = sourceKey ? status.tickets.filter((t) => t.sourceKey === sourceKey).length : status.tickets.length
+  const resultTicketsLeft = sourceKey ? status.tickets.filter((t) => t.sourceKey === sourceKey).length : (result?.ticketsLeft ?? 0)
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" onClick={onClose}>
@@ -111,12 +125,12 @@ export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () 
             {result.wasGuarantee && <p className="mt-2 text-xs text-amber-200">Lucky-streak bonus 🍀</p>}
 
             <div className="mt-6 flex flex-col gap-2">
-              {result.ticketsLeft > 0 && (
+              {resultTicketsLeft > 0 && (
                 <button
                   onClick={() => setResult(null)}
                   className="rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-6 py-3 text-sm font-extrabold text-white shadow-lg"
                 >
-                  Try again ({result.ticketsLeft} left)
+                  Try again ({resultTicketsLeft} left)
                 </button>
               )}
               {won && (result.prizeType === "airtime_voucher" || result.prizeType === "data_voucher") && (
@@ -125,7 +139,7 @@ export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () 
                 </Link>
               )}
               <button onClick={onClose} className="rounded-full bg-white/15 px-6 py-3 text-sm font-semibold hover:bg-white/25">
-                {result.ticketsLeft > 0 ? "Later" : "Done"}
+                {resultTicketsLeft > 0 ? "Later" : "Done"}
               </button>
             </div>
           </div>

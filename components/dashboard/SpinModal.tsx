@@ -1,161 +1,198 @@
-// components/dashboard/SpinModal.tsx
-// The spin dialog used by BOTH the dashboard popup and the inline card.
+// components/dashboard/ScratchCard.tsx
+// Scratch-to-reveal card. DISPLAY ONLY: the prize is decided and saved on the server
+// before this reveals — scratching just uncovers a result that already exists.
+// Same onSpin/onDone contract as SpinWheel so SpinModal can swap between them.
 "use client"
 
-import { useEffect, useState } from "react"
-import Link from "next/link"
-import { X } from "lucide-react"
-import { SpinWheel, type WheelSpinResult } from "@/components/dashboard/SpinWheel"
-import { ScratchCard } from "@/components/dashboard/ScratchCard"
-import { MysteryBox } from "@/components/dashboard/MysteryBox"
-import { spinAuthHeaders, timeLeft, type SpinApi, type SpinOutcome } from "@/components/dashboard/useSpinStatus"
+import { useCallback, useEffect, useRef, useState } from "react"
+import type { SpinOutcome } from "@/components/dashboard/useSpinStatus"
+import type { WheelSpinResult } from "@/components/dashboard/SpinWheel"
 
-export function SpinModal({
-  open,
-  onClose,
-  spin,
-  sourceKey,
+const SIZE = 280
+const SCRATCH_RADIUS = 22
+const REVEAL_THRESHOLD = 0.55 // fraction of the canvas cleared before we auto-reveal
+
+export function ScratchCard({
+  onSpin,
+  onDone,
+  disabled,
+  buttonLabel = "Get my card",
+  resetKey,
 }: {
-  open: boolean
-  onClose: () => void
-  spin: SpinApi
-  /** Restrict this modal to tickets from one source (used by the Play & Earn hub, which
-   *  lists multiple games at once). Omit to use the first available ticket of any source
-   *  (used by the dashboard popup/card, which only ever surfaces one game at a time). */
-  sourceKey?: string
+  onSpin: () => Promise<WheelSpinResult>
+  onDone: (outcome: SpinOutcome) => void
+  disabled?: boolean
+  buttonLabel?: string
+  /** Change this (e.g. to the current ticket id) to reset the card back to
+   *  unscratched — otherwise the last reveal stays frozen on screen when a
+   *  new ticket becomes available after this one is used. */
+  resetKey?: string
 }) {
-  const [result, setResult] = useState<SpinOutcome | null>(null)
-  const [, setTick] = useState(0)
-  const { status, refresh } = spin
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [drawn, setDrawn] = useState(false)
+  const [scratching, setScratching] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [outcome, setOutcome] = useState<SpinOutcome | null>(null)
+  const clearedRef = useRef(0)
+  const doneRef = useRef(false)
+  const pointerDownRef = useRef(false)
 
-  // keep the "expires in" text fresh
+  const drawCoating = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    canvas.width = SIZE
+    canvas.height = SIZE
+    const grad = ctx.createLinearGradient(0, 0, SIZE, SIZE)
+    grad.addColorStop(0, "#94A3B8")
+    grad.addColorStop(1, "#64748B")
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, SIZE, SIZE)
+    ctx.fillStyle = "rgba(255,255,255,0.85)"
+    ctx.font = "bold 15px sans-serif"
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.fillText("Scratch here", SIZE / 2, SIZE / 2)
+    clearedRef.current = 0
+    setDrawn(true)
+  }, [])
+
   useEffect(() => {
-    if (!open) return
-    const t = setInterval(() => setTick((x) => x + 1), 30_000)
-    return () => clearInterval(t)
-  }, [open])
+    drawCoating()
+  }, [drawCoating])
 
   useEffect(() => {
-    if (!open) setResult(null)
-  }, [open])
+    if (resetKey === undefined) return
+    setOutcome(null)
+    setScratching(false)
+    setError(null)
+    doneRef.current = false
+    drawCoating()
+  }, [resetKey, drawCoating])
 
-  if (!open || !status?.enabled) return null
+  function scratchAt(x: number, y: number) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.globalCompositeOperation = "destination-out"
+    ctx.beginPath()
+    ctx.arc(x, y, SCRATCH_RADIUS, 0, Math.PI * 2)
+    ctx.fill()
+  }
 
-  const ticket = sourceKey ? status.tickets.find((t) => t.sourceKey === sourceKey) : status.tickets[0]
-  const segments = ticket ? status.wheels[ticket.sourceKey] ?? [] : []
-  const isScratch = ticket?.sourceKey === "scratch_card"
-  const isBox = ticket?.sourceKey === "mystery_box"
-  const actionWord = isScratch ? "card" : isBox ? "box" : "spin"
+  function pointerPos(e: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current!
+    const rect = canvas.getBoundingClientRect()
+    return { x: ((e.clientX - rect.left) / rect.width) * SIZE, y: ((e.clientY - rect.top) / rect.height) * SIZE }
+  }
 
-  async function doSpin(): Promise<WheelSpinResult> {
-    if (!ticket) return { ok: false, message: "You don't have a spin right now." }
-    try {
-      const res = await fetch("/api/spin", {
-        method: "POST",
-        headers: { ...(await spinAuthHeaders()), "Content-Type": "application/json" },
-        body: JSON.stringify({ ticketId: ticket.id }),
-      })
-      const json = await res.json()
-      if (!res.ok || !json.success) return { ok: false, message: json.message ?? "Couldn't spin. Please try again." }
-      return { ok: true, outcome: json as SpinOutcome }
-    } catch {
-      return { ok: false, message: "Network problem. Your spin is safe — please try again." }
+  function checkCleared() {
+    const canvas = canvasRef.current
+    if (!canvas || doneRef.current) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    // Sample every 6th pixel for performance.
+    const data = ctx.getImageData(0, 0, SIZE, SIZE).data
+    let transparent = 0
+    let sampled = 0
+    for (let i = 3; i < data.length; i += 4 * 6) {
+      sampled++
+      if (data[i] < 20) transparent++
+    }
+    clearedRef.current = transparent / Math.max(1, sampled)
+    if (clearedRef.current >= REVEAL_THRESHOLD && outcome) {
+      doneRef.current = true
+      const canvas2 = canvasRef.current
+      if (canvas2) {
+        const ctx2 = canvas2.getContext("2d")
+        ctx2?.clearRect(0, 0, SIZE, SIZE)
+      }
+      // Dwell on the reveal long enough to actually read it before this
+      // component resets itself for the next ticket (see resetKey below) —
+      // there's no longer a separate "Try again" screen holding it up.
+      setTimeout(() => onDone(outcome), 1800)
     }
   }
 
-  async function handleDone(outcome: SpinOutcome) {
-    setResult(outcome)
-    await refresh() // update tickets left, and the card behind the modal
+  async function handleGetCard() {
+    if (scratching || disabled) return
+    setScratching(true)
+    setError(null)
+    const result = await onSpin()
+    if (!result.ok) {
+      setScratching(false)
+      setError(result.message)
+      return
+    }
+    setOutcome(result.outcome)
+    drawCoating()
+    doneRef.current = false
   }
 
-  const won = result && result.prizeType !== "nothing"
-  const remaining = sourceKey ? status.tickets.filter((t) => t.sourceKey === sourceKey).length : status.tickets.length
-  const resultTicketsLeft = sourceKey ? status.tickets.filter((t) => t.sourceKey === sourceKey).length : (result?.ticketsLeft ?? 0)
-  const atGlobalLimit = status.spinsLeftToday === 0
+  function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!outcome) return
+    pointerDownRef.current = true
+    const { x, y } = pointerPos(e)
+    scratchAt(x, y)
+    checkCleared()
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!pointerDownRef.current || !outcome) return
+    const { x, y } = pointerPos(e)
+    scratchAt(x, y)
+    checkCleared()
+  }
+
+  function handlePointerUp() {
+    pointerDownRef.current = false
+  }
+
+  const won = outcome && outcome.prizeType !== "nothing"
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" onClick={onClose}>
-      <div
-        className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-gradient-to-b from-[#0F1E4D] to-[#1e3a8a] p-6 text-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          aria-label="Close"
-          onClick={onClose}
-          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25"
+    <div className="flex flex-col items-center">
+      <div className="relative overflow-hidden rounded-2xl shadow-lg" style={{ width: "min(78vw, 280px)", aspectRatio: "1 / 1" }}>
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-2xl px-4 text-center"
+          style={{ background: won ? "linear-gradient(135deg,#F59E0B,#DC2626)" : "linear-gradient(135deg,#2563EB,#0F1E4D)" }}
         >
-          <X className="h-4 w-4" />
-        </button>
-
-        {!result ? (
-          <>
-            <p className="text-center text-xs font-semibold uppercase tracking-widest text-amber-300">
-              {isScratch ? "Scratch & Win" : isBox ? "Mystery Box" : "Spin & Win"}
-            </p>
-            <h2 className="mt-1 text-center text-xl font-bold">
-              {remaining > 1 ? `You have ${remaining} ${actionWord}s!` : `You've got a ${actionWord}!`}
-            </h2>
-            {ticket && (
-              <p className="mt-1 text-center text-xs text-blue-100">
-                {ticket.sourceLabel} · expires in {timeLeft(ticket.expiresAt)}
-              </p>
-            )}
-            <div className="mt-6">
-              {atGlobalLimit ? (
-                <p className="rounded-2xl bg-white/10 px-4 py-8 text-center text-sm text-blue-100">
-                  You&apos;ve used today&apos;s spin limit across all games. Your {actionWord}
-                  {remaining === 1 ? "" : "s"} will be waiting when the limit resets tomorrow.
-                </p>
-              ) : ticket ? (
-                ticket.sourceKey === "scratch_card" ? (
-                  <ScratchCard onSpin={doSpin} onDone={handleDone} disabled={!ticket} resetKey={ticket.id} />
-                ) : ticket.sourceKey === "mystery_box" ? (
-                  <MysteryBox onSpin={doSpin} onDone={handleDone} disabled={!ticket} resetKey={ticket.id} />
-                ) : (
-                  <SpinWheel segments={segments} onSpin={doSpin} onDone={handleDone} disabled={!ticket} />
-                )
-              ) : (
-                <p className="py-10 text-center text-sm text-blue-100">No spins available right now.</p>
-              )}
-            </div>
-            {status.spinsLeftToday !== null && !atGlobalLimit && (
-              <p className="mt-4 text-center text-[11px] text-blue-200/80">{status.spinsLeftToday} spin{status.spinsLeftToday === 1 ? "" : "s"} left today</p>
-            )}
-          </>
-        ) : (
-          <div className="py-4 text-center">
-            <div className="text-6xl" aria-hidden="true">{won ? "🎉" : "🍀"}</div>
-            <h2 className="mt-3 text-2xl font-extrabold">{won ? "You won!" : "Not this time"}</h2>
-            {won && <p className="mt-1 text-lg font-bold text-amber-300">{result.prizeLabel}</p>}
-            <p className="mt-3 text-sm text-blue-100">{result.message}</p>
-            {result.wasGuarantee && <p className="mt-2 text-xs text-amber-200">Lucky-streak bonus 🍀</p>}
-
-            <div className="mt-6 flex flex-col gap-2">
-              {resultTicketsLeft > 0 && !atGlobalLimit && (
-                <button
-                  onClick={() => setResult(null)}
-                  className="rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-6 py-3 text-sm font-extrabold text-white shadow-lg"
-                >
-                  Try again ({resultTicketsLeft} left)
-                </button>
-              )}
-              {resultTicketsLeft > 0 && atGlobalLimit && (
-                <p className="text-center text-xs text-blue-200/80">
-                  {resultTicketsLeft} more waiting — today&apos;s overall limit is reached, come back tomorrow.
-                </p>
-              )}
-              {won && (result.prizeType === "airtime_voucher" || result.prizeType === "data_voucher") && (
-                <Link href="/spin" onClick={onClose} className="rounded-full bg-white px-6 py-3 text-sm font-bold text-[#0F1E4D]">
-                  Claim my prize
-                </Link>
-              )}
-              <button onClick={onClose} className="rounded-full bg-white/15 px-6 py-3 text-sm font-semibold hover:bg-white/25">
-                {resultTicketsLeft > 0 && !atGlobalLimit ? "Later" : "Done"}
-              </button>
-            </div>
-          </div>
+          {outcome ? (
+            <>
+              <span className="text-4xl" aria-hidden="true">{won ? "🎉" : "🍀"}</span>
+              <span className="text-lg font-extrabold text-white">{won ? outcome.prizeLabel : "Better luck next time"}</span>
+            </>
+          ) : (
+            <span className="text-sm font-semibold text-white/80">Tap &quot;{buttonLabel}&quot; to start</span>
+          )}
+        </div>
+        {drawn && outcome && (
+          <canvas
+            ref={canvasRef}
+            width={SIZE}
+            height={SIZE}
+            className="absolute inset-0 h-full w-full touch-none rounded-2xl"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+          />
         )}
       </div>
+
+      {!outcome && (
+        <button
+          onClick={handleGetCard}
+          disabled={scratching || disabled}
+          className="mt-6 inline-flex min-w-[180px] items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-8 py-3 text-base font-extrabold tracking-wide text-white shadow-lg shadow-orange-900/20 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {scratching ? "Loading…" : buttonLabel}
+        </button>
+      )}
+      {outcome && <p className="mt-4 text-center text-xs text-blue-100">Scratch the card to reveal your prize</p>}
+      {error && <p className="mt-3 text-center text-sm text-red-600">{error}</p>}
     </div>
   )
 }

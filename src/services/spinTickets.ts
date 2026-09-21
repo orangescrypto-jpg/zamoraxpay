@@ -139,7 +139,7 @@ export async function ensureLazyTickets(userId: string, nativeDB?: any): Promise
   const now = new Date()
   const today = dayKeyOf(now)
 
-  for (const key of ["anytime", "weekend"] as SpinSourceKey[]) {
+  for (const key of ["anytime", "weekend", "scratch_card"] as SpinSourceKey[]) {
     const source = await getSource(key, nativeDB)
     if (!source || !source.isEnabled || !isWithinWindow(source, now)) continue
 
@@ -203,6 +203,14 @@ export async function onPurchaseSuccess(
       const min = Number(purchase.config.min_amount_kobo) || 0
       if (params.amountKobo >= min) {
         await issueTickets({ userId: params.userId, sourceKey: "purchase", issueKey: `purchase:${params.orderId}` }, nativeDB)
+      }
+    }
+
+    const mysteryBox = await getSource("mystery_box", nativeDB)
+    if (mysteryBox?.isEnabled) {
+      const min = Number(mysteryBox.config.min_amount_kobo) || 0
+      if (params.amountKobo >= min) {
+        await issueTickets({ userId: params.userId, sourceKey: "mystery_box", issueKey: `mystery_box:${params.orderId}` }, nativeDB)
       }
     }
 

@@ -17,11 +17,16 @@ export function ScratchCard({
   onDone,
   disabled,
   buttonLabel = "Get my card",
+  resetKey,
 }: {
   onSpin: () => Promise<WheelSpinResult>
   onDone: (outcome: SpinOutcome) => void
   disabled?: boolean
   buttonLabel?: string
+  /** Change this (e.g. to the current ticket id) to reset the card back to
+   *  unscratched — otherwise the last reveal stays frozen on screen when a
+   *  new ticket becomes available after this one is used. */
+  resetKey?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [drawn, setDrawn] = useState(false)
@@ -56,6 +61,15 @@ export function ScratchCard({
   useEffect(() => {
     drawCoating()
   }, [drawCoating])
+
+  useEffect(() => {
+    if (resetKey === undefined) return
+    setOutcome(null)
+    setScratching(false)
+    setError(null)
+    doneRef.current = false
+    drawCoating()
+  }, [resetKey, drawCoating])
 
   function scratchAt(x: number, y: number) {
     const canvas = canvasRef.current

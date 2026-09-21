@@ -38,6 +38,8 @@ interface Draft {
   discountServices: string
   discountMinPurchase: string // naira
   voucherNetwork: string
+  voucherAnyNetwork: boolean
+  voucherSampleNetwork: string
   voucherPlanCode: string
   tokenCount: string
   rewardValidDays: string
@@ -61,6 +63,8 @@ const blank: Draft = {
   discountServices: "",
   discountMinPurchase: "0",
   voucherNetwork: "",
+  voucherAnyNetwork: false,
+  voucherSampleNetwork: "",
   voucherPlanCode: "",
   tokenCount: "1",
   rewardValidDays: "7",
@@ -76,6 +80,7 @@ const blank: Draft = {
 }
 
 function fromPrize(p: AdminPrize): Draft {
+  const isAnyNetwork = p.prizeType === "data_voucher" && !p.voucherNetwork && !!p.voucherPlanCode?.startsWith("any:")
   return {
     id: p.id,
     label: p.label,
@@ -86,6 +91,8 @@ function fromPrize(p: AdminPrize): Draft {
     discountServices: p.discountServices ?? "",
     discountMinPurchase: koboToNaira(p.discountMinPurchaseKobo),
     voucherNetwork: p.voucherNetwork ?? "",
+    voucherAnyNetwork: isAnyNetwork,
+    voucherSampleNetwork: "",
     voucherPlanCode: p.voucherPlanCode ?? "",
     tokenCount: String(p.tokenCount || 1),
     rewardValidDays: String(p.rewardValidDays),
@@ -141,7 +148,9 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
           maxDiscountKobo: nairaToKobo(draft.maxDiscount),
           discountServices: draft.discountServices,
           discountMinPurchaseKobo: nairaToKobo(draft.discountMinPurchase),
-          voucherNetwork: draft.voucherNetwork || null,
+          voucherNetwork: draft.voucherAnyNetwork ? null : draft.voucherNetwork || null,
+          voucherAnyNetwork: draft.voucherAnyNetwork,
+          voucherSampleNetwork: draft.voucherAnyNetwork ? draft.voucherSampleNetwork : undefined,
           voucherPlanCode: draft.voucherPlanCode || null,
           tokenCount: Number(draft.tokenCount),
           rewardValidDays: Number(draft.rewardValidDays),
@@ -191,6 +200,22 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
 
   const t = draft?.prizeType
   const networkPlans = plans.filter((r) => r.network_or_biller === draft?.voucherNetwork)
+
+  // For "All providers (any network)": one option per distinct size/validity,
+  // deduped across networks, so the admin picks "1GB - 30 days" once instead
+  // of once per network. Whichever network's row happens to match first just
+  // supplies the representative plan_code/label/estimated cost — the ACTUAL
+  // network (and its own price) is resolved per-user at claim time.
+  const anyNetworkPlanOptions = useMemo(() => {
+    const seen = new Map<string, { plan_code: string; network_or_biller: string; label: string }>()
+    for (const r of plans) {
+      if (!r.plan_code) continue
+      const key = r.plan_code.match(/^\d+mb-\d+d/i)?.[0]?.toLowerCase()
+      if (!key || seen.has(key)) continue
+      seen.set(key, { plan_code: r.plan_code, network_or_biller: r.network_or_biller, label: labelFromPlanCode(r.plan_code) })
+    }
+    return Array.from(seen.values()).sort((a, b) => a.label.localeCompare(b.label))
+  }, [plans])
 
   return (
     <div className="space-y-4">
@@ -331,20 +356,57 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
 
             {(t === "airtime_voucher" || t === "data_voucher") && (
               <Field label={t === "data_voucher" ? "Network" : "Lock to network (optional)"}>
-                <select value={draft.voucherNetwork} onChange={(e) => set({ voucherNetwork: e.target.value, voucherPlanCode: "" })} className={inputCls}>
+                <select
+                  value={draft.voucherAnyNetwork ? "__any__" : draft.voucherNetwork}
+                  onChange={(e) => {
+                    if (e.target.value === "__any__") {
+                      set({ voucherAnyNetwork: true, voucherNetwork: "", voucherSampleNetwork: "", voucherPlanCode: "" })
+                    } else {
+                      set({ voucherAnyNetwork: false, voucherNetwork: e.target.value, voucherSampleNetwork: "", voucherPlanCode: "" })
+                    }
+                  }}
+                  className={inputCls}
+                >
                   <option value="">{t === "data_voucher" ? "Choose…" : "Any — user picks"}</option>
                   {data.networks.map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
                   ))}
+                  {t === "data_voucher" && <option value="__any__">All providers (any network)</option>}
                 </select>
+                {t === "data_voucher" && draft.voucherAnyNetwork && (
+                  <p className="mt-1 text-xs text-secondary">
+                    The winner&apos;s own number decides the network at claim time. Price and expiry follow whichever
+                    network they&apos;re actually on.
+                  </p>
+                )}
               </Field>
             )}
 
             {t === "data_voucher" && (
               <Field label="Data plan" help="Only plans that exist in your Pricing table can be used.">
-                {networkPlans.length > 0 ? (
+                {draft.voucherAnyNetwork ? (
+                  anyNetworkPlanOptions.length > 0 ? (
+                    <select
+                      value={draft.voucherPlanCode}
+                      onChange={(e) => {
+                        const opt = anyNetworkPlanOptions.find((o) => o.plan_code === e.target.value)
+                        set({ voucherPlanCode: e.target.value, voucherSampleNetwork: opt?.network_or_biller ?? "" })
+                      }}
+                      className={inputCls}
+                    >
+                      <option value="">Choose…</option>
+                      {anyNetworkPlanOptions.map((o) => (
+                        <option key={o.plan_code} value={o.plan_code}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-xs text-secondary">No data plans found in your Pricing table yet.</p>
+                  )
+                ) : networkPlans.length > 0 ? (
                   <select value={draft.voucherPlanCode} onChange={(e) => set({ voucherPlanCode: e.target.value })} className={inputCls}>
                     <option value="">Choose…</option>
                     {networkPlans.map((r) => (

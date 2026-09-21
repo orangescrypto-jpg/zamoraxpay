@@ -11,6 +11,7 @@ import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
 import { isFeatureEnabled, setFeatureFlag } from "@/src/services/config"
 import { lookupPrice } from "@/src/services/pricing"
+import { anyNetworkTargetFromPlanCode } from "@/src/services/spinVouchers"
 import { sendPushToUsers } from "@/src/services/pushNotifications"
 import { SPIN_DEFAULT_PRIZES, SPIN_SETTING_DEFS, SPIN_SOURCE_DEFAULTS } from "@/src/services/spinDefaults"
 import {
@@ -336,13 +337,28 @@ export async function savePrize(input: any, adminId: string, nativeDB?: any): Pr
       autoCost = amountKobo
       break
     case "data_voucher": {
-      voucherNetwork = String(input?.voucherNetwork ?? "")
-      voucherPlanCode = String(input?.voucherPlanCode ?? "").trim()
-      if (!NETWORKS.includes(voucherNetwork)) fail("Choose the network for the data plan.")
-      if (!voucherPlanCode) fail("Choose the data plan.")
-      const price = await lookupPrice("data", voucherNetwork, voucherPlanCode, "retail", undefined, nativeDB)
-      if (!price.found) fail("That data plan isn't in your pricing table (or is switched off). Add it under Pricing first.")
-      autoCost = price.baseAmountKobo
+      const anyNetwork = input?.voucherAnyNetwork === true
+      if (anyNetwork) {
+        voucherNetwork = null
+        const rawPlanCode = String(input?.voucherPlanCode ?? "").trim()
+        if (!rawPlanCode) fail("Choose the data plan size.")
+        const target = anyNetworkTargetFromPlanCode(rawPlanCode)
+        if (!target) fail("That plan doesn't have a recognizable size/validity to match across networks.")
+        voucherPlanCode = target
+        // Cost is priced per-network at claim time (each network's own plan_code
+        // has its own price); estimate cost here using whichever network the
+        // representative plan_code came from, purely for the admin's expected-cost display.
+        const price = await lookupPrice("data", String(input?.voucherSampleNetwork ?? NETWORKS[0]), rawPlanCode, "retail", undefined, nativeDB)
+        autoCost = price.found ? price.baseAmountKobo : 0
+      } else {
+        voucherNetwork = String(input?.voucherNetwork ?? "")
+        voucherPlanCode = String(input?.voucherPlanCode ?? "").trim()
+        if (!NETWORKS.includes(voucherNetwork)) fail("Choose the network for the data plan.")
+        if (!voucherPlanCode) fail("Choose the data plan.")
+        const price = await lookupPrice("data", voucherNetwork, voucherPlanCode, "retail", undefined, nativeDB)
+        if (!price.found) fail("That data plan isn't in your pricing table (or is switched off). Add it under Pricing first.")
+        autoCost = price.baseAmountKobo
+      }
       break
     }
     case "streak_protection":

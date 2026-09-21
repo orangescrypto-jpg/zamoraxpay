@@ -157,6 +157,10 @@ export const btnDanger = "rounded-lg border border-red-200 bg-white px-4 py-2 te
 export function Notice({ notice }: { notice: { ok: boolean; text: string } | null }) {
   if (!notice) return null
   return (
-    <p className={`mb-4 rounded-md p-3 text-sm ${notice.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{notice.text}</p>
+    <p
+      className={`fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-md p-3 text-center text-sm shadow-lg ${notice.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+    >
+      {notice.text}
+    </p>
   )
 }

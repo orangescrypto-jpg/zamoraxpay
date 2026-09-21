@@ -19,6 +19,7 @@ import {
   type AdminOverview,
   type AdminPrize,
 } from "@/components/admin/spin/shared"
+import { labelFromPlanCode } from "@/src/services/planLabel"
 
 interface PlanRule {
   network_or_biller: string
@@ -348,7 +349,7 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
                     <option value="">Choose…</option>
                     {networkPlans.map((r) => (
                       <option key={r.plan_code!} value={r.plan_code!}>
-                        {r.plan_code}
+                        {labelFromPlanCode(r.plan_code!)}
                       </option>
                     ))}
                   </select>

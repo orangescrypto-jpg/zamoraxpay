@@ -215,7 +215,7 @@ function SourceCard({ source, onChanged, onNotice }: { source: AdminSource; onCh
           )}
 
           <div className="flex flex-wrap gap-2">
-            <button onClick={save} disabled={saving} className={btnPrimary}>
+            <button onClick={() => save()} disabled={saving} className={btnPrimary}>
               {saving ? "Saving…" : "Save this source"}
             </button>
             <button onClick={reset} disabled={saving} className={btnGhost}>

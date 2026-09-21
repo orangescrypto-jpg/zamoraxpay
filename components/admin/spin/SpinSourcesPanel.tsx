@@ -73,7 +73,8 @@ function SourceCard({ source, onChanged, onNotice }: { source: AdminSource; onCh
   const isLazy = source.kind === "lazy"
   const isManual = source.kind === "manual"
 
-  async function save() {
+  async function save(override?: Partial<Draft>) {
+    const payload = { ...d, ...override }
     setSaving(true)
     try {
       await adminApi("/api/admin/spin", {
@@ -81,25 +82,31 @@ function SourceCard({ source, onChanged, onNotice }: { source: AdminSource; onCh
         body: JSON.stringify({
           action: "save_source",
           sourceKey: source.sourceKey,
-          isEnabled: d.isEnabled,
-          startsAt: d.startsAt || null,
-          endsAt: d.endsAt || null,
-          ticketsPerAward: Number(d.ticketsPerAward),
-          spinsPerDay: Number(d.spinsPerDay),
-          expiryMode: d.expiryMode,
-          expiryHours: Number(d.expiryHours),
-          dailyBudgetKobo: nairaToKobo(d.dailyBudget),
-          guaranteeAfterLosses: Number(d.guaranteeAfterLosses),
-          config: configPayload(source.fieldDefs, d.config),
+          isEnabled: payload.isEnabled,
+          startsAt: payload.startsAt || null,
+          endsAt: payload.endsAt || null,
+          ticketsPerAward: Number(payload.ticketsPerAward),
+          spinsPerDay: Number(payload.spinsPerDay),
+          expiryMode: payload.expiryMode,
+          expiryHours: Number(payload.expiryHours),
+          dailyBudgetKobo: nairaToKobo(payload.dailyBudget),
+          guaranteeAfterLosses: Number(payload.guaranteeAfterLosses),
+          config: configPayload(source.fieldDefs, payload.config),
         }),
       })
       onNotice({ ok: true, text: `${source.label} saved.` })
       onChanged()
     } catch (e) {
       onNotice({ ok: false, text: (e as Error).message })
+      setD((prev) => ({ ...prev, ...(override ? { isEnabled: d.isEnabled } : {}) }))
     } finally {
       setSaving(false)
     }
+  }
+
+  async function toggleEnabled(v: boolean) {
+    set({ isEnabled: v })
+    await save({ isEnabled: v })
   }
 
   async function reset() {
@@ -120,20 +127,26 @@ function SourceCard({ source, onChanged, onNotice }: { source: AdminSource; onCh
 
   return (
     <section className="rounded-xl border border-border bg-white">
-      <div className="flex flex-wrap items-center gap-3 p-4">
-        <Toggle checked={d.isEnabled} onChange={(v) => set({ isEnabled: v })} />
-        <button type="button" onClick={() => setOpen(!open)} className="min-w-0 flex-1 text-left">
+      <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3">
+          <Toggle checked={d.isEnabled} onChange={toggleEnabled} disabled={saving} />
+          <button type="button" onClick={() => setOpen(!open)} className="min-w-0 flex-1 text-left sm:hidden">
+            <p className="text-sm font-semibold text-primary">{source.label}</p>
+            <p className="text-xs text-secondary">{source.description}</p>
+          </button>
+        </div>
+        <button type="button" onClick={() => setOpen(!open)} className="hidden min-w-0 flex-1 text-left sm:block">
           <p className="text-sm font-semibold text-primary">{source.label}</p>
           <p className="text-xs text-secondary">{source.description}</p>
         </button>
-        <div className="text-right text-[11px] text-secondary">
+        <div className="text-[11px] text-secondary sm:text-right">
           <p>Win chance {source.winChancePercent}% · avg cost {fmt(source.expectedCostPerSpinKobo)}/spin</p>
           <p>
             Today: {source.ticketsIssuedToday} tickets · paid out {fmt(source.spentTodayKobo)}
             {budget > 0 ? ` of ${fmt(budget)}` : ""}
           </p>
         </div>
-        <button type="button" onClick={() => setOpen(!open)} className={btnGhost}>
+        <button type="button" onClick={() => setOpen(!open)} className={`${btnGhost} self-start sm:self-auto`}>
           {open ? "Close" : "Edit"}
         </button>
       </div>

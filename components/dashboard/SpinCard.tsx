@@ -77,23 +77,27 @@ export function SpinCard({ spin }: { spin: SpinApi }) {
 
   const count = status.tickets.length
   const nextExpiry = status.nextExpiresAt
+  const primarySource = status.tickets[0]?.sourceKey
+  const emoji = primarySource === "scratch_card" ? "🎫" : primarySource === "mystery_box" ? "🎁" : "🎡"
+  const actionWord = primarySource === "scratch_card" ? "scratch card" : primarySource === "mystery_box" ? "mystery box" : "free spin"
+  const ctaWord = primarySource === "scratch_card" ? "Scratch now" : primarySource === "mystery_box" ? "Open now" : "Spin now"
 
   return (
     <>
       <div className="mb-4 overflow-hidden rounded-2xl bg-gradient-to-r from-[#0F1E4D] to-[#2563EB] p-4 text-white shadow-md">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15 text-2xl" aria-hidden="true">
-            🎡
+            {emoji}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold">{count > 1 ? `You have ${count} free spins!` : "You have a free spin!"}</p>
+            <p className="text-sm font-bold">{count > 1 ? `You have ${count} ${actionWord}s!` : `You have a ${actionWord}!`}</p>
             {nextExpiry && <p className="text-xs text-blue-100">Use it before it expires · {timeLeft(nextExpiry)} left</p>}
           </div>
           <button
             onClick={() => setOpen(true)}
             className="shrink-0 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-5 py-2 text-sm font-extrabold text-white shadow-lg"
           >
-            Spin now
+            {ctaWord}
           </button>
         </div>
         {showWinners && winners.length > 0 && (

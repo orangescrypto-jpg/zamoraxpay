@@ -68,9 +68,15 @@ export async function issueTickets(params: IssueTicketsParams, nativeDB?: any): 
   if (count <= 0) return 0
 
   // Lazy daily sources can't be "unlimited" (that would mint tickets forever).
+  // The cap must never silently truncate what's actually being given today —
+  // if an admin raises "Spins given each day" (ticketsPerAward) without also
+  // raising "Max spins per day" (spinsPerDay), the count they just set would
+  // otherwise vanish behind the old, smaller cap. The cap can still be set
+  // HIGHER than the daily give (to allow bonus/admin-gift tickets on top),
+  // just never lower than the base count being issued right now.
   const kind = SPIN_SOURCE_META[params.sourceKey].kind
   let cap = source.spinsPerDay
-  if (kind === "lazy") cap = Math.max(1, cap)
+  if (kind === "lazy") cap = Math.max(1, cap, baseCount)
   // Tier bonus tickets are on top of the normal cap, not squeezed inside it.
   const effectiveCap = cap > 0 ? cap + Math.max(0, bonus.extraTickets) : 0
 

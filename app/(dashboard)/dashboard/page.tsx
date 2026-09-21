@@ -22,6 +22,7 @@ import {
   Users,
   Banknote,
   Globe,
+  PartyPopper,
   type LucideIcon,
 } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
@@ -71,6 +72,7 @@ const QUICK_LINKS: { href: string; label: string; icon: LucideIcon; iconClass: s
   { href: "/services/bulk-airtime", label: "Bulk Airtime", icon: Users, iconClass: "bg-sky-50 text-sky-600" },
   { href: "/services/airtime-to-cash", label: "Airtime to Cash", icon: Banknote, iconClass: "bg-lime-50 text-lime-600" },
   { href: "/rewards", label: "Rewards", icon: Gift, iconClass: "bg-teal-50 text-teal-600" },
+  { href: "/play", label: "Play & Earn", icon: PartyPopper, iconClass: "bg-purple-50 text-purple-600" },
 ]
 
 const STATUS_STYLES: Record<string, { badge: string; icon: LucideIcon; iconClass: string }> = {
@@ -267,12 +269,16 @@ export default function DashboardPage() {
         <div className="mt-3.5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {QUICK_LINKS.map((link) => {
             const Icon = link.icon
+            const showBadge = link.href === "/play" && (spin.status?.tickets.length ?? 0) > 0
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className="group flex flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-white px-4 py-5 text-center transition hover:border-blue-200 hover:shadow-[0_4px_16px_-6px_rgba(15,30,77,0.18)]"
+                className="group relative flex flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-white px-4 py-5 text-center transition hover:border-blue-200 hover:shadow-[0_4px_16px_-6px_rgba(15,30,77,0.18)]"
               >
+                {showBadge && (
+                  <span className="absolute right-3 top-3 flex h-2.5 w-2.5 rounded-full bg-red-500" aria-hidden="true" />
+                )}
                 <span className={`flex h-11 w-11 items-center justify-center rounded-full transition group-hover:scale-105 ${link.iconClass}`}>
                   <Icon className="h-5 w-5" />
                 </span>

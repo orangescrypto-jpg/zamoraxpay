@@ -5,7 +5,12 @@
 //                     number; WE buy it from the VTU provider at our cost. It is
 //                     never wallet money, so it can't be withdrawn or spent on
 //                     anything else.
-//   data voucher    — same, but a specific network + plan the admin chose.
+//   data voucher    — a specific network + plan the admin chose, OR an
+//                     "any network" plan (size + validity only): the network
+//                     is resolved from the winner's own phone number at claim
+//                     time, and whichever network they're on supplies its own
+//                     matching plan_code (and its own price/expiry) — see
+//                     ANY_NETWORK_PREFIX / resolveAnyNetworkPlanCode below.
 //   discount coupon — "5% off your next purchase". Applied AUTOMATICALLY by
 //                     purchaseFlow.ts to the user's next eligible purchase.
 //
@@ -27,6 +32,71 @@ import { hasLiveRoute } from "@/src/services/providerPlanMappings"
 import { lookupPrice } from "@/src/services/pricing"
 import { detectNetwork, isValidNgPhone, matchesSelectedNetwork, normalizeNgPhone } from "@/lib/networkDetect"
 import { DEFAULT_DISCOUNT_SERVICES, NETWORKS, sqlTime } from "@/src/services/spinConfig"
+
+// Marks a data-voucher prize's stored plan_code as "any network" rather than
+// one exact provider plan_code. Format: "any:<size>mb-<days>d[-category]",
+// e.g. "any:1000mb-30d" or "any:1000mb-30d-gifting" — the same base shape
+// canonicalPlanKey() produces (see planNormalization.ts), just prefixed so it
+// can never collide with (and is never mistaken for) a real plan_code.
+export const ANY_NETWORK_PREFIX = "any:"
+
+/** Builds the "any:<size>mb-<days>d[-category]" target from one representative plan_code. */
+export function anyNetworkTargetFromPlanCode(planCode: string): string | null {
+  const match = planCode.match(/^(\d+mb-\d+d)((?:-[a-z_+]+)*)$/i)
+  if (!match) return null
+  const [, base, suffixPart] = match
+  const CATEGORY_KEYS = new Set(["gifting", "awoof", "cg", "cg_lite", "sme", "corporate", "direct", "standard"])
+  const segments = suffixPart ? suffixPart.split("-").filter(Boolean) : []
+  const category = segments.find((s) => CATEGORY_KEYS.has(s))
+  return `${ANY_NETWORK_PREFIX}${base}${category ? "-" + category : ""}`
+}
+
+/**
+ * Resolves an "any:<size>mb-<days>d[-category]" target to a real plan_code on
+ * one specific network, by matching size + validity (+ category, if the
+ * target has one) against that network's own active data plans. Different
+ * networks' plan_codes for "the same" size/validity are separate rows with
+ * separate prices — that's expected, not a bug (see spinAdmin.ts). Returns
+ * null when this network currently has no plan matching that shape at all.
+ */
+async function resolveAnyNetworkPlanCode(network: string, target: string, nativeDB?: any): Promise<string | null> {
+  const body = target.slice(ANY_NETWORK_PREFIX.length) // "<size>mb-<days>d[-category]"
+  const match = body.match(/^(\d+mb-\d+d)(?:-([a-z_]+))?$/i)
+  if (!match) return null
+  const [, base, category] = match
+
+  const rows = await d1Query(
+    "SELECT plan_code FROM pricing_rules WHERE service_type = 'data' AND network_or_biller = ? AND is_active = 1 AND plan_code IS NOT NULL",
+    [network],
+    nativeDB,
+  )
+  const candidates = (rows.results ?? []).map((r: any) => String(r.plan_code)) as string[]
+
+  // Prefer an exact base match with no extra suffix at all (the plain, most
+  // "generic" version of that size/validity on this network).
+  const baseRe = new RegExp(`^${base}$`, "i")
+  const exact = candidates.find((c) => baseRe.test(c))
+  if (exact) return exact
+
+  // Otherwise, match the requested category if the admin asked for one;
+  // reject anything with a DIFFERENT category attached so we never silently
+  // substitute a gifting plan for an sme one, etc.
+  const withSuffixRe = new RegExp(`^${base}((?:-[a-z_+]+)*)$`, "i")
+  for (const c of candidates) {
+    const m = c.match(withSuffixRe)
+    if (!m) continue
+    const segs = (m[1] ? m[1].split("-").filter(Boolean) : []).map((s) => s.toLowerCase())
+    const CATEGORY_KEYS = new Set(["gifting", "awoof", "cg", "cg_lite", "sme", "corporate", "direct", "standard"])
+    const planCategory = segs.find((s) => CATEGORY_KEYS.has(s))
+    if (category) {
+      if (planCategory === category.toLowerCase()) return c
+    } else if (!planCategory) {
+      return c
+    }
+  }
+  return null
+}
+
 
 export interface UserVoucher {
   id: string
@@ -183,6 +253,13 @@ export async function claimVoucher(
   } else {
     planCode = v.plan_code
     if (!planCode) return { success: false, message: "This prize is not valid." }
+    if (planCode.startsWith(ANY_NETWORK_PREFIX)) {
+      const resolved = await resolveAnyNetworkPlanCode(network, planCode, nativeDB)
+      if (!resolved) {
+        return { success: false, message: "This data plan isn't available on your network right now. Your prize is safe — try again later." }
+      }
+      planCode = resolved
+    }
     const price = await lookupPrice("data", network, planCode, "retail", undefined, nativeDB)
     if (!price.found) return { success: false, message: "This data plan isn't available right now. Your prize is safe — try again later." }
     baseCostKobo = price.baseAmountKobo

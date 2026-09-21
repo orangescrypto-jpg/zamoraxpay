@@ -102,9 +102,9 @@ export function SpinModal({
             <div className="mt-6">
               {ticket ? (
                 ticket.sourceKey === "scratch_card" ? (
-                  <ScratchCard onSpin={doSpin} onDone={handleDone} disabled={!ticket} />
+                  <ScratchCard onSpin={doSpin} onDone={handleDone} disabled={!ticket} resetKey={ticket.id} />
                 ) : ticket.sourceKey === "mystery_box" ? (
-                  <MysteryBox onSpin={doSpin} onDone={handleDone} disabled={!ticket} />
+                  <MysteryBox onSpin={doSpin} onDone={handleDone} disabled={!ticket} resetKey={ticket.id} />
                 ) : (
                   <SpinWheel segments={segments} onSpin={doSpin} onDone={handleDone} disabled={!ticket} />
                 )

@@ -6,6 +6,8 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { X } from "lucide-react"
 import { SpinWheel, type WheelSpinResult } from "@/components/dashboard/SpinWheel"
+import { ScratchCard } from "@/components/dashboard/ScratchCard"
+import { MysteryBox } from "@/components/dashboard/MysteryBox"
 import { spinAuthHeaders, timeLeft, type SpinApi, type SpinOutcome } from "@/components/dashboard/useSpinStatus"
 
 export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () => void; spin: SpinApi }) {
@@ -28,6 +30,9 @@ export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () 
 
   const ticket = status.tickets[0]
   const segments = ticket ? status.wheels[ticket.sourceKey] ?? [] : []
+  const isScratch = ticket?.sourceKey === "scratch_card"
+  const isBox = ticket?.sourceKey === "mystery_box"
+  const actionWord = isScratch ? "card" : isBox ? "box" : "spin"
 
   async function doSpin(): Promise<WheelSpinResult> {
     if (!ticket) return { ok: false, message: "You don't have a spin right now." }
@@ -69,9 +74,11 @@ export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () 
 
         {!result ? (
           <>
-            <p className="text-center text-xs font-semibold uppercase tracking-widest text-amber-300">Spin &amp; Win</p>
+            <p className="text-center text-xs font-semibold uppercase tracking-widest text-amber-300">
+              {isScratch ? "Scratch & Win" : isBox ? "Mystery Box" : "Spin & Win"}
+            </p>
             <h2 className="mt-1 text-center text-xl font-bold">
-              {remaining > 1 ? `You have ${remaining} spins!` : "You've got a spin!"}
+              {remaining > 1 ? `You have ${remaining} ${actionWord}s!` : `You've got a ${actionWord}!`}
             </h2>
             {ticket && (
               <p className="mt-1 text-center text-xs text-blue-100">
@@ -80,7 +87,13 @@ export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () 
             )}
             <div className="mt-6">
               {ticket ? (
-                <SpinWheel segments={segments} onSpin={doSpin} onDone={handleDone} disabled={!ticket} />
+                ticket.sourceKey === "scratch_card" ? (
+                  <ScratchCard onSpin={doSpin} onDone={handleDone} disabled={!ticket} />
+                ) : ticket.sourceKey === "mystery_box" ? (
+                  <MysteryBox onSpin={doSpin} onDone={handleDone} disabled={!ticket} />
+                ) : (
+                  <SpinWheel segments={segments} onSpin={doSpin} onDone={handleDone} disabled={!ticket} />
+                )
               ) : (
                 <p className="py-10 text-center text-sm text-blue-100">No spins available right now.</p>
               )}
@@ -103,7 +116,7 @@ export function SpinModal({ open, onClose, spin }: { open: boolean; onClose: () 
                   onClick={() => setResult(null)}
                   className="rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-6 py-3 text-sm font-extrabold text-white shadow-lg"
                 >
-                  Spin again ({result.ticketsLeft} left)
+                  Try again ({result.ticketsLeft} left)
                 </button>
               )}
               {won && (result.prizeType === "airtime_voucher" || result.prizeType === "data_voucher") && (

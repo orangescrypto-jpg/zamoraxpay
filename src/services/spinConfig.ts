@@ -25,6 +25,8 @@ export type SpinSourceKey =
   | "spend_milestone"
   | "weekend"
   | "admin_gift"
+  | "scratch_card"
+  | "mystery_box"
 
 export const SPIN_SOURCE_KEYS: SpinSourceKey[] = [
   "streak_milestone",
@@ -36,6 +38,8 @@ export const SPIN_SOURCE_KEYS: SpinSourceKey[] = [
   "spend_milestone",
   "weekend",
   "admin_gift",
+  "scratch_card",
+  "mystery_box",
 ]
 
 export type SpinPrizeType =
@@ -131,6 +135,11 @@ export const SPIN_SOURCE_META: Record<SpinSourceKey, SpinSourceMeta> = {
     fields: [{ key: "active_weekdays", label: "Days it appears", type: "weekdays", help: "Weekday names, e.g. Saturday,Sunday." }],
   },
   admin_gift: { kind: "manual", fields: [] },
+  scratch_card: { kind: "lazy", fields: [] },
+  mystery_box: {
+    kind: "event",
+    fields: [{ key: "min_amount_kobo", label: "Minimum purchase", type: "kobo", help: "A purchase must be at least this much to earn a mystery box." }],
+  },
 }
 
 export interface SpinSource {

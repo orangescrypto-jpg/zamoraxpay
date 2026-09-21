@@ -153,7 +153,7 @@ export async function ensureLazyTickets(userId: string, nativeDB?: any): Promise
         userId,
         sourceKey: key,
         issueKey: `lazy:${key}:${userId}:${today}`,
-        count: Math.max(1, source.spinsPerDay),
+        count: Math.max(1, source.ticketsPerAward),
         notify: false,
       },
       nativeDB,

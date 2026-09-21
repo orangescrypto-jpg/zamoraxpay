@@ -75,7 +75,7 @@ export async function runSpinCron(nativeDB?: any): Promise<SpinCronResult> {
   // "Your free spin is ready" — daily reminder for subscribed users who haven't spun today.
   if (settings.pushAnytimeReady) {
     let anytimeLive = false
-    for (const key of ["anytime", "weekend"] as const) {
+    for (const key of ["anytime", "weekend", "scratch_card"] as const) {
       const s = await getSource(key, nativeDB)
       if (!s?.isEnabled || !isWithinWindow(s, now)) continue
       if (key === "weekend" && !parseWeekdays(s.config.active_weekdays).includes(weekdayNameOf(now).toLowerCase())) continue
@@ -85,7 +85,7 @@ export async function runSpinCron(nativeDB?: any): Promise<SpinCronResult> {
       const rows = await d1Query(
         `SELECT DISTINCT p.user_id FROM push_subscriptions p
           WHERE p.user_id IS NOT NULL
-            AND NOT EXISTS (SELECT 1 FROM spin_spins s WHERE s.user_id = p.user_id AND s.day_key = ? AND s.source_key IN ('anytime','weekend'))
+            AND NOT EXISTS (SELECT 1 FROM spin_spins s WHERE s.user_id = p.user_id AND s.day_key = ? AND s.source_key IN ('anytime','weekend','scratch_card'))
           LIMIT 500`,
         [today],
         nativeDB,

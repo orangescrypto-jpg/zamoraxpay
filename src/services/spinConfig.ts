@@ -27,6 +27,7 @@ export type SpinSourceKey =
   | "admin_gift"
   | "scratch_card"
   | "mystery_box"
+  | "pick_a_card"
 
 export const SPIN_SOURCE_KEYS: SpinSourceKey[] = [
   "streak_milestone",
@@ -40,6 +41,7 @@ export const SPIN_SOURCE_KEYS: SpinSourceKey[] = [
   "admin_gift",
   "scratch_card",
   "mystery_box",
+  "pick_a_card",
 ]
 
 export type SpinPrizeType =
@@ -136,6 +138,7 @@ export const SPIN_SOURCE_META: Record<SpinSourceKey, SpinSourceMeta> = {
   },
   admin_gift: { kind: "manual", fields: [] },
   scratch_card: { kind: "lazy", fields: [] },
+  pick_a_card: { kind: "lazy", fields: [] },
   mystery_box: {
     kind: "event",
     fields: [{ key: "min_amount_kobo", label: "Minimum purchase", type: "kobo", help: "A purchase must be at least this much to earn a mystery box." }],

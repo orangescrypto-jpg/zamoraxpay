@@ -8,7 +8,23 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createMiddlewareClient } from "@/src/services/providers/supabase/middleware"
 
-const PROTECTED_PREFIXES = ["/dashboard", "/wallet", "/services", "/reseller", "/history", "/beneficiaries", "/settings", "/withdraw"]
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/wallet",
+  "/services",
+  "/reseller",
+  "/history",
+  "/beneficiaries",
+  "/settings",
+  "/withdraw",
+  "/spin",
+  "/play",
+  "/rewards",
+  "/referrals",
+  "/refund",
+  "/daily-streak",
+  "/cashback",
+]
 const ADMIN_PREFIX = "/admin"
 const AUTH_PREFIXES = ["/login", "/signup"]
 
@@ -57,6 +73,13 @@ export const config = {
     "/beneficiaries/:path*",
     "/settings/:path*",
     "/withdraw/:path*",
+    "/spin/:path*",
+    "/play/:path*",
+    "/rewards/:path*",
+    "/referrals/:path*",
+    "/refund/:path*",
+    "/daily-streak/:path*",
+    "/cashback/:path*",
     "/admin/:path*",
     "/login",
     "/signup",

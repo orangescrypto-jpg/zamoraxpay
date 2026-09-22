@@ -48,6 +48,7 @@ export interface ParsedPlanIdentity {
   validityDays: number | null // null when no validity applies
   category: string // "standard" when the provider draws no distinction
   cableTier: string | null // e.g. "compact", "max", "nova" — cable's equivalent of size; null for non-cable services
+  cableAddon: string | null // e.g. "french-11", "movie-bundle", "india" — a cable add-on sold alongside (not instead of) a base tier; null for non-cable services or a tier-only cable plan
   planFamily: string | null // e.g. "collabo", "always-on" — named data products with no fixed size (unlimited/capped-speed bundles); null for size-based data plans and non-data services
   bundleTag: string | null // e.g. "social", "binge", "night" — an app-restricted or time-restricted data variant layered on top of a normal sized plan; null for an unrestricted (general-purpose) data plan
   // True only when every field we needed was confidently extracted.
@@ -174,6 +175,7 @@ const CABLE_TIER_PATTERNS: Record<string, Array<{ key: string; re: RegExp }>> = 
     { key: "lite", re: /\blite\b/i },
   ],
   StarTimes: [
+    { key: "super-antenna", re: /\bsuper[\s-]*antenna\b/i },
     { key: "nova", re: /\bnova\b/i },
     { key: "basic", re: /\bbasic\b/i },
     { key: "smart", re: /\bsmart\b/i },
@@ -191,6 +193,47 @@ const CABLE_TIER_PATTERNS: Record<string, Array<{ key: string; re: RegExp }>> = 
 
 function extractCableTier(text: string, biller: string): string | null {
   const patterns = CABLE_TIER_PATTERNS[biller]
+  if (!patterns) return null
+  for (const { key, re } of patterns) {
+    if (re.test(text)) return key
+  }
+  return null
+}
+
+// Cable ADD-ONS — sold alongside a base tier subscription rather than
+// as one, e.g. DSTV's French channel packs, Showmax bundles, regional
+// add-ons (Indian/Asian), and Complus/ExtraView. These are a genuinely
+// different product shape from a tier: a customer's DSTV account can
+// carry a base tier (Compact, Premium, ...) AND one of these add-ons
+// at the same time, so folding an add-on into cableTier would treat
+// "French 11" as if it were a competing alternative to "Compact"
+// rather than a separate line item — and, in practice, is exactly why
+// labels like "dstv-french-11", "french11", and
+// "dstv-french-11-n10-800" (three spellings of the same real add-on,
+// all ₦10,992-11,100) were never recognized by CABLE_TIER_PATTERNS and
+// fell through to raw, unmerged, ugly slugs on the buy page.
+//
+// Longest/most-specific pattern first per biller for the same reason
+// CABLE_TIER_PATTERNS orders that way — "premier-league" must match
+// before a shorter fragment inside a longer label could mis-fire.
+// A trailing "-n<price>" fragment some provider labels carry (e.g.
+// "-n3500", "-n10-800") is NOT part of any pattern here — it's noise
+// stripped by the generic cleanup already applied to rawLabel, not an
+// add-on identity signal.
+const CABLE_ADDON_PATTERNS: Record<string, Array<{ key: string; re: RegExp }>> = {
+  DSTV: [
+    { key: "movie-bundle", re: /\bmovie[\s-]*bundle\b/i },
+    { key: "showmax-premier-league", re: /\bshowmax[\s-]*premier[\s-]*league\b/i },
+    { key: "french-11", re: /\bfrench[\s-]*-?\s*11\b/i },
+    { key: "india", re: /\bindia[n]?[\s-]*add[\s-]*on\b|\bdstv[\s-]*india\b/i },
+    { key: "asian", re: /\basian[\s-]*add[\s-]*on\b/i },
+    { key: "complus-extraview", re: /\bcomplus[\s-]*(french[\s-]*)?extraview\b/i },
+    { key: "extraview", re: /\bextraview\b/i },
+  ],
+}
+
+function extractCableAddon(text: string, biller: string): string | null {
+  const patterns = CABLE_ADDON_PATTERNS[biller]
   if (!patterns) return null
   for (const { key, re } of patterns) {
     if (re.test(text)) return key
@@ -322,7 +365,7 @@ export function parsePlanIdentity(
       // exactly as before. A size without validity is NOT confidently
       // parsed — do not guess.
       const confident = validityDays !== null
-      return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, cableTier: null, planFamily: null, bundleTag, confident }
+      return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, cableTier: null, cableAddon: null, planFamily: null, bundleTag, confident }
     }
     // No data size found — check for a named plan family (Collabo,
     // Always-On, ...) instead. These are real products identified by
@@ -335,7 +378,7 @@ export function parsePlanIdentity(
     // (which duration is it?) and is not guessed at.
     const planFamily = extractPlanFamily(rawLabel)
     const confident = planFamily !== null && validityDays !== null
-    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, planFamily, bundleTag, confident }
+    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, cableAddon: null, planFamily, bundleTag, confident }
   }
 
   if (serviceType === "cable") {
@@ -345,11 +388,21 @@ export function parsePlanIdentity(
     // Validity ("1 Month") often accompanies it but isn't required —
     // some providers list a bare tier with no validity in the label
     // at all (validity is implied to be monthly). Confidence requires
-    // the tier to be recognized; an unrecognized tier is NOT guessed
-    // at, exactly like an unparseable data size.
+    // EITHER the tier OR a recognized add-on (see CABLE_ADDON_PATTERNS
+    // above) to be recognized — an add-on like "French 11" or "Movie
+    // Bundle" is sold as its own line item, not bundled with a base
+    // tier in the same label, so requiring both would make every
+    // legitimate add-on unconfident. An unrecognized tier AND
+    // unrecognized addon together is NOT guessed at, exactly like an
+    // unparseable data size — this is what still correctly leaves
+    // provider-internal numeric codes (dstv7, dstv79, dstv3, uni-2)
+    // unconfident: those aren't a real tier or add-on name at all, just
+    // an opaque package ID, and guessing which tier "dstv79" maps to
+    // would risk delivering the wrong subscription.
     const cableTier = extractCableTier(rawLabel, normalizedNetwork)
-    const confident = cableTier !== null
-    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier, planFamily: null, bundleTag: null, confident }
+    const cableAddon = extractCableAddon(rawLabel, normalizedNetwork)
+    const confident = cableTier !== null || cableAddon !== null
+    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier, cableAddon, planFamily: null, bundleTag: null, confident }
   }
 
   // Remaining non-size, non-cable plan-coded services (exam_pin,
@@ -360,7 +413,7 @@ export function parsePlanIdentity(
   // cleaned text alone.
   const cleaned = cleanToken(rawLabel)
   const confident = /^[a-z0-9-]{2,40}$/.test(cleaned)
-  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, planFamily: null, bundleTag: null, confident }
+  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, cableAddon: null, planFamily: null, bundleTag: null, confident }
 }
 
 // Lightly-cleaned fallback slug used both for the "couldn't confidently
@@ -443,13 +496,21 @@ export function canonicalPlanKey(
     }
   }
 
-  if (serviceType === "cable" && parsed.cableTier !== null) {
+  if (serviceType === "cable" && (parsed.cableTier !== null || parsed.cableAddon !== null)) {
     // Validity is appended only when present in the label — many
     // cable catalogs list one row per tier with validity implied
     // (monthly) rather than stated, so its absence here does not
     // reduce confidence the way it does for data plans.
     const validitySuffix = parsed.validityDays !== null ? `-${parsed.validityDays}d` : ""
-    return { planCode: `${parsed.cableTier}${validitySuffix}`, confident: true }
+    // A tier and an addon are two different real products (a base
+    // subscription vs. a standalone add-on pack) — never merge them
+    // into one composed code even if a label somehow matched both.
+    // Tier takes precedence when both are present, since an addon
+    // pattern matching inside a full tier label (rare, but possible if
+    // a provider ever writes "Compact + French 11" as one line) would
+    // otherwise silently misfile a real tier plan under an addon key.
+    const base = parsed.cableTier ?? `addon-${parsed.cableAddon}`
+    return { planCode: `${base}${validitySuffix}`, confident: true }
   }
 
   // Any other non-data, non-cable plan-coded service with a validity

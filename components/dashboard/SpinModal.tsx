@@ -8,6 +8,7 @@ import { X } from "lucide-react"
 import { SpinWheel, type WheelSpinResult } from "@/components/dashboard/SpinWheel"
 import { ScratchCard } from "@/components/dashboard/ScratchCard"
 import { MysteryBox } from "@/components/dashboard/MysteryBox"
+import { PickACard } from "@/components/dashboard/PickACard"
 import { spinAuthHeaders, timeLeft, type SpinApi, type SpinOutcome } from "@/components/dashboard/useSpinStatus"
 
 export function SpinModal({
@@ -25,13 +26,13 @@ export function SpinModal({
   sourceKey?: string
 }) {
   const [result, setResult] = useState<SpinOutcome | null>(null)
-  const [, setTick] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
   const { status, refresh } = spin
 
   // keep the "expires in" text fresh
   useEffect(() => {
     if (!open) return
-    const t = setInterval(() => setTick((x) => x + 1), 30_000)
+    const t = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(t)
   }, [open])
 
@@ -45,7 +46,8 @@ export function SpinModal({
   const segments = ticket ? status.wheels[ticket.sourceKey] ?? [] : []
   const isScratch = ticket?.sourceKey === "scratch_card"
   const isBox = ticket?.sourceKey === "mystery_box"
-  const actionWord = isScratch ? "card" : isBox ? "box" : "spin"
+  const isPickCard = ticket?.sourceKey === "pick_a_card"
+  const actionWord = isScratch ? "card" : isBox ? "box" : isPickCard ? "pick" : "spin"
 
   async function doSpin(): Promise<WheelSpinResult> {
     if (!ticket) return { ok: false, message: "You don't have a spin right now." }
@@ -64,14 +66,14 @@ export function SpinModal({
   }
 
   async function handleDone(outcome: SpinOutcome) {
-    // Scratch card / mystery box already show their own reveal (the clover/
-    // emoji screen) inside the component itself, and reset themselves for the
-    // next ticket via resetKey. Showing the modal's OWN result screen on top
+    // Scratch card / mystery box / pick-a-card already show their own reveal (the
+    // clover/emoji screen) inside the component itself, and reset themselves for
+    // the next ticket via resetKey. Showing the modal's OWN result screen on top
     // of that is a redundant extra tap ("Try again") the user has to make
-    // before they can scratch the next card — so for these two, skip it:
-    // just refresh status in the background and let the child's own reset
-    // effect (see ScratchCard/MysteryBox resetKey) bring back a fresh card.
-    if (isScratch || isBox) {
+    // before they can play again — so for these, skip it: just refresh status
+    // in the background and let the child's own reset effect (see
+    // ScratchCard/MysteryBox/PickACard resetKey) bring back a fresh card.
+    if (isScratch || isBox || isPickCard) {
       await refresh()
       return
     }
@@ -101,14 +103,14 @@ export function SpinModal({
         {!result ? (
           <>
             <p className="text-center text-xs font-semibold uppercase tracking-widest text-amber-300">
-              {isScratch ? "Scratch & Win" : isBox ? "Mystery Box" : "Spin & Win"}
+              {isScratch ? "Scratch & Win" : isBox ? "Mystery Box" : isPickCard ? "Pick a Card" : "Spin & Win"}
             </p>
             <h2 className="mt-1 text-center text-xl font-bold">
               {remaining > 1 ? `You have ${remaining} ${actionWord}s!` : `You've got a ${actionWord}!`}
             </h2>
             {ticket && (
               <p className="mt-1 text-center text-xs text-blue-100">
-                {ticket.sourceLabel} · expires in {timeLeft(ticket.expiresAt)}
+                {ticket.sourceLabel} · expires in {timeLeft(ticket.expiresAt, now)}
               </p>
             )}
             <div className="mt-6">
@@ -122,6 +124,8 @@ export function SpinModal({
                   <ScratchCard onSpin={doSpin} onDone={handleDone} disabled={!ticket} resetKey={ticket.id} />
                 ) : ticket.sourceKey === "mystery_box" ? (
                   <MysteryBox onSpin={doSpin} onDone={handleDone} disabled={!ticket} resetKey={ticket.id} />
+                ) : ticket.sourceKey === "pick_a_card" ? (
+                  <PickACard onSpin={doSpin} onDone={handleDone} disabled={!ticket} resetKey={ticket.id} />
                 ) : (
                   <SpinWheel segments={segments} onSpin={doSpin} onDone={handleDone} disabled={!ticket} />
                 )

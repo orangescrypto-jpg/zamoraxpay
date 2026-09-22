@@ -19,14 +19,33 @@ interface PlanGroup {
   variants: PlanVariant[]
 }
 
-// Plan codes are admin-defined (e.g. "DSTV_COMPACT_PLUS"); turn the
-// biller prefix + underscores into a readable label instead of
-// keeping a second, separate label list that can drift from admin.
+// Plan codes are the canonical keys produced by canonicalPlanKey()
+// (see src/services/planNormalization.ts): a recognized tier
+// ("compact-plus", "super-antenna") or a recognized add-on
+// ("addon-french-11", "addon-movie-bundle"), each with an optional
+// trailing "-<N>d" validity suffix. Formats those into a readable
+// label. A plan_code that matches neither shape is a genuine
+// low-confidence row (an unrecognized provider-internal code like
+// "dstv79", or a stale pre-normalization row pending the plan-code
+// migration) — title-cased instead of shown as a raw slug, same
+// fallback principle as the data page's labelFromPlanCode.
+function titleCaseFallback(code: string): string {
+  return code
+    .split("-")
+    .filter(Boolean)
+    .map((seg) => seg.charAt(0).toUpperCase() + seg.slice(1))
+    .join(" ")
+}
+
 function labelFromPlanCode(code: string, biller: string): string {
-  const prefix = biller.toUpperCase().replace(/\s/g, "")
-  const rest = code.startsWith(prefix + "_") ? code.slice(prefix.length + 1) : code
-  const words = rest.split("_").map((w) => w.charAt(0) + w.slice(1).toLowerCase())
-  return `${biller} ${words.join(" ")}`
+  const match = code.match(/^(addon-)?([a-z0-9]+(?:-[a-z0-9]+)*?)(?:-(\d+)d)?$/i)
+  if (!match) return `${biller} ${titleCaseFallback(code)}`
+  const [, addonPrefix, base, daysStr] = match
+  const words = base.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+  const validitySuffix = daysStr ? ` (${daysStr} days)` : ""
+  return addonPrefix
+    ? `${biller} ${words.join(" ")} Add-on${validitySuffix}`
+    : `${biller} ${words.join(" ")}${validitySuffix}`
 }
 
 export default function CablePage() {

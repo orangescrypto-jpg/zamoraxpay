@@ -20,7 +20,7 @@ export function SpinCard({ spin }: { spin: SpinApi }) {
   const [open, setOpen] = useState(false)
   const [winners, setWinners] = useState<Winner[]>([])
   const [winnerIdx, setWinnerIdx] = useState(0)
-  const [, setTick] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
 
   const hasTickets = !!status?.enabled && status.tickets.length > 0
   const showWinners = hasTickets && !!status?.winnersEnabled
@@ -51,9 +51,17 @@ export function SpinCard({ spin }: { spin: SpinApi }) {
 
   useEffect(() => {
     if (!hasTickets) return
-    const t = setInterval(() => setTick((x) => x + 1), 30_000)
+    const t = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(t)
   }, [hasTickets])
+
+  // Once the ticket we're showing actually expires, pull a fresh status
+  // instead of leaving a dead "expired" ticket on screen.
+  useEffect(() => {
+    if (!status?.nextExpiresAt) return
+    const ms = new Date(status.nextExpiresAt.replace(" ", "T") + "Z").getTime() - now
+    if (ms <= 0) spin.refresh()
+  }, [now, status?.nextExpiresAt, spin])
 
   if (!status?.enabled) return null
 
@@ -78,9 +86,11 @@ export function SpinCard({ spin }: { spin: SpinApi }) {
   const count = status.tickets.length
   const nextExpiry = status.nextExpiresAt
   const primarySource = status.tickets[0]?.sourceKey
-  const emoji = primarySource === "scratch_card" ? "🎫" : primarySource === "mystery_box" ? "🎁" : "🎡"
-  const actionWord = primarySource === "scratch_card" ? "scratch card" : primarySource === "mystery_box" ? "mystery box" : "free spin"
-  const ctaWord = primarySource === "scratch_card" ? "Scratch now" : primarySource === "mystery_box" ? "Open now" : "Spin now"
+  const emoji = primarySource === "scratch_card" ? "🎫" : primarySource === "mystery_box" ? "🎁" : primarySource === "pick_a_card" ? "🃏" : "🎡"
+  const actionWord =
+    primarySource === "scratch_card" ? "scratch card" : primarySource === "mystery_box" ? "mystery box" : primarySource === "pick_a_card" ? "card pick" : "free spin"
+  const ctaWord =
+    primarySource === "scratch_card" ? "Scratch now" : primarySource === "mystery_box" ? "Open now" : primarySource === "pick_a_card" ? "Pick now" : "Spin now"
 
   return (
     <>
@@ -91,7 +101,7 @@ export function SpinCard({ spin }: { spin: SpinApi }) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold">{count > 1 ? `You have ${count} ${actionWord}s!` : `You have a ${actionWord}!`}</p>
-            {nextExpiry && <p className="text-xs text-blue-100">Use it before it expires · {timeLeft(nextExpiry)} left</p>}
+            {nextExpiry && <p className="text-xs text-blue-100">Use it before it expires · {timeLeft(nextExpiry, now)} left</p>}
           </div>
           <button
             onClick={() => setOpen(true)}

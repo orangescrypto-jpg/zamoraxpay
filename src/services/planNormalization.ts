@@ -49,6 +49,7 @@ export interface ParsedPlanIdentity {
   category: string // "standard" when the provider draws no distinction
   cableTier: string | null // e.g. "compact", "max", "nova" — cable's equivalent of size; null for non-cable services
   cableAddon: string | null // e.g. "french-11", "movie-bundle", "india" — a cable add-on sold alongside (not instead of) a base tier; null for non-cable services or a tier-only cable plan
+  cableDelivery: string | null // "dish" or "antenna" — StarTimes sells the SAME tier at two different prices depending on receiver hardware (satellite dish vs terrestrial antenna), a real distinct product, not formatting noise; null when a label doesn't specify (assumed to mean dish, StarTimes's default) or for non-StarTimes cable
   planFamily: string | null // e.g. "collabo", "always-on" — named data products with no fixed size (unlimited/capped-speed bundles); null for size-based data plans and non-data services
   bundleTag: string | null // e.g. "social", "binge", "night" — an app-restricted or time-restricted data variant layered on top of a normal sized plan; null for an unrestricted (general-purpose) data plan
   // True only when every field we needed was confidently extracted.
@@ -183,6 +184,21 @@ const CABLE_TIER_PATTERNS: Record<string, Array<{ key: string; re: RegExp }>> = 
     { key: "super", re: /\bsuper\b/i },
     { key: "unique", re: /\bunique\b/i },
     { key: "global", re: /\bglobal\b/i },
+    // "Uni" (Uni-1, Uni-2) and "Special" are real StarTimes tiers
+    // distinct from the above — seen in raw catalog labels as bare
+    // "uni-1"/"uni-2"/"special-weekly"/"special-monthly" with no other
+    // recognizable tier word, so each needs its own explicit pattern
+    // rather than falling through unconfident. Checked after the
+    // longer/more specific patterns above so e.g. a label that also
+    // contains "super" or "global" elsewhere isn't mis-claimed by
+    // these shorter, more generic-sounding names.
+    { key: "uni-1", re: /\buni[\s-]*1\b/i },
+    { key: "uni-2", re: /\buni[\s-]*2\b/i },
+    { key: "special", re: /\bspecial\b/i },
+    // "Chinese" (Chinese Dish bouquet) — confirmed by observed live
+    // label "chinese-dish-21-000-naira-1-month" — a real StarTimes
+    // tier distinct from Global, not a formatting variant of it.
+    { key: "chinese", re: /\bchinese\b/i },
   ],
   Showmax: [
     { key: "mobile", re: /\bmobile\b/i },
@@ -224,6 +240,7 @@ const CABLE_ADDON_PATTERNS: Record<string, Array<{ key: string; re: RegExp }>> =
   DSTV: [
     { key: "movie-bundle", re: /\bmovie[\s-]*bundle\b/i },
     { key: "showmax-premier-league", re: /\bshowmax[\s-]*premier[\s-]*league\b/i },
+    { key: "french-plus", re: /\bfrench[\s-]*plus\b/i },
     { key: "french-11", re: /\bfrench[\s-]*-?\s*11\b/i },
     { key: "india", re: /\bindia[n]?[\s-]*add[\s-]*on\b|\bdstv[\s-]*india\b/i },
     { key: "asian", re: /\basian[\s-]*add[\s-]*on\b/i },
@@ -241,6 +258,35 @@ function extractCableAddon(text: string, biller: string): string | null {
   return null
 }
 
+// StarTimes-specific: "dish" (satellite) vs "antenna" (terrestrial) —
+// the SAME tier name (Basic, Classic, Nova, Super, Global) is sold at
+// two different real prices depending on which receiver the customer
+// has, confirmed by observed live labels like
+// "basic-antenna-1400-naira-1-week" (₦1,400) vs
+// "basic-dish-1-700-naira-1-week" (₦1,700) for the same "Basic"
+// tier+validity. Without this distinction those two rows were
+// silently colliding into one canonical code (basic-7d) during
+// migration, which is a real pricing/product bug: whichever
+// provider_plan_mappings row happened to merge-win would route ALL
+// Basic-weekly purchases to just one receiver type's wholesale cost,
+// even for customers who have the other kind of receiver. Only
+// StarTimes labels carry this distinction in practice (DSTV/GOtv
+// don't sell the same tier over two receiver types), so this is
+// intentionally not a per-biller pattern map like CABLE_ADDON_PATTERNS
+// — StarTimes is the only biller key checked.
+function extractCableDelivery(text: string, biller: string, tier: string | null): string | null {
+  if (biller !== "StarTimes") return null
+  // "super-antenna" is its OWN tier name (see CABLE_TIER_PATTERNS)
+  // that happens to contain the word "antenna" as part of its name,
+  // not as a separate delivery-method signal — without this guard,
+  // "super-antenna-weekly" produced the doubled, wrong code
+  // "super-antenna-antenna-7d" instead of "super-antenna-7d".
+  if (tier === "super-antenna") return null
+  if (/\bantenna\b/i.test(text)) return "antenna"
+  if (/\bdish\b/i.test(text)) return "dish"
+  return null
+}
+
 // Named data products with no fixed MB/GB size — "Collabo" and
 // "Always-On" are real MTN bundle families sold by validity+price
 // tier rather than a data quota (often unlimited-at-reduced-speed, or
@@ -251,7 +297,14 @@ function extractCableAddon(text: string, biller: string): string | null {
 // unrecognized cable tier or an unparseable data size.
 const DATA_PLAN_FAMILY_PATTERNS: Array<{ key: string; re: RegExp }> = [
   { key: "collabo", re: /\bcollabo\b/i },
-  { key: "always-on", re: /\balways[\s-]*on\b/i },
+  // "always-on" tolerates the real observed provider typo "alwavs"
+  // (v instead of y — seen verbatim in a live ClubKonnect label,
+  // "alwavs-on-n7000-30days") alongside the correct spelling, so this
+  // typo'd row stops falling back to a raw, unmerged slug. Embedded
+  // price fragments like "n7000" are not part of the match and are
+  // simply ignored (not stripped) — they never end up in the
+  // recomposed plan_code, which uses parsed.planFamily, not rawLabel.
+  { key: "always-on", re: /\balwa[yv]s[\s-]*on\b/i },
 ]
 
 function extractPlanFamily(text: string): string | null {
@@ -365,7 +418,7 @@ export function parsePlanIdentity(
       // exactly as before. A size without validity is NOT confidently
       // parsed — do not guess.
       const confident = validityDays !== null
-      return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, cableTier: null, cableAddon: null, planFamily: null, bundleTag, confident }
+      return { networkOrBiller: normalizedNetwork, sizeMB, validityDays, category, cableTier: null, cableAddon: null, cableDelivery: null, planFamily: null, bundleTag, confident }
     }
     // No data size found — check for a named plan family (Collabo,
     // Always-On, ...) instead. These are real products identified by
@@ -378,7 +431,7 @@ export function parsePlanIdentity(
     // (which duration is it?) and is not guessed at.
     const planFamily = extractPlanFamily(rawLabel)
     const confident = planFamily !== null && validityDays !== null
-    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, cableAddon: null, planFamily, bundleTag, confident }
+    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, cableAddon: null, cableDelivery: null, planFamily, bundleTag, confident }
   }
 
   if (serviceType === "cable") {
@@ -401,8 +454,9 @@ export function parsePlanIdentity(
     // would risk delivering the wrong subscription.
     const cableTier = extractCableTier(rawLabel, normalizedNetwork)
     const cableAddon = extractCableAddon(rawLabel, normalizedNetwork)
+    const cableDelivery = extractCableDelivery(rawLabel, normalizedNetwork, cableTier)
     const confident = cableTier !== null || cableAddon !== null
-    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier, cableAddon, planFamily: null, bundleTag: null, confident }
+    return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier, cableAddon, cableDelivery, planFamily: null, bundleTag: null, confident }
   }
 
   // Remaining non-size, non-cable plan-coded services (exam_pin,
@@ -413,7 +467,7 @@ export function parsePlanIdentity(
   // cleaned text alone.
   const cleaned = cleanToken(rawLabel)
   const confident = /^[a-z0-9-]{2,40}$/.test(cleaned)
-  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, cableAddon: null, planFamily: null, bundleTag: null, confident }
+  return { networkOrBiller: normalizedNetwork, sizeMB: null, validityDays, category, cableTier: null, cableAddon: null, cableDelivery: null, planFamily: null, bundleTag: null, confident }
 }
 
 // Lightly-cleaned fallback slug used both for the "couldn't confidently
@@ -510,7 +564,14 @@ export function canonicalPlanKey(
     // a provider ever writes "Compact + French 11" as one line) would
     // otherwise silently misfile a real tier plan under an addon key.
     const base = parsed.cableTier ?? `addon-${parsed.cableAddon}`
-    return { planCode: `${base}${validitySuffix}`, confident: true }
+    // Delivery method (dish/antenna) is StarTimes-only and only ever
+    // set alongside a tier (see extractCableDelivery — addons don't
+    // carry it), placed between tier and validity so e.g.
+    // "basic-antenna-7d" and "basic-dish-7d" stay two distinct plan
+    // codes rather than colliding into one "basic-7d" that silently
+    // picks whichever receiver-type row happened to sync/merge first.
+    const deliverySuffix = parsed.cableDelivery ? `-${parsed.cableDelivery}` : ""
+    return { planCode: `${base}${deliverySuffix}${validitySuffix}`, confident: true }
   }
 
   // Any other non-data, non-cable plan-coded service with a validity

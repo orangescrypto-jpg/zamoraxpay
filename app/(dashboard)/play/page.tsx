@@ -37,6 +37,13 @@ const GAME_META: Record<string, GameMeta> = {
     colorClass: "from-purple-600 to-fuchsia-800",
     emoji: "🎁",
   },
+  pick_a_card: {
+    title: "Pick a card",
+    blurb: "Pick one of 4 face-down cards. A new deck every day.",
+    icon: Sparkles,
+    colorClass: "from-emerald-600 to-teal-800",
+    emoji: "🃏",
+  },
 }
 
 const DEFAULT_META: GameMeta = {

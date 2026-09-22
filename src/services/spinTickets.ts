@@ -145,7 +145,7 @@ export async function ensureLazyTickets(userId: string, nativeDB?: any): Promise
   const now = new Date()
   const today = dayKeyOf(now)
 
-  for (const key of ["anytime", "weekend", "scratch_card"] as SpinSourceKey[]) {
+  for (const key of ["anytime", "weekend", "scratch_card", "pick_a_card"] as SpinSourceKey[]) {
     const source = await getSource(key, nativeDB)
     if (!source || !source.isEnabled || !isWithinWindow(source, now)) continue
 

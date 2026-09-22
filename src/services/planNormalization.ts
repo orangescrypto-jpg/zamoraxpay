@@ -281,6 +281,15 @@ function extractValidityDays(text: string): number | null {
   if (months) return parseInt(months[1], 10) * 30
   if (/\bmonthly\b/.test(lower)) return 30
 
+  // "Weekend" plans (e.g. "875mb-weekend-plan-sun-awoof-data") are a
+  // real, distinct validity window used by several Nigerian providers
+  // — valid Fri/Sat through Sun/Mon, roughly 2-3 days — not a size or
+  // category. Treated as its own fixed value (2) rather than left
+  // unparsed, so these plans stop falling back to a raw, unformatted
+  // slug on the buy page. Checked last (after day/week/month) so an
+  // explicit day count elsewhere in the same label always wins.
+  if (/\bweekend\b/.test(lower)) return 2
+
   return null
 }
 

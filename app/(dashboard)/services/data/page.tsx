@@ -94,9 +94,24 @@ function bucketFor(days: number | null): ValidityBucket {
   return "yearly"
 }
 
+// Last-resort formatter for a plan_code that didn't match either
+// canonical shape below (e.g. a stale pre-normalization row still
+// pending the plan-code migration, or a label the normalizer
+// genuinely couldn't parse confidently). Never shows the raw
+// hyphenated slug verbatim — title-cases it into something readable
+// instead, so "200-mb-14-days-sme" reads as "200 Mb 14 Days Sme"
+// rather than exposing internal formatting to the customer.
+function titleCaseFallback(code: string): string {
+  return code
+    .split("-")
+    .filter(Boolean)
+    .map((seg) => seg.charAt(0).toUpperCase() + seg.slice(1))
+    .join(" ")
+}
+
 function labelFromPlanCode(code: string): string {
   const match = code.match(/^(\d+)mb-(\d+)d((?:-[a-z_+]+)*)$/i)
-  if (!match) return code
+  if (!match) return titleCaseFallback(code)
   const [, sizeMBStr, daysStr, suffixPart] = match
   const sizeMB = parseInt(sizeMBStr, 10)
   const days = parseInt(daysStr, 10)

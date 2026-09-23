@@ -538,16 +538,25 @@ export async function getSpinLog(params: { page?: number; sourceKey?: string }, 
     nativeDB,
   )
 
-  const [todayT, weekT, allT, bySource, vouchers, tickets] = await Promise.all([
+  const [todayT, weekT, allT, bySource, vouchers, tickets, archivedT] = await Promise.all([
     d1Query("SELECT COUNT(*) AS spins, COALESCE(SUM(cost_kobo),0) AS cost, SUM(CASE WHEN prize_type != 'nothing' THEN 1 ELSE 0 END) AS wins FROM spin_spins WHERE day_key = ?", [today], nativeDB),
     d1Query("SELECT COUNT(*) AS spins, COALESCE(SUM(cost_kobo),0) AS cost, SUM(CASE WHEN prize_type != 'nothing' THEN 1 ELSE 0 END) AS wins FROM spin_spins WHERE created_at >= ?", [weekStart], nativeDB),
     d1Query("SELECT COUNT(*) AS spins, COALESCE(SUM(cost_kobo),0) AS cost, SUM(CASE WHEN prize_type != 'nothing' THEN 1 ELSE 0 END) AS wins FROM spin_spins", [], nativeDB),
     d1Query("SELECT source_key, COUNT(*) AS spins, COALESCE(SUM(cost_kobo),0) AS cost FROM spin_spins WHERE created_at >= ? GROUP BY source_key", [weekStart], nativeDB),
     d1Query("SELECT kind, status, COUNT(*) AS n FROM spin_vouchers GROUP BY kind, status", [], nativeDB),
     d1Query("SELECT status, COUNT(*) AS n FROM spin_tickets GROUP BY status", [], nativeDB),
+    // Spins already removed by the retention job. Their totals were folded
+    // into this single row first, so "all time" stays true after cleanup.
+    d1Query("SELECT spins, wins, cost_kobo FROM spin_stats_rollup WHERE id = 1", [], nativeDB),
   ])
 
   const t = (r: any) => ({ spins: r.results?.[0]?.spins ?? 0, wins: r.results?.[0]?.wins ?? 0, costKobo: r.results?.[0]?.cost ?? 0 })
+  const archived = archivedT.results?.[0]
+  const allTime = {
+    spins: (allT.results?.[0]?.spins ?? 0) + (Number(archived?.spins) || 0),
+    wins: (allT.results?.[0]?.wins ?? 0) + (Number(archived?.wins) || 0),
+    costKobo: (allT.results?.[0]?.cost ?? 0) + (Number(archived?.cost_kobo) || 0),
+  }
   return {
     page,
     spins: (rows.results ?? []).map((r: any) => ({
@@ -562,7 +571,7 @@ export async function getSpinLog(params: { page?: number; sourceKey?: string }, 
       userName: r.full_name ?? null,
       userEmail: r.email ?? null,
     })),
-    totals: { today: t(todayT), last7Days: t(weekT), allTime: t(allT) },
+    totals: { today: t(todayT), last7Days: t(weekT), allTime },
     bySource7d: (bySource.results ?? []).map((r: any) => ({ sourceKey: r.source_key, spins: r.spins, costKobo: r.cost })),
     vouchers: (vouchers.results ?? []).map((r: any) => ({ kind: r.kind, status: r.status, count: r.n })),
     tickets: (tickets.results ?? []).map((r: any) => ({ status: r.status, count: r.n })),

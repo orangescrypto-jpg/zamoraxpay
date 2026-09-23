@@ -12,16 +12,6 @@ interface JobStatus {
   days: number
   minDays: number
   eligibleRows: number | null
-  lastRun: { at: string; status: string; rows: number; message: string | null; source: string } | null
-}
-
-interface RunRow {
-  job_key: string
-  trigger_source: string
-  rows_affected: number
-  status: string
-  message: string | null
-  started_at: string
 }
 
 interface JobResult {
@@ -39,7 +29,6 @@ const ACTION_LABEL: Record<JobStatus["action"], string> = {
 
 export default function AdminRetentionPage() {
   const [jobs, setJobs] = useState<JobStatus[]>([])
-  const [recent, setRecent] = useState<RunRow[]>([])
   const [masterEnabled, setMasterEnabled] = useState(true)
   const [batchSize, setBatchSize] = useState("1000")
   const [timeBudget, setTimeBudget] = useState("40")
@@ -63,7 +52,6 @@ export default function AdminRetentionPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Failed to load")
       setJobs(data.jobs ?? [])
-      setRecent(data.recentRuns ?? [])
       setMasterEnabled(data.masterEnabled)
       setBatchSize(String(data.batchSize))
       setTimeBudget(String(data.timeBudgetSeconds))
@@ -276,12 +264,6 @@ export default function AdminRetentionPage() {
                   )}
                 </div>
 
-                {job.lastRun && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Last run ({job.lastRun.source}): {job.lastRun.at} UTC — {job.lastRun.status}, {job.lastRun.rows} row(s)
-                    {job.lastRun.status !== "ok" && job.lastRun.message ? ` — ${job.lastRun.message}` : ""}
-                  </p>
-                )}
               </div>
             )
           })}
@@ -301,21 +283,6 @@ export default function AdminRetentionPage() {
         </div>
       )}
 
-      {recent.length > 0 && (
-        <div>
-          <h2 className="mb-2 font-heading font-semibold text-secondary">Recent runs</h2>
-          <div className="space-y-1">
-            {recent.map((r, i) => (
-              <div key={`${r.started_at}-${r.job_key}-${i}`} className="flex items-center justify-between rounded-md border border-border bg-white px-3 py-2 text-xs">
-                <span className="font-medium text-secondary">{r.job_key}</span>
-                <span className="text-muted-foreground">
-                  {r.trigger_source} · {r.status} · {r.rows_affected} row(s) · {r.started_at}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

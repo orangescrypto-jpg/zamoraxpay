@@ -38,7 +38,7 @@
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
 import { upsertPlanMapping, findMappingByNaturalKey } from "@/src/services/providerPlanMappings"
-import { canonicalPlanKey } from "@/src/services/planNormalization"
+import { canonicalPlanKey, parsePlanIdentity } from "@/src/services/planNormalization"
 
 // Every sync function below calls a provider's HTTP API and expects
 // JSON back. When a provider is down, the base URL is wrong, or the
@@ -322,6 +322,31 @@ const CABLE_BILLER_LABEL: Record<string, string> = {
   Showmax: "Showmax",
 }
 
+// ClubKonnect's TV_ID.Showmax group has been observed live carrying
+// StarTimes packages under StarTimes-only vocabulary — e.g.
+// "Basic (Antenna) - 4,000 Naira - 1 Month", "Nova (Dish) - 2100
+// Naira - 1 Month". "(Dish)"/"(Antenna)" delivery tags and StarTimes
+// tier names (Basic/Classic/Nova/Smart/Super/Uni-1/Uni-2/Special/
+// Global/Chinese — see CABLE_TIER_PATTERNS.StarTimes in
+// planNormalization.ts) never appear in a genuine Showmax label
+// (Mobile/Standard/Pro, no receiver-hardware distinction), so a
+// PACKAGE_NAME that confidently parses as a StarTimes tier under the
+// "Showmax" key is almost certainly mis-nested by ClubKonnect's own
+// catalog, not a real Showmax product — reroute it to StarTimes
+// rather than filing it where it can never merge with the real
+// StarTimes rows synced from the same catalog. Only fires for the
+// Showmax key specifically; DStv/GOtv/Startimes groups are trusted
+// as-is since no equivalent mislabeling has been observed for them.
+function correctedCableBiller(tvKey: string, packageName: string): string {
+  const biller = CABLE_BILLER_LABEL[tvKey] ?? tvKey
+  if (biller !== "Showmax") return biller
+  const parsed = parsePlanIdentity(packageName, "StarTimes", "cable")
+  if (parsed.confident && (parsed.cableTier !== null || parsed.cableDelivery !== null)) {
+    return "StarTimes"
+  }
+  return biller
+}
+
 export async function syncClubkonnectCablePlans(
   adminUserId: string,
   credentials: { userId?: string; baseUrl?: string } = {},
@@ -344,7 +369,6 @@ export async function syncClubkonnectCablePlans(
   let skipped = 0
 
   for (const [tvKey, wrappers] of Object.entries(tvRoot)) {
-    const biller = CABLE_BILLER_LABEL[tvKey] ?? tvKey
     const wrapperList = Array.isArray(wrappers) ? wrappers : [wrappers]
     const products = (wrapperList as any[]).flatMap((w) =>
       w && typeof w === "object" && Array.isArray(w.PRODUCT) ? w.PRODUCT : [],
@@ -359,6 +383,12 @@ export async function syncClubkonnectCablePlans(
         skipped++
         continue
       }
+      // Resolved per-package, not per-group: ClubKonnect's "Showmax"
+      // key has been observed mixing genuine Showmax packages with
+      // mis-nested StarTimes ones (see correctedCableBiller above),
+      // so every package name is checked individually rather than
+      // trusting the tvKey for the whole group.
+      const biller = correctedCableBiller(tvKey, String(pkg?.PACKAGE_NAME ?? ""))
       const planCode = pkg?.PACKAGE_NAME
         ? canonicalizedPlanCode(String(pkg.PACKAGE_NAME), biller, "cable")
         : `ck-${planId}`

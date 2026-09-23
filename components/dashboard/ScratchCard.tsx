@@ -9,61 +9,136 @@ import type { SpinOutcome } from "@/components/dashboard/useSpinStatus"
 import type { WheelSpinResult } from "@/components/dashboard/SpinWheel"
 
 const SIZE = 280
-const SCRATCH_RADIUS = 24
+const SCRATCH_RADIUS = 26
 const REVEAL_THRESHOLD = 0.55 // fraction of the canvas cleared before we auto-reveal
 const DPR = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1
 
-type Particle = { x: number; y: number; vx: number; vy: number; life: number; hue: number; size: number }
+// Brand tokens (ZamoraxPay) — kept as literals so the canvas painter doesn't
+// depend on Tailwind/CSS var resolution.
+const BRAND = {
+  primary: "#0057FF", // Electric Blue
+  navy: "#0B1220", // near-black navy
+  success: "#00D67A", // win state — matches app-wide cashback/success color
+}
 
-// Draws a brushed-foil coating: a metallic diagonal sheen plus a fine scratch-etched
-// texture, so the "before" state reads as an actual physical card instead of a flat tint.
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; size: number; gold: boolean }
+
+// Rounded-rect helper (roundRect isn't guaranteed on every canvas impl we target).
+function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
+}
+
+// Draws a real gold-foil coating: a brushed-metal sheen in warm gold tones (the
+// material metaphor for "scratch and win"), a die-cut scalloped edge so the
+// card reads as ticket stock rather than a flat rounded rectangle, and a
+// engraved instruction plate at the center.
 function paintFoil(ctx: CanvasRenderingContext2D) {
+  ctx.clearRect(0, 0, SIZE, SIZE)
+
+  // Scalloped die-cut silhouette — clip everything drawn after this to it.
+  ctx.save()
+  const notches = 14
+  const r = 6
+  const inset = 3
+  ctx.beginPath()
+  for (let i = 0; i <= notches; i++) {
+    const x = inset + (i * (SIZE - inset * 2)) / notches
+    ctx.arc(x, inset, r, Math.PI, 0, false)
+  }
+  for (let i = 0; i <= notches; i++) {
+    const y = inset + (i * (SIZE - inset * 2)) / notches
+    ctx.arc(SIZE - inset, y, r, Math.PI * 1.5, Math.PI * 0.5, false)
+  }
+  for (let i = 0; i <= notches; i++) {
+    const x = SIZE - inset - (i * (SIZE - inset * 2)) / notches
+    ctx.arc(x, SIZE - inset, r, 0, Math.PI, false)
+  }
+  for (let i = 0; i <= notches; i++) {
+    const y = SIZE - inset - (i * (SIZE - inset * 2)) / notches
+    ctx.arc(inset, y, r, Math.PI * 0.5, Math.PI * 1.5, false)
+  }
+  ctx.closePath()
+  ctx.clip()
+
+  // Base gold gradient — the material itself, not a flat tint.
   const g = ctx.createLinearGradient(0, 0, SIZE, SIZE)
-  g.addColorStop(0, "#B9C4D6")
-  g.addColorStop(0.35, "#8A97AE")
-  g.addColorStop(0.55, "#DCE3EE")
-  g.addColorStop(0.75, "#6B7A93")
-  g.addColorStop(1, "#4B5A73")
+  g.addColorStop(0, "#C99A2E")
+  g.addColorStop(0.28, "#F4E5A1")
+  g.addColorStop(0.45, "#D4AF37")
+  g.addColorStop(0.62, "#F6EFC9")
+  g.addColorStop(0.8, "#B8862F")
+  g.addColorStop(1, "#8F6B23")
   ctx.fillStyle = g
   ctx.fillRect(0, 0, SIZE, SIZE)
 
-  // Fine diagonal etching for a brushed-metal look.
-  ctx.strokeStyle = "rgba(255,255,255,0.10)"
+  // Fine brushed-metal striations, angled, so light reads as combed rather than smeared.
+  ctx.strokeStyle = "rgba(255,255,255,0.16)"
   ctx.lineWidth = 1
-  for (let i = -SIZE; i < SIZE * 2; i += 5) {
+  for (let i = -SIZE; i < SIZE * 2; i += 4) {
     ctx.beginPath()
     ctx.moveTo(i, 0)
-    ctx.lineTo(i - SIZE, SIZE)
+    ctx.lineTo(i - SIZE * 0.6, SIZE)
+    ctx.stroke()
+  }
+  ctx.strokeStyle = "rgba(80,55,10,0.10)"
+  for (let i = -SIZE; i < SIZE * 2; i += 4) {
+    ctx.beginPath()
+    ctx.moveTo(i + 2, 0)
+    ctx.lineTo(i - SIZE * 0.6 + 2, SIZE)
     ctx.stroke()
   }
 
-  // Soft vignette so the coating doesn't look pasted flat.
-  const vg = ctx.createRadialGradient(SIZE / 2, SIZE / 2, SIZE * 0.2, SIZE / 2, SIZE / 2, SIZE * 0.75)
+  // Diagonal sheen sweep — a lighter band crossing the surface, the classic
+  // foil highlight rather than decoration.
+  const sheen = ctx.createLinearGradient(0, SIZE * 0.15, SIZE, SIZE * 0.55)
+  sheen.addColorStop(0, "rgba(255,255,255,0)")
+  sheen.addColorStop(0.5, "rgba(255,255,255,0.35)")
+  sheen.addColorStop(1, "rgba(255,255,255,0)")
+  ctx.fillStyle = sheen
+  ctx.fillRect(0, 0, SIZE, SIZE)
+
+  // Vignette for depth so it doesn't look pasted flat.
+  const vg = ctx.createRadialGradient(SIZE / 2, SIZE / 2, SIZE * 0.25, SIZE / 2, SIZE / 2, SIZE * 0.75)
   vg.addColorStop(0, "rgba(0,0,0,0)")
-  vg.addColorStop(1, "rgba(0,0,0,0.18)")
+  vg.addColorStop(1, "rgba(60,40,5,0.28)")
   ctx.fillStyle = vg
   ctx.fillRect(0, 0, SIZE, SIZE)
 
-  // Coin/star mark repeated lightly, like real scratch-card stock.
-  ctx.fillStyle = "rgba(255,255,255,0.14)"
-  ctx.font = "bold 13px sans-serif"
+  // Repeated coin-mark texture, subtle, like genuine scratch-card stock.
+  ctx.fillStyle = "rgba(255,255,255,0.10)"
+  ctx.font = "11px sans-serif"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  for (let y = 22; y < SIZE; y += 46) {
-    for (let x = 22 + ((y / 46) % 2) * 23; x < SIZE; x += 46) {
-      ctx.fillText("★", x, y)
+  for (let y = 20; y < SIZE; y += 40) {
+    for (let x = 20 + ((y / 40) % 2) * 20; x < SIZE; x += 40) {
+      ctx.fillText("●", x, y)
     }
   }
 
-  ctx.fillStyle = "rgba(15,30,77,0.55)"
-  ctx.beginPath()
+  // Engraved instruction plate — navy, matches app secondary color, feels
+  // stamped into the foil rather than floating on top.
   const cx = SIZE / 2
   const cy = SIZE / 2
-  ctx.roundRect(cx - 78, cy - 20, 156, 40, 20)
+  ctx.fillStyle = "rgba(11,18,32,0.85)"
+  rr(ctx, cx - 84, cy - 22, 168, 44, 22)
   ctx.fill()
-  ctx.fillStyle = "#fff"
-  ctx.font = "bold 14px sans-serif"
-  ctx.fillText("SCRATCH HERE", cx, cy)
+  ctx.strokeStyle = "rgba(255,255,255,0.15)"
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  ctx.fillStyle = "#F4E5A1"
+  ctx.font = "700 13px sans-serif"
+  ctx.letterSpacing = "1px"
+  ctx.fillText("SCRATCH TO REVEAL", cx, cy)
+  ctx.letterSpacing = "0px"
+
+  ctx.restore()
 }
 
 export function ScratchCard({
@@ -126,22 +201,24 @@ export function ScratchCard({
     drawCoating()
   }, [resetKey, drawCoating])
 
-  // Lightweight particle burst that follows the scratch point, for a "flaking foil" feel.
+  // Lightweight particle burst that follows the scratch point — a mix of gold
+  // "foil flake" and white "shine" specks, for a material feel instead of
+  // generic confetti dust.
   const spawnParticles = useCallback((x: number, y: number) => {
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       const angle = Math.random() * Math.PI * 2
-      const speed = 0.6 + Math.random() * 1.4
+      const speed = 0.5 + Math.random() * 1.6
       particlesRef.current.push({
         x,
         y,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 0.5,
+        vy: Math.sin(angle) * speed - 0.6,
         life: 1,
-        hue: 210 + Math.random() * 20,
-        size: 1.5 + Math.random() * 2,
+        size: 1.2 + Math.random() * 2.2,
+        gold: Math.random() > 0.4,
       })
     }
-    if (particlesRef.current.length > 160) particlesRef.current.splice(0, particlesRef.current.length - 160)
+    if (particlesRef.current.length > 180) particlesRef.current.splice(0, particlesRef.current.length - 180)
   }, [])
 
   const runParticleLoop = useCallback(() => {
@@ -153,10 +230,10 @@ export function ScratchCard({
     for (const p of particlesRef.current) {
       p.x += p.vx
       p.y += p.vy
-      p.vy += 0.06
-      p.life -= 0.035
+      p.vy += 0.07
+      p.life -= 0.032
       ctx.globalAlpha = Math.max(0, p.life)
-      ctx.fillStyle = `hsl(${p.hue} 60% 85%)`
+      ctx.fillStyle = p.gold ? "#F4E5A1" : "#FFFDF3"
       ctx.beginPath()
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
       ctx.fill()
@@ -267,19 +344,45 @@ export function ScratchCard({
   return (
     <div className="flex flex-col items-center">
       <div
-        className="relative overflow-hidden rounded-2xl shadow-lg ring-1 ring-white/10"
+        className="relative overflow-hidden rounded-[28px] shadow-[0_20px_50px_-15px_rgba(11,18,32,0.55)] ring-1 ring-black/5"
         style={{ width: "min(78vw, 280px)", aspectRatio: "1 / 1" }}
       >
+        {/* Reveal face — brand-consistent electric blue / navy panel, with a
+            calm navy loss state (never punishing) and the app's own success
+            green for wins, instead of an arbitrary red/orange. */}
         <div
-          className={`absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-2xl px-4 text-center transition-transform duration-500 ${celebrate ? "scale-105" : ""}`}
-          style={{ background: won ? "linear-gradient(135deg,#F59E0B,#DC2626)" : "linear-gradient(135deg,#2563EB,#0F1E4D)" }}
+          className={`absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center transition-transform duration-500 ${celebrate ? "scale-[1.03]" : ""}`}
+          style={{
+            background: won
+              ? `radial-gradient(120% 120% at 50% 0%, ${BRAND.success} 0%, #049658 55%, ${BRAND.navy} 100%)`
+              : `linear-gradient(160deg, ${BRAND.primary} 0%, #0038B8 45%, ${BRAND.navy} 100%)`,
+          }}
         >
           {outcome ? (
             <>
-              <span className={`text-4xl ${celebrate ? "animate-bounce" : ""}`} aria-hidden="true">
-                {won ? "🎉" : "🍀"}
+              <span
+                className="flex h-14 w-14 items-center justify-center rounded-full"
+                style={{ background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.25)" }}
+                aria-hidden="true"
+              >
+                {won ? (
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 6L9 17l-5-5" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                ) : (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="9" stroke="#fff" strokeWidth="2" opacity="0.9" />
+                    <path d="M9 9.5c0-1.4 1.2-2.5 3-2.5s3 1 3 2.3c0 1.6-1.6 1.9-2.6 2.9-.4.4-.6.9-.6 1.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity="0.9" />
+                    <circle cx="12" cy="17" r="1" fill="#fff" opacity="0.9" />
+                  </svg>
+                )}
               </span>
-              <span className="text-lg font-extrabold text-white">{won ? outcome.prizeLabel : "Better luck next time"}</span>
+              <span className="text-[26px] font-extrabold leading-tight text-white">
+                {won ? outcome.prizeLabel : "Not this time"}
+              </span>
+              <span className="text-xs font-medium uppercase tracking-wide text-white/70">
+                {won ? "Added to your account" : "Try again next time"}
+              </span>
             </>
           ) : (
             <span className="text-sm font-semibold text-white/80">Tap &quot;{buttonLabel}&quot; to start</span>
@@ -292,50 +395,60 @@ export function ScratchCard({
           <>
             <canvas
               ref={canvasRef}
-              className="absolute inset-0 h-full w-full touch-none rounded-2xl"
+              className="absolute inset-0 h-full w-full touch-none"
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerLeave={handlePointerUp}
             />
-            <canvas ref={fxRef} className="pointer-events-none absolute inset-0 h-full w-full rounded-2xl" />
+            <canvas ref={fxRef} className="pointer-events-none absolute inset-0 h-full w-full" />
           </>
         )}
 
         {outcome && !doneRef.current && (
-          <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/20">
+          <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/25">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-300 to-orange-400 transition-[width] duration-150"
-                style={{ width: `${pct}%` }}
+                className="h-full rounded-full transition-[width] duration-150"
+                style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${BRAND.success}, #F4E5A1)` }}
               />
             </div>
-            <span className="text-[10px] font-bold text-white/80">{pct}%</span>
+            <span className="text-[10px] font-bold tabular-nums text-white/85">{pct}%</span>
           </div>
         )}
       </div>
 
+      {/* Card and button unified as one object: button sits flush beneath,
+          same corner language and a matching brand-blue fill instead of a
+          separate floating pill. */}
       {!outcome && (
         <button
           onClick={handleGetCard}
           disabled={scratching || disabled}
-          className="mt-6 inline-flex min-w-[180px] items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-8 py-3 text-base font-extrabold tracking-wide text-white shadow-lg shadow-orange-900/20 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+          className="-mt-1 inline-flex min-w-[200px] items-center justify-center gap-2 rounded-b-2xl px-8 py-3.5 text-base font-bold tracking-wide text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          style={{ background: BRAND.primary, boxShadow: "0 10px 25px -8px rgba(0,87,255,0.55)" }}
         >
           {scratching ? "Loading…" : buttonLabel}
         </button>
       )}
-      {outcome && <p className="mt-4 text-center text-xs text-blue-100">Scratch the card to reveal your prize</p>}
+      {outcome && !doneRef.current && (
+        <p className="mt-4 text-center text-xs font-medium" style={{ color: BRAND.navy, opacity: 0.6 }}>
+          Scratch the gold panel to reveal your prize
+        </p>
+      )}
       {error && <p className="mt-3 text-center text-sm text-red-600">{error}</p>}
     </div>
   )
 }
 
-// Small CSS-only confetti burst shown once a winning prize is revealed.
+// Small CSS-only confetti burst shown once a winning prize is revealed —
+// gold + success-green pieces to match the brand win palette, not generic
+// party colors.
 function ConfettiBurst() {
   const pieces = Array.from({ length: 18 }, (_, i) => i)
-  const colors = ["#FCD34D", "#F97316", "#F43F5E", "#FDE68A", "#FFFFFF"]
+  const colors = ["#F4E5A1", "#D4AF37", BRAND.success, "#FFFFFF"]
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+    <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]">
       {pieces.map((i) => {
         const left = 5 + ((i * 53) % 90)
         const delay = (i % 6) * 0.06

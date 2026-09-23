@@ -22,6 +22,13 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "key and value are required" }, { status: 400 })
     }
 
+    // Retention windows are edited only from /admin/retention, which validates
+    // the value and enforces each job's safe minimum. Keeping them out of this
+    // generic endpoint means there is exactly one path that can change them.
+    if (typeof key === "string" && key.startsWith("retention_")) {
+      return NextResponse.json({ error: "Retention settings are edited on the Data Retention page" }, { status: 400 })
+    }
+
     await updateSetting(key, String(value), auth.uid)
 
     // The homepage is ISR-cached (revalidate = 900s) and reads settings

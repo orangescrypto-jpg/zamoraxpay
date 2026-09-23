@@ -25,6 +25,7 @@ const NAV_ITEMS: { href: string; label: string; minRole: "moderator" | "admin" |
   { href: "/admin/blog", label: "Blog", minRole: "admin" },
   { href: "/admin/blog-categories", label: "Blog Categories", minRole: "admin" },
   { href: "/admin/settings", label: "Site Settings", minRole: "admin" },
+  { href: "/admin/retention", label: "Data Retention", minRole: "admin" },
   { href: "/admin/weekend-bonus", label: "Weekend Bonus", minRole: "admin" },
   { href: "/admin/spin", label: "Spin & Win", minRole: "admin" },
   { href: "/admin/push-notifications", label: "Push Notifications", minRole: "admin" },

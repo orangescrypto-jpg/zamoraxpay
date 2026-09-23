@@ -199,6 +199,13 @@ const CABLE_TIER_PATTERNS: Record<string, Array<{ key: string; re: RegExp }>> = 
     // label "chinese-dish-21-000-naira-1-month" — a real StarTimes
     // tier distinct from Global, not a formatting variant of it.
     { key: "chinese", re: /\bchinese\b/i },
+    // "Shs" = StarTimes' own abbreviation for its SD/HD antenna
+    // bundle tier, seen in raw catalog labels as "Shs Weekly 2800",
+    // "Startimes Shs 2 800 Naira Weekly", etc. — the trailing number
+    // is the naira price restated in the label (noise, not identity),
+    // so it is deliberately NOT captured here; validity ("Weekly")
+    // is picked up separately by the existing validity parser.
+    { key: "shs", re: /\bshs\b/i },
   ],
   Showmax: [
     { key: "mobile", re: /\bmobile\b/i },
@@ -240,6 +247,13 @@ const CABLE_ADDON_PATTERNS: Record<string, Array<{ key: string; re: RegExp }>> =
   DSTV: [
     { key: "movie-bundle", re: /\bmovie[\s-]*bundle\b/i },
     { key: "showmax-premier-league", re: /\bshowmax[\s-]*premier[\s-]*league\b/i },
+    // Matches "French Plus Addon", "Dstv French Plus Add On N24 500",
+    // and bare "Dstv French Plus" — all three observed spellings of
+    // the same add-on (₦24,555-24,800). The trailing "N24 500" /
+    // "N24500" price restatement is noise, not identity, so it's not
+    // captured; ordered before the bare CABLE_TIER_PATTERNS "french-
+    // touch"/generic matches would ever run since add-ons are checked
+    // via extractCableAddon, a separate pass from tiers.
     { key: "french-plus", re: /\bfrench[\s-]*plus\b/i },
     { key: "french-11", re: /\bfrench[\s-]*-?\s*11\b/i },
     { key: "india", re: /\bindia[n]?[\s-]*add[\s-]*on\b|\bdstv[\s-]*india\b/i },

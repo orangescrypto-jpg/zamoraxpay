@@ -10,7 +10,7 @@ import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
 import { getActiveVtuProviders } from "@/src/services/config"
-import { canonicalPlanKey, normalizeNetworkOrBiller } from "@/src/services/planNormalization"
+import { canonicalPlanKey, normalizeNetworkOrBiller, isCleanPlanCode } from "@/src/services/planNormalization"
 import { getPricingPolicy, applyFee } from "@/src/services/pricingPolicies"
 
 // Services where the customer names their own amount instead of
@@ -241,6 +241,14 @@ export async function listPlans(
       if (!planCodesWithMappings.has(row.plan_code)) return true // unmapped plan — no liveness signal to check
       return planCodesWithLiveProvider.has(row.plan_code)
     })
+    // Customer-facing safety net (see isCleanPlanCode in
+    // planNormalization.ts): a plan_code that still looks like a raw,
+    // unnormalized provider slug (an unmapped opaque code, or a label
+    // still carrying provider noise words/restated prices) never
+    // reaches the buy page, even though the row itself stays active
+    // and priced for admin visibility — this is a read-time filter
+    // only, not a change to is_active.
+    .filter((row: any) => isCleanPlanCode(row.plan_code))
     .map((row: any) => ({
       planCode: row.plan_code,
       priceKobo: (wholesale ? row.wholesale_price_kobo : row.retail_price_kobo) + row.convenience_fee_kobo,

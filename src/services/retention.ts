@@ -460,19 +460,6 @@ async function dispatch(job: RetentionJobDef, ctx: RunContext, days: number): Pr
   }
 }
 
-async function logRun(res: JobResult, source: "cron" | "admin", startedAt: string, nativeDB?: any) {
-  try {
-    await d1Query(
-      `INSERT INTO retention_runs (id, job_key, trigger_source, rows_affected, status, message, started_at, finished_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      [randomUUID(), res.key, source, res.rowsAffected, res.status, res.message.slice(0, 500), startedAt],
-      nativeDB,
-    )
-  } catch (err) {
-    console.error("[retention] failed to write run log:", err)
-  }
-}
-
 /** Runs one job. Never throws — errors come back as status 'error'. */
 export async function runRetentionJob(
   key: RetentionJobKey,
@@ -482,7 +469,6 @@ export async function runRetentionJob(
   const def = getJobDef(key)
   if (!def) return { key, status: "error", rowsAffected: 0, message: `Unknown job: ${key}` }
 
-  const startedAt = new Date().toISOString().slice(0, 19).replace("T", " ")
   let res: JobResult
   try {
     const days = opts.daysOverride !== undefined ? Math.max(Math.floor(opts.daysOverride), def.minDays) : await getEffectiveDays(def, opts.nativeDB)
@@ -495,7 +481,9 @@ export async function runRetentionJob(
   } catch (err) {
     res = { key, status: "error", rowsAffected: 0, message: err instanceof Error ? err.message : String(err) }
   }
-  await logRun(res, source, startedAt, opts.nativeDB)
+  // Runs are no longer stored in D1 (that log grew forever), so a failure must
+  // be visible somewhere: your host's function logs. Successes are not logged.
+  if (res.status === "error") console.error(`[retention] job "${key}" (${source}) failed: ${res.message}`)
   return res
 }
 
@@ -553,7 +541,6 @@ export interface JobStatus {
   days: number            // effective days (0 = disabled)
   minDays: number
   eligibleRows: number | null // null when the count failed or job disabled
-  lastRun: { at: string; status: string; rows: number; message: string | null; source: string } | null
 }
 
 export async function getRetentionOverview(nativeDB?: any): Promise<{ jobs: JobStatus[]; masterEnabled: boolean }> {
@@ -572,19 +559,7 @@ export async function getRetentionOverview(nativeDB?: any): Promise<{ jobs: JobS
           eligible = null
         }
       }
-      let lastRun: JobStatus["lastRun"] = null
-      try {
-        const lr = await d1Query(
-          `SELECT started_at, status, rows_affected, message, trigger_source FROM retention_runs WHERE job_key = ? ORDER BY started_at DESC LIMIT 1`,
-          [job.key],
-          nativeDB,
-        )
-        const row = lr.results?.[0]
-        if (row) lastRun = { at: row.started_at, status: row.status, rows: row.rows_affected, message: row.message, source: row.trigger_source }
-      } catch {
-        lastRun = null
-      }
-      return { key: job.key, label: job.label, action: job.action, keeps: job.keeps, settingKey: job.settingKey, days, minDays: job.minDays, eligibleRows: eligible, lastRun }
+      return { key: job.key, label: job.label, action: job.action, keeps: job.keeps, settingKey: job.settingKey, days, minDays: job.minDays, eligibleRows: eligible }
     }),
   )
   return { jobs, masterEnabled }

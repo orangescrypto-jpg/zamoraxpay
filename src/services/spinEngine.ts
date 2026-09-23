@@ -243,6 +243,13 @@ export async function performSpin(
   }
 
   // 2. Consume one ticket atomically (soonest-expiring first unless a specific one was asked for).
+  // Same window gap as listAvailableTickets in spinTickets.ts: this
+  // UPDATE...WHERE(SELECT...) is the actual point a ticket gets spent,
+  // so it's the one place this check matters most — a ticket minted
+  // before a source's schedule was tightened must not stay spendable
+  // through a window the admin has since closed. Mirrors
+  // isWithinWindow's own comparison (see spinConfig.ts): NULL means no
+  // bound on that side.
   const nowSql = sqlTime(now)
   const consume = await d1Query(
     `UPDATE spin_tickets SET status = 'used', used_at = ?
@@ -250,11 +257,15 @@ export async function performSpin(
         SELECT t.id FROM spin_tickets t
           JOIN spin_sources s ON s.source_key = t.source_key
          WHERE t.user_id = ? AND t.status = 'available' AND t.expires_at > ? AND s.is_enabled = 1
+           AND (s.starts_at IS NULL OR s.starts_at <= ?)
+           AND (s.ends_at IS NULL OR s.ends_at >= ?)
            ${params.ticketId ? "AND t.id = ?" : ""}
          ORDER BY t.expires_at ASC, t.created_at ASC LIMIT 1
       ) AND status = 'available'
       RETURNING id, source_key`,
-    params.ticketId ? [nowSql, params.userId, nowSql, params.ticketId] : [nowSql, params.userId, nowSql],
+    params.ticketId
+      ? [nowSql, params.userId, nowSql, nowSql, nowSql, params.ticketId]
+      : [nowSql, params.userId, nowSql, nowSql, nowSql],
     nativeDB,
   )
   const ticket = consume.results?.[0]

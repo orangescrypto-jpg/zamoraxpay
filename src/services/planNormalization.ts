@@ -223,6 +223,37 @@ function extractCableTier(text: string, biller: string): string | null {
   return null
 }
 
+// DSTV-only: opaque numeric variation codes used by VTU aggregators
+// (VTpass/VTU.ng-style APIs) as the plan_code ITSELF, with no tier
+// word anywhere in the label — e.g. raw label "dstv79" carries zero
+// text CABLE_TIER_PATTERNS can match against. These must be an exact,
+// case-insensitive, whole-string lookup, never a substring/regex test
+// like the word patterns above: a fuzzy match on a bare number is how
+// you accidentally deliver the wrong bouquet to a paying customer.
+// Mapping confirmed independently across VTpass's own DSTV variation-
+// code documentation and the VTU.ng-compatible aggregator convention
+// (see migration skip-list dated 2026-09; PR discussion with
+// Tobialpha). Codes seen in the skip list but NOT listed here
+// (dstv9, dstv30, dstv33, dstv43, dstv45, dstv47, dstv62) are
+// deliberately left unmapped — no source confirmed what bouquet they
+// represent, and guessing would risk subscribing a customer to the
+// wrong package. Add them here, with a source, once confirmed against
+// Pairgate's actual variation list — do not guess from the price
+// alone, since bouquet prices change independently of the code.
+const DSTV_NUMERIC_CODE_MAP: Record<string, string> = {
+  dstv79: "compact",
+  dstv7: "compact-plus",
+  dstv3: "premium",
+  dstv10: "premium-asia",
+  dstv6: "asia",
+}
+
+function extractDstvNumericCode(text: string, biller: string): string | null {
+  if (biller !== "DSTV") return null
+  const key = text.trim().toLowerCase().replace(/[^a-z0-9]/g, "")
+  return DSTV_NUMERIC_CODE_MAP[key] ?? null
+}
+
 // Cable ADD-ONS — sold alongside a base tier subscription rather than
 // as one, e.g. DSTV's French channel packs, Showmax bundles, regional
 // add-ons (Indian/Asian), and Complus/ExtraView. These are a genuinely
@@ -465,8 +496,12 @@ export function parsePlanIdentity(
     // provider-internal numeric codes (dstv7, dstv79, dstv3, uni-2)
     // unconfident: those aren't a real tier or add-on name at all, just
     // an opaque package ID, and guessing which tier "dstv79" maps to
-    // would risk delivering the wrong subscription.
-    const cableTier = extractCableTier(rawLabel, normalizedNetwork)
+    // would risk delivering the wrong subscription. UPDATE: a subset
+    // of these codes now HAVE a confirmed mapping (see
+    // DSTV_NUMERIC_CODE_MAP above) — checked first, since a bare
+    // numeric label like "dstv79" contains no text the word-pattern
+    // CABLE_TIER_PATTERNS below could ever match anyway.
+    const cableTier = extractDstvNumericCode(rawLabel, normalizedNetwork) ?? extractCableTier(rawLabel, normalizedNetwork)
     const cableAddon = extractCableAddon(rawLabel, normalizedNetwork)
     const cableDelivery = extractCableDelivery(rawLabel, normalizedNetwork, cableTier)
     const confident = cableTier !== null || cableAddon !== null
@@ -598,4 +633,45 @@ export function canonicalPlanKey(
   }
 
   return { planCode: cleanToken(rawLabel), confident: true }
+}
+
+// Customer-facing safety net: does a STORED plan_code look like a
+// properly composed canonical code (tier/size/validity words joined
+// with "-"), or does it look like a raw, unnormalized provider slug
+// that leaked through — a bare opaque code ("dstv45", "dstv62"), or a
+// label that still carries provider noise words ("naira", "weekly"
+// spelled out mid-slug instead of folded to "-7d"/"-1m", "startimes"
+// repeated inside its own network's plan_code, a stray "addon-"
+// duplicated, etc).
+//
+// This is intentionally a SHAPE check, not a re-run of the full
+// parser — pricing_rules doesn't persist the `confident` flag
+// canonicalPlanKey() computed at sync time, so this is the only signal
+// available at read time. It exists to keep a not-yet-mapped code
+// (like the still-unconfirmed dstv9/30/33/43/45/47/62 numeric codes)
+// OFF the customer buy page even before an admin has had a chance to
+// map it — those stay visible in the admin panel via listPlanGroups'
+// admin-only counterpart, just excluded from what customers see.
+// A false negative here (a valid code flagged as unclean) only hides
+// a real plan from checkout — annoying but safe. A false positive
+// (an unclean slug passing as clean) is the failure this exists to
+// prevent, so patterns lean toward exclusion when in doubt.
+const RAW_SLUG_NOISE_WORDS = /\b(naira|weekly|monthly|daily|dstv|gotv|startimes|showmax)\b/i
+// Bare opaque numeric-suffixed codes like "dstv79", "dstv45" with NO
+// separator before the digits — a real canonical code always joins
+// words with "-", so a no-separator alnum blob is never one.
+const BARE_OPAQUE_CODE = /^[a-z]+\d+$/i
+
+export function isCleanPlanCode(planCode: string): boolean {
+  if (RAW_SLUG_NOISE_WORDS.test(planCode)) return false
+  if (BARE_OPAQUE_CODE.test(planCode)) return false
+  // A digit run of 3+ consecutive digits inside the code is normally
+  // a restated provider price ("...-2-800-...", "...-21000-...") —
+  // but a data plan_code legitimately STARTS with a large size number
+  // ("500mb-1d-gifting", "2000mb-30d" — see canonicalPlanKey's data
+  // branch), so a leading digit run is exempted; only a 3+ digit run
+  // appearing after the first segment is treated as noise.
+  const afterFirstSegment = planCode.replace(/^\d+/, "")
+  if (/\d{3,}/.test(afterFirstSegment)) return false
+  return true
 }

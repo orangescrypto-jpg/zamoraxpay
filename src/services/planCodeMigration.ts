@@ -94,23 +94,90 @@ export async function migratePlanCodes(dryRun: boolean, adminUserId: string, nat
     mappingGroups.get(groupKey)!.push({ ...row, _normalizedNetwork: normalizedNetwork, _canonical: canonical })
   }
 
+  // Cross-row collision guard: a single-row group's target slot
+  // (service_type, network_or_biller, plan_code, provider_key) can
+  // ALREADY be occupied by a different row that is either (a) already
+  // sitting at its canonical code from a previous migration run, or
+  // (b) a live sync that ran between migration runs and inserted a
+  // fresh row under that exact canonical code (sync calls
+  // canonicalPlanKey() too). mappingGroups above only catches
+  // collisions AMONG rows being migrated in this same pass; it can't
+  // see a row that was never touched because it was already correct.
+  // Build a set of every occupied (service_type, network, provider,
+  // plan_code) slot up front, from the full unfiltered table, so a
+  // plain "rename" is only ever queued when the destination slot is
+  // free — otherwise it's redirected into the merge path (cheapest
+  // wins, loser deactivated), the same safe handling already used for
+  // in-pass duplicates, instead of being written blind and failing on
+  // the UNIQUE constraint at write time.
+  const occupiedMappingSlots = new Map<string, any>() // slotKey -> row
+  for (const row of mappingRows) {
+    const slotKey = `${row.service_type}::${normalizeNetworkOrBiller(row.network_or_biller)}::${row.provider_key}::${row.plan_code}`
+    occupiedMappingSlots.set(slotKey, row)
+  }
+
   for (const [, group] of mappingGroups) {
     if (group.length === 1) {
       const row = group[0]
-      if (row.plan_code !== row._canonical || row.network_or_biller !== row._normalizedNetwork) {
-        changes.push({
-          table: "provider_plan_mappings",
-          id: row.id,
-          serviceType: row.service_type,
-          networkOrBiller: row._normalizedNetwork,
-          oldPlanCode: row.plan_code,
-          newPlanCode: row._canonical,
-          action: "rename",
-        })
+      if (row.plan_code === row._canonical && row.network_or_biller === row._normalizedNetwork) {
+        continue // already at its canonical slot, nothing to do
       }
+      const destSlotKey = `${row.service_type}::${row._normalizedNetwork}::${row.provider_key}::${row._canonical}`
+      const occupant = occupiedMappingSlots.get(destSlotKey)
+      if (occupant && occupant.id !== row.id) {
+        // Destination is taken by a different, already-settled row —
+        // treat this exactly like an in-pass duplicate: cheapest of
+        // the two wins the slot, the other is deactivated (never
+        // deleted). Do NOT queue a plain rename here; it would hit the
+        // same UNIQUE constraint this guard exists to prevent.
+        const occupantCost = occupant.provider_cost_kobo ?? Infinity
+        const rowCost = row.provider_cost_kobo ?? Infinity
+        if (rowCost < occupantCost) {
+          changes.push({
+            table: "provider_plan_mappings",
+            id: row.id,
+            serviceType: row.service_type,
+            networkOrBiller: row._normalizedNetwork,
+            oldPlanCode: row.plan_code,
+            newPlanCode: row._canonical,
+            action: "merge-kept",
+            note: `Cheaper than already-settled row ${occupant.id} at slot ${destSlotKey}; that row is being deactivated instead`,
+          })
+          changes.push({
+            table: "provider_plan_mappings",
+            id: occupant.id,
+            serviceType: occupant.service_type,
+            networkOrBiller: normalizeNetworkOrBiller(occupant.network_or_biller),
+            oldPlanCode: occupant.plan_code,
+            newPlanCode: occupant.plan_code,
+            action: "merge-deactivated",
+            note: `Cross-run collision: row ${row.id} (${rowCost} kobo) claims this canonical slot instead (was ${occupantCost} kobo)`,
+          })
+        } else {
+          changes.push({
+            table: "provider_plan_mappings",
+            id: row.id,
+            serviceType: row.service_type,
+            networkOrBiller: row._normalizedNetwork,
+            oldPlanCode: row.plan_code,
+            newPlanCode: row.plan_code, // stays put — loses the slot, keeps its own old code, gets deactivated
+            action: "merge-deactivated",
+            note: `Cross-run collision: already-settled row ${occupant.id} (${occupantCost} kobo) keeps this canonical slot; this row was ${rowCost} kobo`,
+          })
+        }
+        continue
+      }
+      changes.push({
+        table: "provider_plan_mappings",
+        id: row.id,
+        serviceType: row.service_type,
+        networkOrBiller: row._normalizedNetwork,
+        oldPlanCode: row.plan_code,
+        newPlanCode: row._canonical,
+        action: "rename",
+      })
       continue
     }
-
     // Real duplicate within the same provider — same size/validity/
     // category, just written differently across two synced rows (or a
     // sync re-run before this normalization existed created both).
@@ -168,20 +235,80 @@ export async function migratePlanCodes(dryRun: boolean, adminUserId: string, nat
     pricingGroups.get(groupKey)!.push({ ...row, _normalizedNetwork: normalizedNetwork, _canonical: canonical })
   }
 
+  // Same cross-run collision guard as provider_plan_mappings above,
+  // but keyed without provider_key — pricing_rules' UNIQUE constraint
+  // is (service_type, network_or_biller, plan_code) only, one price
+  // per canonical plan overall, not per provider.
+  const occupiedPricingSlots = new Map<string, any>()
+  for (const row of pricingRows) {
+    const slotKey = `${row.service_type}::${normalizeNetworkOrBiller(row.network_or_biller)}::${row.plan_code}`
+    occupiedPricingSlots.set(slotKey, row)
+  }
+
   for (const [groupKey, group] of pricingGroups) {
     if (group.length === 1) {
       const row = group[0]
-      if (row.plan_code !== row._canonical || row.network_or_biller !== row._normalizedNetwork) {
-        changes.push({
-          table: "pricing_rules",
-          id: row.id,
-          serviceType: row.service_type,
-          networkOrBiller: row._normalizedNetwork,
-          oldPlanCode: row.plan_code,
-          newPlanCode: row._canonical,
-          action: "rename",
-        })
+      if (row.plan_code === row._canonical && row.network_or_biller === row._normalizedNetwork) {
+        continue // already at its canonical slot, nothing to do
       }
+      const destSlotKey = `${row.service_type}::${row._normalizedNetwork}::${row._canonical}`
+      const occupant = occupiedPricingSlots.get(destSlotKey)
+      if (occupant && occupant.id !== row.id) {
+        // Same manual-price-wins rule as the in-pass merge path below:
+        // a manually-set price always outranks an auto-priced one; two
+        // manual prices colliding is flagged for human review rather
+        // than decided here.
+        const rowIsManual = row.auto_priced === 0
+        const occupantIsManual = occupant.auto_priced === 0
+        if (rowIsManual && occupantIsManual) {
+          manualReviewNeeded.push({
+            table: "pricing_rules",
+            canonicalKey: destSlotKey,
+            conflictingIds: [row.id, occupant.id],
+            reason:
+              "Two manually-priced rows resolve to the same canonical plan across migration runs " +
+              "(one already settled, one newly renaming into its slot) but have different admin-set prices — pick which one should survive by hand.",
+          })
+          changes.push({
+            table: "pricing_rules", id: row.id, serviceType: row.service_type,
+            networkOrBiller: row._normalizedNetwork, oldPlanCode: row.plan_code, newPlanCode: row._canonical,
+            action: "rename", note: "Left as separate row pending manual price-conflict review — see manualReviewNeeded",
+          })
+          continue
+        }
+        const winnerIsRow = rowIsManual || (!occupantIsManual && row.retail_price_kobo < occupant.retail_price_kobo)
+        if (winnerIsRow) {
+          changes.push({
+            table: "pricing_rules", id: row.id, serviceType: row.service_type,
+            networkOrBiller: row._normalizedNetwork, oldPlanCode: row.plan_code, newPlanCode: row._canonical,
+            action: "merge-kept",
+            note: `Cross-run collision: claims slot from already-settled row ${occupant.id}, which is being deactivated`,
+          })
+          changes.push({
+            table: "pricing_rules", id: occupant.id, serviceType: occupant.service_type,
+            networkOrBiller: normalizeNetworkOrBiller(occupant.network_or_biller),
+            oldPlanCode: occupant.plan_code, newPlanCode: occupant.plan_code,
+            action: "merge-deactivated", note: `Duplicate of ${row.id} (cross-run collision)`,
+          })
+        } else {
+          changes.push({
+            table: "pricing_rules", id: row.id, serviceType: row.service_type,
+            networkOrBiller: row._normalizedNetwork, oldPlanCode: row.plan_code, newPlanCode: row.plan_code,
+            action: "merge-deactivated",
+            note: `Cross-run collision: already-settled row ${occupant.id} keeps this canonical slot`,
+          })
+        }
+        continue
+      }
+      changes.push({
+        table: "pricing_rules",
+        id: row.id,
+        serviceType: row.service_type,
+        networkOrBiller: row._normalizedNetwork,
+        oldPlanCode: row.plan_code,
+        newPlanCode: row._canonical,
+        action: "rename",
+      })
       continue
     }
 

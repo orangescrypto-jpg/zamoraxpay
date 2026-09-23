@@ -33,7 +33,7 @@ import { getSettingNumber, getSetting } from "@/src/services/siteSettings"
 import { checkPinWithLimit } from "@/src/services/pinGuard"
 
 export async function getWithdrawableBalance(userId: string, nativeDB?: any): Promise<number> {
-  const [currentBalance, creditSums, debitSum] = await Promise.all([
+  const [currentBalance, creditSums, debitSum, rollup] = await Promise.all([
     getWalletBalance(userId, nativeDB),
     d1Query(
       `SELECT type, COALESCE(SUM(amount_kobo), 0) AS total FROM wallet_transactions
@@ -48,13 +48,23 @@ export async function getWithdrawableBalance(userId: string, nativeDB?: any): Pr
       [userId],
       nativeDB,
     ),
+    // Totals of wallet_transactions rows the retention job has already
+    // archived to R2 and deleted from D1. Without adding these back, old
+    // funding credits would vanish from this sum while recent debits stay,
+    // wrongly shrinking what the user can withdraw.
+    d1Query(
+      `SELECT funding_credits_kobo, total_debits_kobo FROM wallet_ledger_rollup WHERE user_id = ?`,
+      [userId],
+      nativeDB,
+    ),
   ])
 
   const credits: Record<string, number> = {}
   for (const row of creditSums.results ?? []) credits[row.type] = row.total
 
-  const withdrawableCredits = credits.funding ?? 0
-  const totalDebits = debitSum.results?.[0]?.total ?? 0
+  const archived = rollup.results?.[0]
+  const withdrawableCredits = (credits.funding ?? 0) + (Number(archived?.funding_credits_kobo) || 0)
+  const totalDebits = (debitSum.results?.[0]?.total ?? 0) + (Number(archived?.total_debits_kobo) || 0)
 
   const withdrawable = withdrawableCredits - totalDebits
   // Never report more than the actual current balance (a safety clamp

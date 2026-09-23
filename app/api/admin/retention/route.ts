@@ -1,8 +1,8 @@
 // app/api/admin/retention/route.ts
 // Admin control for data retention.
 //
-//   GET    -> every job with its current days, safe minimum, how many rows
-//             are due for deletion right now, and its last run
+//   GET    -> every job with its current days, safe minimum, and how many
+//             rows are due for deletion right now
 //   PATCH  -> save retention days / the master switch / batch + time budget
 //   POST   -> { jobKey } deletes that ONE job's due rows now
 //             { all: true } runs every job now
@@ -56,17 +56,11 @@ export async function GET(req: NextRequest) {
       getSettingNumber("retention_time_budget_seconds", 40),
     ])
 
-    const recent = await d1Query(
-      `SELECT job_key, trigger_source, rows_affected, status, message, started_at
-         FROM retention_runs ORDER BY started_at DESC LIMIT 30`,
-    )
-
     return NextResponse.json({
       masterEnabled: overview.masterEnabled,
       batchSize: batch,
       timeBudgetSeconds: budget,
       jobs: overview.jobs,
-      recentRuns: recent.results ?? [],
     })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to load retention" }, { status: 500 })

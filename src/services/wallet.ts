@@ -68,12 +68,18 @@ export async function ensureWalletExists(userId: string, nativeDB?: any): Promis
  * NOTE: This is a convenience read only. It is NOT what protects
  * against double-processing — creditWallet/debitWallet rely on the
  * UNIQUE(reference) constraint at INSERT time, which is race-free.
+ * References of rows removed by data retention are also blocked at INSERT
+ * time by trigger trg_block_archived_wallet_reference
+ * (migrations/retention_fixes.sql), which raises a UNIQUE-style error.
  * Callers may still use this for early-exit / reporting purposes.
  */
 export async function referenceAlreadyProcessed(reference: string, nativeDB?: any): Promise<boolean> {
   const result = await d1Query(
-    "SELECT id FROM wallet_transactions WHERE reference = ?",
-    [reference],
+    `SELECT 1 AS hit FROM wallet_transactions WHERE reference = ?
+     UNION ALL
+     SELECT 1 AS hit FROM archived_wallet_references WHERE reference = ?
+     LIMIT 1`,
+    [reference, reference],
     nativeDB,
   )
   return (result.results?.length ?? 0) > 0

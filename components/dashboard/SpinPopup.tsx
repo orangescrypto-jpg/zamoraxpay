@@ -41,5 +41,5 @@ export function SpinPopup({ spin, blocked }: { spin: SpinApi; blocked: boolean }
     }
   }
 
-  return <SpinModal open={open} onClose={close} spin={spin} />
+  return <SpinModal open={open} onClose={close} spin={spin} sourceKey={status?.tickets[0]?.sourceKey} />
 }

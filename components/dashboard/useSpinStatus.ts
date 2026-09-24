@@ -21,6 +21,8 @@ export interface SpinTicket {
   sourceKey: string
   sourceLabel: string
   expiresAt: string
+  startsAt?: string | null
+  endsAt?: string | null
 }
 
 export interface SpinStatusData {
@@ -30,6 +32,7 @@ export interface SpinStatusData {
   tickets: SpinTicket[]
   wheels: Record<string, WheelSegment[]>
   nextExpiresAt: string | null
+  nextRefreshAt?: string | null
   activeVouchers: number
   activeCoupons: number
   spinsLeftToday: number | null
@@ -76,6 +79,18 @@ export function useSpinStatus(refreshKey?: unknown) {
   useEffect(() => {
     refresh()
   }, [refresh, refreshKey])
+
+  // Refresh exactly when the schedule changes by itself (a source's start time,
+  // a ticket's end time, UTC midnight) so tickets appear / disappear on time
+  // without the user reloading the page.
+  const nextRefreshAt = status?.nextRefreshAt ?? null
+  useEffect(() => {
+    if (!nextRefreshAt) return
+    const ms = new Date(nextRefreshAt.replace(" ", "T") + "Z").getTime() - Date.now() + 1000
+    if (ms > 2_147_000_000) return
+    const t = setTimeout(() => refresh(), Math.max(1000, ms))
+    return () => clearTimeout(t)
+  }, [nextRefreshAt, refresh])
 
   return { status, loading, refresh }
 }

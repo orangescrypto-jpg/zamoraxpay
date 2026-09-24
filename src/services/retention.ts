@@ -58,13 +58,13 @@ export interface RetentionJobDef {
 }
 
 export const RETENTION_JOBS: RetentionJobDef[] = [
-  { key: "spin_tickets", label: "Spin tickets (used/expired)", settingKey: "retention_spin_tickets_days", defaultDays: 30, minDays: 2, action: "delete", keeps: "Unspent (available) tickets are never deleted." },
-  { key: "spin_vouchers", label: "Spin vouchers (used/expired)", settingKey: "retention_spin_vouchers_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Active vouchers are never deleted." },
+  { key: "spin_tickets", label: "Spin tickets (used/expired)", settingKey: "retention_spin_tickets_days", defaultDays: 30, minDays: 2, action: "delete", keeps: "Unspent tickets that have not expired are never deleted. Expired ones go even if the spin cron never marked them." },
+  { key: "spin_vouchers", label: "Spin vouchers (used/expired)", settingKey: "retention_spin_vouchers_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Active, unexpired vouchers are never deleted." },
   { key: "spin_nowin", label: "Spin history: no-win rows", settingKey: "retention_spin_nowin_days", defaultDays: 7, minDays: 7, action: "delete", keeps: "Winning spins are handled by the next job. Minimum 7 days because jackpot caps look back 7 days." },
   { key: "spin_win", label: "Spin history: winning rows", settingKey: "retention_spin_win_days", defaultDays: 60, minDays: 7, action: "delete", keeps: "Totals are folded into the all-time stats before deletion." },
   { key: "push_log", label: "Push notification log", settingKey: "retention_push_log_days", defaultDays: 30, minDays: 7, action: "delete", keeps: "Push subscriptions (devices) are never touched." },
   { key: "payment_webhook_blank", label: "Payment webhook payloads (Korapay/Paystack)", settingKey: "retention_payment_webhook_blank_days", defaultDays: 30, minDays: 7, action: "blank", keeps: "Event ID row stays so duplicate events are still recognised." },
-  { key: "payment_webhook_delete", label: "Payment webhook event rows", settingKey: "retention_payment_webhook_delete_days", defaultDays: 90, minDays: 30, action: "delete", keeps: "Wallet reference check still blocks double credits." },
+  { key: "payment_webhook_delete", label: "Payment webhook event rows", settingKey: "retention_payment_webhook_delete_days", defaultDays: 90, minDays: 30, action: "delete", keeps: "Wallet double-credit protection does not depend on this table (archived references are blocked at the database)." },
   { key: "vtu_webhook_blank", label: "VTU webhook payloads (Pairgate/VTU.ng)", settingKey: "retention_vtu_webhook_blank_days", defaultDays: 30, minDays: 7, action: "blank", keeps: "Event ID row stays so duplicate events are still recognised." },
   { key: "vtu_webhook_delete", label: "VTU webhook event rows", settingKey: "retention_vtu_webhook_delete_days", defaultDays: 90, minDays: 30, action: "delete", keeps: "" },
   { key: "wallet_tx", label: "Wallet transactions", settingKey: "retention_wallet_tx_days", defaultDays: 90, minDays: 60, action: "archive_delete", keeps: "Copied to R2 first. Withdrawal totals and duplicate-payment references are preserved. Pending rows are never touched." },
@@ -213,56 +213,35 @@ async function archiveRowsToR2(folder: string, rows: Record<string, unknown>[], 
 // ── Individual jobs ──────────────────────────────────────────────────
 
 async function jobSpinTickets(ctx: RunContext, days: number): Promise<JobResult> {
-  const r = await deleteInBatches(ctx, "spin_tickets", "id", "status != 'available' AND created_at < ?", [cutoffSql(days, ctx.now)])
+  const r = await deleteInBatches(ctx, "spin_tickets", "id", "(status != 'available' OR expires_at <= datetime('now')) AND created_at < ?", [cutoffSql(days, ctx.now)])
   return result("spin_tickets", r.deleted, r.finished, "Spin tickets deleted")
 }
 
 async function jobSpinVouchers(ctx: RunContext, days: number): Promise<JobResult> {
   // 'active' vouchers are still spendable by the user — never delete those.
-  const r = await deleteInBatches(ctx, "spin_vouchers", "id", "status != 'active' AND created_at < ?", [cutoffSql(days, ctx.now)])
+  const r = await deleteInBatches(ctx, "spin_vouchers", "id", "(status != 'active' OR expires_at <= datetime('now')) AND created_at < ?", [cutoffSql(days, ctx.now)])
   return result("spin_vouchers", r.deleted, r.finished, "Spin vouchers deleted")
 }
 
 /**
- * Deletes spin_spins rows matching `whereSql`, folding their totals into
- * spin_stats_rollup FIRST. Fold-then-delete per batch: if the process dies
- * between the two statements, the worst case is a batch counted twice in
- * the rollup — never a batch lost. To make that impossible we fold and
- * delete the exact same id list.
+ * Deletes spin_spins rows matching `whereSql`. The all-time totals are folded
+ * into spin_stats_rollup by the trigger trg_spin_rollup_on_delete
+ * (migrations/retention_fixes.sql) INSIDE each DELETE statement, so a row can
+ * never be deleted without being counted, nor counted twice. D1 has no
+ * transactions, which is why this is a trigger and not a second query.
+ * If the trigger is missing the job refuses to delete anything.
  */
-async function foldAndDeleteSpins(ctx: RunContext, key: RetentionJobKey, whereSql: string, whereParams: unknown[], label: string): Promise<JobResult> {
-  let total = 0
-  while (timeLeft(ctx)) {
-    const sel = await d1Query(
-      `SELECT id, cost_kobo, prize_type FROM spin_spins WHERE ${whereSql} LIMIT ?`,
-      [...whereParams, ctx.batchSize],
-      ctx.nativeDB,
-    )
-    const rows: any[] = sel.results ?? []
-    if (rows.length === 0) return result(key, total, true, label)
-
-    const spins = rows.length
-    const wins = rows.filter((r) => r.prize_type !== "nothing").length
-    const cost = rows.reduce((s, r) => s + (Number(r.cost_kobo) || 0), 0)
-
-    // Delete first, fold second: a crash after the delete under-counts the
-    // rollup by one batch (harmless — it is a statistic), whereas fold-first
-    // would double-count on retry. Statistics-only, so under-count is the
-    // safer failure.
-    for (let i = 0; i < rows.length; i += 90) {
-      const chunk = rows.slice(i, i + 90)
-      const marks = chunk.map(() => "?").join(",")
-      await d1Query(`DELETE FROM spin_spins WHERE id IN (${marks})`, chunk.map((r) => r.id), ctx.nativeDB)
-    }
-    await d1Query(
-      `UPDATE spin_stats_rollup SET spins = spins + ?, wins = wins + ?, cost_kobo = cost_kobo + ?, updated_at = datetime('now') WHERE id = 1`,
-      [spins, wins, cost],
-      ctx.nativeDB,
-    )
-    total += spins
-    if (rows.length < ctx.batchSize) return result(key, total, true, label)
+async function assertSpinRollupTrigger(ctx: RunContext): Promise<void> {
+  const t = await d1Query(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_spin_rollup_on_delete'`, [], ctx.nativeDB)
+  if ((t.results?.length ?? 0) === 0) {
+    throw new Error("Missing trigger trg_spin_rollup_on_delete — run migrations/retention_fixes.sql first. Nothing was deleted.")
   }
-  return result(key, total, false, label)
+}
+
+async function foldAndDeleteSpins(ctx: RunContext, key: RetentionJobKey, whereSql: string, whereParams: unknown[], label: string): Promise<JobResult> {
+  await assertSpinRollupTrigger(ctx)
+  const r = await deleteInBatches(ctx, "spin_spins", "id", whereSql, whereParams)
+  return result(key, r.deleted, r.finished, label)
 }
 
 async function jobSpinNoWin(ctx: RunContext, days: number): Promise<JobResult> {
@@ -513,8 +492,8 @@ export async function runOneRetentionJobNow(key: RetentionJobKey, nativeDB?: any
 // ── Preview (how many rows would go) ─────────────────────────────────
 
 const PREVIEW_SQL: Record<RetentionJobKey, { sql: string; table: string }> = {
-  spin_tickets: { table: "spin_tickets", sql: "SELECT COUNT(*) AS n FROM spin_tickets WHERE status != 'available' AND created_at < ?" },
-  spin_vouchers: { table: "spin_vouchers", sql: "SELECT COUNT(*) AS n FROM spin_vouchers WHERE status != 'active' AND created_at < ?" },
+  spin_tickets: { table: "spin_tickets", sql: "SELECT COUNT(*) AS n FROM spin_tickets WHERE (status != 'available' OR expires_at <= datetime('now')) AND created_at < ?" },
+  spin_vouchers: { table: "spin_vouchers", sql: "SELECT COUNT(*) AS n FROM spin_vouchers WHERE (status != 'active' OR expires_at <= datetime('now')) AND created_at < ?" },
   spin_nowin: { table: "spin_spins", sql: "SELECT COUNT(*) AS n FROM spin_spins WHERE prize_type = 'nothing' AND created_at < ?" },
   spin_win: { table: "spin_spins", sql: "SELECT COUNT(*) AS n FROM spin_spins WHERE prize_type != 'nothing' AND fulfilled = 1 AND created_at < ?" },
   push_log: { table: "push_notification_log", sql: "SELECT COUNT(*) AS n FROM push_notification_log WHERE created_at < ?" },

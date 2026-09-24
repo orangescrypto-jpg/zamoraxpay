@@ -81,7 +81,7 @@ export async function issueTickets(params: IssueTicketsParams, nativeDB?: any): 
   const effectiveCap = cap > 0 ? cap + Math.max(0, bonus.extraTickets) : 0
 
   const today = dayKeyOf(now)
-  const expiresAt = computeExpiry(source, now)
+  const expiresAt = computeExpiry(source, now) // already clamped to this source's own end time
 
   let issued = 0
   for (let i = 0; i < count; i++) {
@@ -301,32 +301,29 @@ export interface AvailableTicket {
   id: string
   sourceKey: string
   sourceLabel: string
+  /** When THIS ticket stops being usable: its own expiry, or its source's end time if that comes first. */
   expiresAt: string
+  /** This source's own schedule (null = no bound). Never taken from another source. */
+  startsAt: string | null
+  endsAt: string | null
 }
 
 export async function listAvailableTickets(userId: string, nativeDB?: any): Promise<AvailableTicket[]> {
-  // Only status/expiry/is_enabled were checked here before — a ticket
-  // issued while a source's availability window was open (or before a
-  // window existed at all) stayed spendable for its whole expiry life
-  // even after an admin later tightened starts_at/ends_at to restrict
-  // it, since nothing here re-checked the window on every read. The
-  // window is meant to gate WHEN a ticket can be used, not just when
-  // it gets minted — issuance already enforces it (see isWithinWindow
-  // in spinConfig.ts / its callers in this file), but a ticket that
-  // slipped through before the window was tightened, or was issued
-  // under an older/looser schedule, needs the same check applied here
-  // too. now <= starts_at / now >= ends_at mirrors isWithinWindow's
-  // own comparison exactly (see spinConfig.ts) rather than duplicating
-  // slightly different logic in SQL.
+  // A ticket is visible/usable only inside ITS OWN source's schedule
+  // (starts_at / ends_at, UTC). Nothing about another source's schedule or
+  // tickets affects it. The window is re-checked on every read so tightening
+  // a schedule takes effect immediately, and the deadline shown is the
+  // earlier of the ticket's expiry and its source's end time.
   const now = sqlTime()
   const result = await d1Query(
-    `SELECT t.id, t.source_key, t.expires_at, s.label
+    `SELECT t.id, t.source_key, s.label, s.starts_at, s.ends_at,
+            MIN(t.expires_at, COALESCE(s.ends_at, t.expires_at)) AS eff_expires
        FROM spin_tickets t
        JOIN spin_sources s ON s.source_key = t.source_key
       WHERE t.user_id = ? AND t.status = 'available' AND t.expires_at > ? AND s.is_enabled = 1
         AND (s.starts_at IS NULL OR s.starts_at <= ?)
         AND (s.ends_at IS NULL OR s.ends_at >= ?)
-      ORDER BY t.expires_at ASC, t.created_at ASC`,
+      ORDER BY eff_expires ASC, t.created_at ASC`,
     [userId, now, now, now],
     nativeDB,
   )
@@ -334,6 +331,8 @@ export async function listAvailableTickets(userId: string, nativeDB?: any): Prom
     id: r.id,
     sourceKey: r.source_key,
     sourceLabel: r.label,
-    expiresAt: r.expires_at,
+    expiresAt: r.eff_expires,
+    startsAt: r.starts_at ?? null,
+    endsAt: r.ends_at ?? null,
   }))
 }

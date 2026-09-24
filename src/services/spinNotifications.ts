@@ -48,12 +48,17 @@ export async function runSpinCron(nativeDB?: any): Promise<SpinCronResult> {
   // "Your spin is about to expire" — users still holding an unused ticket that ends soon.
   if (settings.pushExpiryNudge) {
     const soon = sqlTime(addHours(now, settings.pushExpiryWindowHours))
+    // Only tickets that are usable right now inside their OWN source's schedule,
+    // judged by the earlier of the ticket's expiry and its source's end time.
     const rows = await d1Query(
       `SELECT t.user_id, COUNT(*) AS n
          FROM spin_tickets t JOIN spin_sources s ON s.source_key = t.source_key
-        WHERE t.status = 'available' AND t.expires_at > ? AND t.expires_at <= ? AND s.is_enabled = 1
+        WHERE t.status = 'available' AND s.is_enabled = 1
+          AND (s.starts_at IS NULL OR s.starts_at <= ?) AND (s.ends_at IS NULL OR s.ends_at >= ?)
+          AND MIN(t.expires_at, COALESCE(s.ends_at, t.expires_at)) > ?
+          AND MIN(t.expires_at, COALESCE(s.ends_at, t.expires_at)) <= ?
         GROUP BY t.user_id LIMIT 1000`,
-      [nowSql, soon],
+      [nowSql, nowSql, nowSql, soon],
       nativeDB,
     )
     for (const r of rows.results ?? []) {
@@ -72,29 +77,27 @@ export async function runSpinCron(nativeDB?: any): Promise<SpinCronResult> {
     }
   }
 
-  // "Your free spin is ready" — daily reminder for subscribed users who haven't spun today.
+  // "Your free spin is ready" — one nudge PER SOURCE, only while that source is inside its
+  // own schedule, only to users who haven't used THAT source today. One source's window or
+  // usage never triggers or suppresses another's.
   if (settings.pushAnytimeReady) {
-    let anytimeLive = false
     for (const key of ["anytime", "weekend", "scratch_card", "pick_a_card"] as const) {
       const s = await getSource(key, nativeDB)
       if (!s?.isEnabled || !isWithinWindow(s, now)) continue
       if (key === "weekend" && !parseWeekdays(s.config.active_weekdays).includes(weekdayNameOf(now).toLowerCase())) continue
-      anytimeLive = true
-    }
-    if (anytimeLive) {
       const rows = await d1Query(
         `SELECT DISTINCT p.user_id FROM push_subscriptions p
           WHERE p.user_id IS NOT NULL
-            AND NOT EXISTS (SELECT 1 FROM spin_spins s WHERE s.user_id = p.user_id AND s.day_key = ? AND s.source_key IN ('anytime','weekend','scratch_card','pick_a_card'))
+            AND NOT EXISTS (SELECT 1 FROM spin_spins x WHERE x.user_id = p.user_id AND x.day_key = ? AND x.source_key = ?)
           LIMIT 500`,
-        [today],
+        [today, key],
         nativeDB,
       )
       for (const r of rows.results ?? []) {
-        if (!(await claimSlot(r.user_id, "spin_daily_ready", today, nativeDB))) continue
+        if (!(await claimSlot(r.user_id, `spin_daily_ready:${key}`, today, nativeDB))) continue
         const sent = await sendPushToUser(
           r.user_id,
-          { title: "Your free spin is ready 🎡", body: "Spin today for a chance to win. It's gone at midnight!", url: "/dashboard", tag: "spin-ready" },
+          { title: `${s.label} is ready 🎡`, body: "Open the app and play before it expires.", url: "/dashboard", tag: `spin-ready-${key}` },
           nativeDB,
         ).catch(() => 0)
         if (sent > 0) result.readyNudges++

@@ -82,8 +82,9 @@ export function SpinModal({
   }
 
   const won = result && result.prizeType !== "nothing"
-  const remaining = sourceKey ? status.tickets.filter((t) => t.sourceKey === sourceKey).length : status.tickets.length
-  const resultTicketsLeft = sourceKey ? status.tickets.filter((t) => t.sourceKey === sourceKey).length : (result?.ticketsLeft ?? 0)
+  const ownKey = ticket?.sourceKey
+  const remaining = status.tickets.filter((t) => t.sourceKey === ownKey).length
+  const resultTicketsLeft = remaining
   const atGlobalLimit = status.spinsLeftToday === 0
 
   return (

@@ -231,9 +231,11 @@ export function addDays(d: Date, days: number): Date {
 }
 
 /** When a ticket issued now expires, per the source's admin-set expiry rule. */
-export function computeExpiry(src: Pick<SpinSource, "expiryMode" | "expiryHours">, now: Date = new Date()): string {
-  if (src.expiryMode === "hours") return sqlTime(addHours(now, Math.max(1, src.expiryHours)))
-  return endOfDayUtc(now)
+export function computeExpiry(src: Pick<SpinSource, "expiryMode" | "expiryHours"> & Partial<Pick<SpinSource, "endsAt">>, now: Date = new Date()): string {
+  const base = src.expiryMode === "hours" ? sqlTime(addHours(now, Math.max(1, src.expiryHours))) : endOfDayUtc(now)
+  // A ticket never outlives its own source's schedule: if the admin set an
+  // end time, the ticket ends then, not at midnight / N hours.
+  return src.endsAt && src.endsAt < base ? src.endsAt : base
 }
 
 export function isWithinWindow(src: Pick<SpinSource, "startsAt" | "endsAt">, now: Date = new Date()): boolean {

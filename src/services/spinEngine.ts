@@ -28,6 +28,7 @@ import { addProtectionTokens } from "@/src/services/streakProtection"
 import {
   addDays,
   dayKeyOf,
+  endOfDayUtc,
   fromSqlTime,
   getSource,
   getSpinSettings,
@@ -65,6 +66,8 @@ export interface SpinStatus {
   /** Wheel layout per source key, only for sources the user currently holds a ticket for. */
   wheels: Record<string, WheelSegment[]>
   nextExpiresAt: string | null
+  /** Next moment the ticket list can change by itself (a source's start time, a ticket's end, UTC midnight). The app refreshes then. */
+  nextRefreshAt: string | null
   activeVouchers: number
   activeCoupons: number
   /** null = no daily limit configured. */
@@ -105,6 +108,7 @@ export async function getSpinStatus(userId: string, nativeDB?: any): Promise<Spi
     tickets: [],
     wheels: {},
     nextExpiresAt: null,
+    nextRefreshAt: null,
     activeVouchers: 0,
     activeCoupons: 0,
     spinsLeftToday: null,
@@ -144,6 +148,15 @@ export async function getSpinStatus(userId: string, nativeDB?: any): Promise<Spi
     spinsLeftToday = Math.max(0, settings.globalDailyCapPerUser - (used.results?.[0]?.n ?? 0))
   }
 
+  // Next time the visible tickets change purely because of the clock.
+  const upcoming = await d1Query(
+    `SELECT MIN(starts_at) AS n FROM spin_sources WHERE is_enabled = 1 AND starts_at IS NOT NULL AND starts_at > ?`,
+    [now],
+    nativeDB,
+  ).catch(() => ({ results: [] as any[] }))
+  const candidates = [upcoming.results?.[0]?.n, tickets[0]?.expiresAt, endOfDayUtc()].filter(Boolean) as string[]
+  const nextRefreshAt = candidates.length > 0 ? candidates.reduce((a, b) => (a < b ? a : b)) : null
+
   return {
     enabled: true,
     popupEnabled: settings.popupEnabled,
@@ -151,6 +164,7 @@ export async function getSpinStatus(userId: string, nativeDB?: any): Promise<Spi
     tickets,
     wheels,
     nextExpiresAt: tickets[0]?.expiresAt ?? null,
+    nextRefreshAt,
     activeVouchers,
     activeCoupons,
     spinsLeftToday,
@@ -431,8 +445,9 @@ export async function performSpin(
 
     const left = await d1Query(
       `SELECT COUNT(*) AS n FROM spin_tickets t JOIN spin_sources s ON s.source_key = t.source_key
-        WHERE t.user_id = ? AND t.status = 'available' AND t.expires_at > ? AND s.is_enabled = 1`,
-      [params.userId, sqlTime()],
+        WHERE t.user_id = ? AND t.status = 'available' AND t.expires_at > ? AND s.is_enabled = 1
+          AND (s.starts_at IS NULL OR s.starts_at <= ?) AND (s.ends_at IS NULL OR s.ends_at >= ?)`,
+      [params.userId, sqlTime(), sqlTime(), sqlTime()],
       nativeDB,
     )
 

@@ -17,7 +17,7 @@ interface Winner {
 
 export function SpinCard({ spin }: { spin: SpinApi }) {
   const { status } = spin
-  const [open, setOpen] = useState(false)
+  const [openKey, setOpenKey] = useState<string | null>(null)
   const [winners, setWinners] = useState<Winner[]>([])
   const [winnerIdx, setWinnerIdx] = useState(0)
   const [now, setNow] = useState(() => Date.now())
@@ -83,41 +83,59 @@ export function SpinCard({ spin }: { spin: SpinApi }) {
     )
   }
 
-  const count = status.tickets.length
-  const nextExpiry = status.nextExpiresAt
-  const primarySource = status.tickets[0]?.sourceKey
-  const emoji = primarySource === "scratch_card" ? "🎫" : primarySource === "mystery_box" ? "🎁" : primarySource === "pick_a_card" ? "🃏" : "🎡"
-  const actionWord =
-    primarySource === "scratch_card" ? "scratch card" : primarySource === "mystery_box" ? "mystery box" : primarySource === "pick_a_card" ? "card pick" : "free spin"
-  const ctaWord =
-    primarySource === "scratch_card" ? "Scratch now" : primarySource === "mystery_box" ? "Open now" : primarySource === "pick_a_card" ? "Pick now" : "Spin now"
+  // One card PER SOURCE. Each shows its own count, its own wording and its own
+  // deadline (its ticket expiry or its source's end time). Nothing is shared
+  // between sources, so one source's schedule never drives another's card.
+  const groups = new Map<string, { label: string; count: number; expiresAt: string }>()
+  for (const t of status.tickets) {
+    const g = groups.get(t.sourceKey)
+    if (!g) groups.set(t.sourceKey, { label: t.sourceLabel, count: 1, expiresAt: t.expiresAt })
+    else {
+      g.count++
+      if (t.expiresAt < g.expiresAt) g.expiresAt = t.expiresAt
+    }
+  }
+
+  const words = (key: string) =>
+    key === "scratch_card"
+      ? { emoji: "🎫", action: "scratch card", cta: "Scratch now" }
+      : key === "mystery_box"
+        ? { emoji: "🎁", action: "mystery box", cta: "Open now" }
+        : key === "pick_a_card"
+          ? { emoji: "🃏", action: "card pick", cta: "Pick now" }
+          : { emoji: "🎡", action: "free spin", cta: "Spin now" }
 
   return (
     <>
-      <div className="mb-4 overflow-hidden rounded-2xl bg-gradient-to-r from-[#0F1E4D] to-[#2563EB] p-4 text-white shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15 text-2xl" aria-hidden="true">
-            {emoji}
+      {Array.from(groups.entries()).map(([key, g], idx) => {
+        const w = words(key)
+        return (
+          <div key={key} className="mb-4 overflow-hidden rounded-2xl bg-gradient-to-r from-[#0F1E4D] to-[#2563EB] p-4 text-white shadow-md">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15 text-2xl" aria-hidden="true">
+                {w.emoji}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold">{g.count > 1 ? `You have ${g.count} ${w.action}s!` : `You have a ${w.action}!`}</p>
+                <p className="text-xs text-blue-100">Use it before it expires · {timeLeft(g.expiresAt, now)} left</p>
+              </div>
+              <button
+                onClick={() => setOpenKey(key)}
+                className="shrink-0 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-5 py-2 text-sm font-extrabold text-white shadow-lg"
+              >
+                {w.cta}
+              </button>
+            </div>
+            {idx === 0 && showWinners && winners.length > 0 && (
+              <p className="mt-3 flex items-center gap-2 border-t border-white/15 pt-2 text-xs text-blue-100">
+                <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+                <span className="truncate">{winners[winnerIdx % winners.length].text}</span>
+              </p>
+            )}
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold">{count > 1 ? `You have ${count} ${actionWord}s!` : `You have a ${actionWord}!`}</p>
-            {nextExpiry && <p className="text-xs text-blue-100">Use it before it expires · {timeLeft(nextExpiry, now)} left</p>}
-          </div>
-          <button
-            onClick={() => setOpen(true)}
-            className="shrink-0 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-5 py-2 text-sm font-extrabold text-white shadow-lg"
-          >
-            {ctaWord}
-          </button>
-        </div>
-        {showWinners && winners.length > 0 && (
-          <p className="mt-3 flex items-center gap-2 border-t border-white/15 pt-2 text-xs text-blue-100">
-            <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-300" />
-            <span className="truncate">{winners[winnerIdx % winners.length].text}</span>
-          </p>
-        )}
-      </div>
-      <SpinModal open={open} onClose={() => setOpen(false)} spin={spin} />
+        )
+      })}
+      <SpinModal open={openKey !== null} onClose={() => setOpenKey(null)} spin={spin} sourceKey={openKey ?? undefined} />
     </>
   )
 }

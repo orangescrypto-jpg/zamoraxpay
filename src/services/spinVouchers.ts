@@ -5,12 +5,12 @@
 //                     number; WE buy it from the VTU provider at our cost. It is
 //                     never wallet money, so it can't be withdrawn or spent on
 //                     anything else.
-//   data voucher    — a specific network + plan the admin chose, OR an
-//                     "any network" plan (size + validity only): the network
-//                     is resolved from the winner's own phone number at claim
-//                     time, and whichever network they're on supplies its own
-//                     matching plan_code (and its own price/expiry) — see
-//                     ANY_NETWORK_PREFIX / resolveAnyNetworkPlanCode below.
+//   data voucher    — a specific network + plan the admin chose, an "any
+//                     network" plan (same size + validity everywhere), OR a
+//                     per-network map (a DIFFERENT plan chosen for each
+//                     network): the network is resolved from the winner's
+//                     own phone number at claim time — see ANY_NETWORK_PREFIX
+//                     / MAP_PREFIX and their resolvers below.
 //   discount coupon — "5% off your next purchase". Applied AUTOMATICALLY by
 //                     purchaseFlow.ts to the user's next eligible purchase.
 //
@@ -39,6 +39,39 @@ import { DEFAULT_DISCOUNT_SERVICES, NETWORKS, sqlTime } from "@/src/services/spi
 // canonicalPlanKey() produces (see planNormalization.ts), just prefixed so it
 // can never collide with (and is never mistaken for) a real plan_code.
 export const ANY_NETWORK_PREFIX = "any:"
+
+// Marks a data-voucher prize's stored plan_code as an explicit per-network
+// map, so the admin can give each network a DIFFERENT plan under one prize
+// (not just the same size/validity everywhere). Format:
+// "map:{"MTN":"1000mb-30d","Glo":"1500mb-30d-gifting"}" — a JSON object of
+// network -> that network's own real plan_code. A network can be left out
+// entirely (no key), meaning that network has no plan configured for this
+// prize and will show as "not available" if won on that network.
+export const MAP_PREFIX = "map:"
+
+/** Builds a "map:{...}" target from a { network: planCode } selection. Drops blank entries. */
+export function mapNetworkTarget(byNetwork: Record<string, string | null | undefined>): string | null {
+  const cleaned: Record<string, string> = {}
+  for (const [network, planCode] of Object.entries(byNetwork)) {
+    if (planCode && planCode.trim()) cleaned[network] = planCode.trim()
+  }
+  if (Object.keys(cleaned).length === 0) return null
+  return `${MAP_PREFIX}${JSON.stringify(cleaned)}`
+}
+
+/** Parses a "map:{...}" target back to { network: planCode }. Returns {} if malformed or not a map target. */
+export function parseNetworkMap(target: string): Record<string, string> {
+  if (!target.startsWith(MAP_PREFIX)) return {}
+  try {
+    const parsed = JSON.parse(target.slice(MAP_PREFIX.length))
+    if (!parsed || typeof parsed !== "object") return {}
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(parsed)) if (typeof v === "string" && v) out[k] = v
+    return out
+  } catch {
+    return {}
+  }
+}
 
 /** Builds the "any:<size>mb-<days>d[-category]" target from one representative plan_code. */
 export function anyNetworkTargetFromPlanCode(planCode: string): string | null {
@@ -253,7 +286,14 @@ export async function claimVoucher(
   } else {
     planCode = v.plan_code
     if (!planCode) return { success: false, message: "This prize is not valid." }
-    if (planCode.startsWith(ANY_NETWORK_PREFIX)) {
+    if (planCode.startsWith(MAP_PREFIX)) {
+      const byNetwork = parseNetworkMap(planCode)
+      const resolved = byNetwork[network]
+      if (!resolved) {
+        return { success: false, message: "This data plan isn't available on your network right now. Your prize is safe — try again later." }
+      }
+      planCode = resolved
+    } else if (planCode.startsWith(ANY_NETWORK_PREFIX)) {
       const resolved = await resolveAnyNetworkPlanCode(network, planCode, nativeDB)
       if (!resolved) {
         return { success: false, message: "This data plan isn't available on your network right now. Your prize is safe — try again later." }

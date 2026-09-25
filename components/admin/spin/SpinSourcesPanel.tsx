@@ -29,6 +29,7 @@ interface Draft {
   expiryHours: string
   dailyBudget: string // naira
   guaranteeAfterLosses: string
+  dailyResetTime: string // 'HH:MM' UTC, blank = midnight
   config: Record<string, string>
 }
 
@@ -50,6 +51,7 @@ function toDraft(s: AdminSource): Draft {
     expiryHours: String(s.expiryHours),
     dailyBudget: koboToNaira(s.dailyBudgetKobo),
     guaranteeAfterLosses: String(s.guaranteeAfterLosses),
+    dailyResetTime: s.dailyResetTime ?? "",
     config,
   }
 }
@@ -91,6 +93,7 @@ function SourceCard({ source, onChanged, onNotice }: { source: AdminSource; onCh
           expiryHours: Number(payload.expiryHours),
           dailyBudgetKobo: nairaToKobo(payload.dailyBudget),
           guaranteeAfterLosses: Number(payload.guaranteeAfterLosses),
+          dailyResetTime: payload.dailyResetTime || null,
           config: configPayload(source.fieldDefs, payload.config),
         }),
       })
@@ -185,6 +188,16 @@ function SourceCard({ source, onChanged, onNotice }: { source: AdminSource; onCh
             >
               <input type="number" min={0} value={d.spinsPerDay} onChange={(e) => set({ spinsPerDay: e.target.value })} className={inputCls} />
             </Field>
+            {isLazy && (
+              <Field label="Resets daily at (UTC)" help="The clock time the free daily ticket becomes available again, e.g. 17:00. Leave blank to reset at UTC midnight, as before.">
+                <input
+                  type="time"
+                  value={d.dailyResetTime}
+                  onChange={(e) => set({ dailyResetTime: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+            )}
             {!isManual && (
               <>
                 <Field label="Unused ticket expires" help="Ends of the UTC day, or a set number of hours after it is earned. After that it is gone.">

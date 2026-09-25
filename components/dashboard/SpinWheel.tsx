@@ -53,6 +53,11 @@ export function SpinWheel({
 }) {
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
+  // True only for the network round-trip before the server has told us the
+  // result, so the wheel visibly does SOMETHING right away instead of
+  // sitting frozen while the button just says "Spinning…" underneath it —
+  // that dead-looking wait is what reads as the game being stuck.
+  const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const rotationRef = useRef(0)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -63,16 +68,17 @@ export function SpinWheel({
   }, [])
 
   async function handleSpin() {
-    if (spinning || disabled) return
-    setSpinning(true)
+    if (spinning || waiting || disabled) return
+    setWaiting(true)
     setError(null)
 
     const result = await onSpin()
+    setWaiting(false)
     if (!result.ok) {
-      setSpinning(false)
       setError(result.message)
       return
     }
+    setSpinning(true)
     const outcome = result.outcome
 
     // Fewer than 2 slices can't be drawn as a wheel: just reveal the result.
@@ -109,7 +115,10 @@ export function SpinWheel({
 
   return (
     <div className="flex flex-col items-center">
-      <div className="relative" style={{ width: "min(78vw, 300px)", aspectRatio: "1 / 1" }}>
+      <div
+        className={`relative transition-opacity ${waiting ? "animate-pulse opacity-80" : ""}`}
+        style={{ width: "min(78vw, 300px)", aspectRatio: "1 / 1" }}
+      >
         {/* pointer */}
         <div
           className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1"
@@ -155,14 +164,22 @@ export function SpinWheel({
           )}
           <circle cx={C} cy={C} r={26} fill="#fff" stroke="#0F1E4D" strokeWidth={4} />
         </svg>
+        {waiting && (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            aria-hidden="true"
+          >
+            <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-white/30 border-t-white" />
+          </div>
+        )}
       </div>
 
       <button
         onClick={handleSpin}
-        disabled={spinning || disabled}
+        disabled={spinning || waiting || disabled}
         className="mt-6 inline-flex min-w-[180px] items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 px-8 py-3 text-base font-extrabold tracking-wide text-white shadow-lg shadow-orange-900/20 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {spinning ? "Spinning…" : buttonLabel}
+        {waiting ? "Contacting server…" : spinning ? "Spinning…" : buttonLabel}
       </button>
       {error && <p className="mt-3 text-center text-sm text-red-600">{error}</p>}
     </div>

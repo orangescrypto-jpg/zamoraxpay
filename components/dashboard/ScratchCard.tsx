@@ -351,7 +351,7 @@ export function ScratchCard({
             calm navy loss state (never punishing) and the app's own success
             green for wins, instead of an arbitrary red/orange. */}
         <div
-          className={`absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center transition-transform duration-500 ${celebrate ? "scale-[1.03]" : ""}`}
+          className={`absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center transition-transform duration-500 ${celebrate ? "scale-[1.03]" : ""} ${scratching ? "animate-pulse" : ""}`}
           style={{
             background: won
               ? `radial-gradient(120% 120% at 50% 0%, ${BRAND.success} 0%, #049658 55%, ${BRAND.navy} 100%)`
@@ -385,7 +385,9 @@ export function ScratchCard({
               </span>
             </>
           ) : (
-            <span className="text-sm font-semibold text-white/80">Tap &quot;{buttonLabel}&quot; to start</span>
+            <span className="text-sm font-semibold text-white/80">
+              {scratching ? "Loading your card…" : `Tap "${buttonLabel}" to start`}
+            </span>
           )}
         </div>
 

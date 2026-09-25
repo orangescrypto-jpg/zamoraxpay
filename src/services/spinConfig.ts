@@ -158,6 +158,8 @@ export interface SpinSource {
   expiryHours: number
   dailyBudgetKobo: number
   guaranteeAfterLosses: number
+  /** 'HH:MM' UTC clock time the free daily ticket resets (lazy sources only). Null = UTC midnight. */
+  dailyResetTime: string | null
   config: Record<string, any>
 }
 
@@ -249,6 +251,27 @@ export function weekdayNameOf(d: Date = new Date()): string {
   return WEEKDAY_NAMES[d.getUTCDay()]
 }
 
+/**
+ * The "day" a LAZY source's free ticket belongs to, given its own
+ * daily_reset_time ('HH:MM' UTC). Before that clock time it's still
+ * "yesterday's" cycle; at/after it, a new cycle (and a new free ticket)
+ * starts. Used only for lazy-ticket issuing/idempotency — everything else
+ * (budgets, spin caps, event sources) keeps using dayKeyOf/UTC midnight.
+ * No reset time set → identical to dayKeyOf (UTC midnight, unchanged).
+ */
+export function lazyDayKeyOf(resetTime: string | null | undefined, d: Date = new Date()): string {
+  const m = typeof resetTime === "string" ? resetTime.trim().match(/^(\d{1,2}):(\d{2})$/) : null
+  if (!m) return dayKeyOf(d)
+  const resetHour = Math.min(23, Math.max(0, Number(m[1])))
+  const resetMinute = Math.min(59, Math.max(0, Number(m[2])))
+  const cycleStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), resetHour, resetMinute))
+  // If we're before today's reset moment, this cycle actually began at
+  // yesterday's reset moment — key it by yesterday's date so it's distinct
+  // from the cycle that starts later today.
+  if (d.getTime() < cycleStart.getTime()) cycleStart.setUTCDate(cycleStart.getUTCDate() - 1)
+  return dayKeyOf(cycleStart)
+}
+
 // ── Parsing helpers ───────────────────────────────────────────────────
 
 export function parseIntList(raw: unknown): number[] {
@@ -293,6 +316,7 @@ export function mapSource(row: any): SpinSource {
     expiryHours: row.expiry_hours ?? 24,
     dailyBudgetKobo: row.daily_budget_kobo ?? 0,
     guaranteeAfterLosses: row.guarantee_after_losses ?? 0,
+    dailyResetTime: row.daily_reset_time ?? null,
     config: safeJson(row.config_json, {}),
   }
 }

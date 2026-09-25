@@ -39,8 +39,12 @@ interface Draft {
   discountMinPurchase: string // naira
   voucherNetwork: string
   voucherAnyNetwork: boolean
+  /** When voucherAnyNetwork: "shape" = same size/validity on every network. "map" = a chosen plan per network. */
+  voucherAnyNetworkMode: "shape" | "map"
   voucherSampleNetwork: string
   voucherPlanCode: string
+  /** Only used when voucherAnyNetworkMode === "map": one plan_code per network, blank = not configured for that network. */
+  voucherNetworkPlans: Record<string, string>
   tokenCount: string
   rewardValidDays: string
   weight: string
@@ -64,8 +68,10 @@ const blank: Draft = {
   discountMinPurchase: "0",
   voucherNetwork: "",
   voucherAnyNetwork: false,
+  voucherAnyNetworkMode: "shape",
   voucherSampleNetwork: "",
   voucherPlanCode: "",
+  voucherNetworkPlans: {},
   tokenCount: "1",
   rewardValidDays: "7",
   weight: "10",
@@ -80,7 +86,16 @@ const blank: Draft = {
 }
 
 function fromPrize(p: AdminPrize): Draft {
-  const isAnyNetwork = p.prizeType === "data_voucher" && !p.voucherNetwork && !!p.voucherPlanCode?.startsWith("any:")
+  const isMapNetwork = p.prizeType === "data_voucher" && !p.voucherNetwork && !!p.voucherPlanCode?.startsWith("map:")
+  const isAnyNetwork = p.prizeType === "data_voucher" && !p.voucherNetwork && (isMapNetwork || !!p.voucherPlanCode?.startsWith("any:"))
+  let networkPlans: Record<string, string> = {}
+  if (isMapNetwork && p.voucherPlanCode) {
+    try {
+      networkPlans = JSON.parse(p.voucherPlanCode.slice("map:".length)) ?? {}
+    } catch {
+      networkPlans = {}
+    }
+  }
   return {
     id: p.id,
     label: p.label,
@@ -92,8 +107,10 @@ function fromPrize(p: AdminPrize): Draft {
     discountMinPurchase: koboToNaira(p.discountMinPurchaseKobo),
     voucherNetwork: p.voucherNetwork ?? "",
     voucherAnyNetwork: isAnyNetwork,
+    voucherAnyNetworkMode: isMapNetwork ? "map" : "shape",
     voucherSampleNetwork: "",
-    voucherPlanCode: p.voucherPlanCode ?? "",
+    voucherPlanCode: isMapNetwork ? "" : p.voucherPlanCode ?? "",
+    voucherNetworkPlans: networkPlans,
     tokenCount: String(p.tokenCount || 1),
     rewardValidDays: String(p.rewardValidDays),
     weight: String(p.weight),
@@ -150,8 +167,9 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
           discountMinPurchaseKobo: nairaToKobo(draft.discountMinPurchase),
           voucherNetwork: draft.voucherAnyNetwork ? null : draft.voucherNetwork || null,
           voucherAnyNetwork: draft.voucherAnyNetwork,
-          voucherSampleNetwork: draft.voucherAnyNetwork ? draft.voucherSampleNetwork : undefined,
+          voucherSampleNetwork: draft.voucherAnyNetwork && draft.voucherAnyNetworkMode === "shape" ? draft.voucherSampleNetwork : undefined,
           voucherPlanCode: draft.voucherPlanCode || null,
+          voucherNetworkPlans: draft.voucherAnyNetwork && draft.voucherAnyNetworkMode === "map" ? draft.voucherNetworkPlans : undefined,
           tokenCount: Number(draft.tokenCount),
           rewardValidDays: Number(draft.rewardValidDays),
           weight: Number(draft.weight),
@@ -379,9 +397,9 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
                   value={draft.voucherAnyNetwork ? "__any__" : draft.voucherNetwork}
                   onChange={(e) => {
                     if (e.target.value === "__any__") {
-                      set({ voucherAnyNetwork: true, voucherNetwork: "", voucherSampleNetwork: "", voucherPlanCode: "" })
+                      set({ voucherAnyNetwork: true, voucherNetwork: "", voucherSampleNetwork: "", voucherPlanCode: "", voucherNetworkPlans: {} })
                     } else {
-                      set({ voucherAnyNetwork: false, voucherNetwork: e.target.value, voucherSampleNetwork: "", voucherPlanCode: "" })
+                      set({ voucherAnyNetwork: false, voucherNetwork: e.target.value, voucherSampleNetwork: "", voucherPlanCode: "", voucherNetworkPlans: {} })
                     }
                   }}
                   className={inputCls}
@@ -396,14 +414,36 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
                 </select>
                 {t === "data_voucher" && draft.voucherAnyNetwork && (
                   <p className="mt-1 text-xs text-secondary">
-                    The winner&apos;s own number decides the network at claim time. Price and expiry follow whichever
-                    network they&apos;re actually on.
+                    The winner&apos;s own number decides the network at claim time.
                   </p>
                 )}
               </Field>
             )}
 
-            {t === "data_voucher" && draft.voucherAnyNetwork && anyNetworkBreakdown.length > 0 && (
+            {t === "data_voucher" && draft.voucherAnyNetwork && (
+              <Field label="How the plan is chosen per network">
+                <div className="flex gap-4 text-sm">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={draft.voucherAnyNetworkMode === "shape"}
+                      onChange={() => set({ voucherAnyNetworkMode: "shape", voucherNetworkPlans: {} })}
+                    />
+                    Same size/validity on every network
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={draft.voucherAnyNetworkMode === "map"}
+                      onChange={() => set({ voucherAnyNetworkMode: "map", voucherPlanCode: "", voucherSampleNetwork: "" })}
+                    />
+                    Choose a different plan for each network
+                  </label>
+                </div>
+              </Field>
+            )}
+
+            {t === "data_voucher" && draft.voucherAnyNetwork && draft.voucherAnyNetworkMode === "shape" && anyNetworkBreakdown.length > 0 && (
               <Field label="Availability by network" help="Whether each network currently has a matching plan for this size/validity. A network shown missing will fail if a winner on it tries to claim — add that plan in Pricing first.">
                 <ul className="space-y-1 rounded-lg border border-border bg-muted/30 p-2 text-xs">
                   {anyNetworkBreakdown.map((b) => (
@@ -422,29 +462,64 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
               </Field>
             )}
 
-            {t === "data_voucher" && (
+            {t === "data_voucher" && draft.voucherAnyNetwork && draft.voucherAnyNetworkMode === "shape" && (
               <Field label="Data plan" help="Only plans that exist in your Pricing table can be used.">
-                {draft.voucherAnyNetwork ? (
-                  anyNetworkPlanOptions.length > 0 ? (
-                    <select
-                      value={draft.voucherPlanCode}
-                      onChange={(e) => {
-                        const opt = anyNetworkPlanOptions.find((o) => o.plan_code === e.target.value)
-                        set({ voucherPlanCode: e.target.value, voucherSampleNetwork: opt?.network_or_biller ?? "" })
-                      }}
-                      className={inputCls}
-                    >
-                      <option value="">Choose…</option>
-                      {anyNetworkPlanOptions.map((o) => (
-                        <option key={o.plan_code} value={o.plan_code}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p className="text-xs text-secondary">No data plans found in your Pricing table yet.</p>
-                  )
-                ) : networkPlans.length > 0 ? (
+                {anyNetworkPlanOptions.length > 0 ? (
+                  <select
+                    value={draft.voucherPlanCode}
+                    onChange={(e) => {
+                      const opt = anyNetworkPlanOptions.find((o) => o.plan_code === e.target.value)
+                      set({ voucherPlanCode: e.target.value, voucherSampleNetwork: opt?.network_or_biller ?? "" })
+                    }}
+                    className={inputCls}
+                  >
+                    <option value="">Choose…</option>
+                    {anyNetworkPlanOptions.map((o) => (
+                      <option key={o.plan_code} value={o.plan_code}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-xs text-secondary">No data plans found in your Pricing table yet.</p>
+                )}
+              </Field>
+            )}
+
+            {t === "data_voucher" && draft.voucherAnyNetwork && draft.voucherAnyNetworkMode === "map" && (
+              <Field label="Data plan per network" help="Pick each network's own plan independently. Leave a network blank if you don't want to offer it there yet — that network will show as unavailable if won.">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {data.networks.map((n) => {
+                    const optionsForNetwork = plans.filter((r) => r.network_or_biller === n && r.plan_code)
+                    return (
+                      <div key={n}>
+                        <p className="mb-1 text-xs font-semibold text-primary">{n}</p>
+                        {optionsForNetwork.length > 0 ? (
+                          <select
+                            value={draft.voucherNetworkPlans[n] ?? ""}
+                            onChange={(e) => set({ voucherNetworkPlans: { ...draft.voucherNetworkPlans, [n]: e.target.value } })}
+                            className={inputCls}
+                          >
+                            <option value="">Not offered on {n}</option>
+                            {optionsForNetwork.map((r) => (
+                              <option key={r.plan_code!} value={r.plan_code!}>
+                                {labelFromPlanCode(r.plan_code!)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-xs text-secondary">No {n} data plans in your Pricing table yet.</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </Field>
+            )}
+
+            {t === "data_voucher" && !draft.voucherAnyNetwork && (
+              <Field label="Data plan" help="Only plans that exist in your Pricing table can be used.">
+                {networkPlans.length > 0 ? (
                   <select value={draft.voucherPlanCode} onChange={(e) => set({ voucherPlanCode: e.target.value })} className={inputCls}>
                     <option value="">Choose…</option>
                     {networkPlans.map((r) => (

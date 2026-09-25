@@ -51,6 +51,8 @@ export interface AdminSource {
   expiryHours: number
   dailyBudgetKobo: number
   guaranteeAfterLosses: number
+  /** 'HH:MM' UTC clock time the free daily ticket resets (lazy sources only). Null = UTC midnight. */
+  dailyResetTime: string | null
   config: Record<string, any>
   fieldDefs: FieldDef[]
   kind: "event" | "lazy" | "manual"

@@ -82,7 +82,7 @@ export function PickACard({
 
   return (
     <div className="flex flex-col items-center">
-      <div className="grid grid-cols-4 gap-2.5" style={{ width: "min(84vw, 300px)" }}>
+      <div className={`grid grid-cols-4 gap-2.5 ${loading ? "animate-pulse" : ""}`} style={{ width: "min(84vw, 300px)" }}>
         {Array.from({ length: CARD_COUNT }, (_, i) => {
           const isPicked = picked === i
           const showFront = isPicked && flipped

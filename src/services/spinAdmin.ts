@@ -70,6 +70,17 @@ function dateOrNull(v: unknown, label: string): string | null {
   return `${m[1]} ${m[2] ?? "00:00"}:${m[3] ?? "00"}`
 }
 
+/** Admin clock-time input ("17:00") → normalized 'HH:MM' UTC, or null when blank. */
+function clockTimeOrNull(v: unknown, label: string): string | null {
+  if (v === null || v === undefined || v === "") return null
+  const m = String(v).trim().match(/^(\d{1,2}):(\d{2})$/)
+  if (!m) fail(`${label} must be a time like 17:00 (24-hour, UTC).`)
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) fail(`${label} must be a valid 24-hour time.`)
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`
+}
+
 // ── Overview ──────────────────────────────────────────────────────────
 
 export interface AdminPrize extends SpinPrize {
@@ -232,17 +243,18 @@ export async function saveSource(input: any, adminId: string, nativeDB?: any): P
     expiryHours: int(input.expiryHours ?? 24, "Expiry hours", 1, 24 * 90),
     dailyBudgetKobo: int(input.dailyBudgetKobo ?? 0, "Daily budget", 0, MAX_KOBO * 100),
     guaranteeAfterLosses: int(input.guaranteeAfterLosses ?? 0, "Guarantee after losses", 0, 100),
+    dailyResetTime: clockTimeOrNull(input.dailyResetTime, "Daily reset time"),
     config: cleanConfig(sourceKey, input.config),
   }
 
   await d1Query(
     `UPDATE spin_sources SET is_enabled = ?, starts_at = ?, ends_at = ?, tickets_per_award = ?, spins_per_day = ?,
-            expiry_mode = ?, expiry_hours = ?, daily_budget_kobo = ?, guarantee_after_losses = ?, config_json = ?,
-            updated_by = ?, updated_at = datetime('now')
+            expiry_mode = ?, expiry_hours = ?, daily_budget_kobo = ?, guarantee_after_losses = ?, daily_reset_time = ?,
+            config_json = ?, updated_by = ?, updated_at = datetime('now')
       WHERE source_key = ?`,
     [
       row.isEnabled, row.startsAt, row.endsAt, row.ticketsPerAward, row.spinsPerDay, row.expiryMode, row.expiryHours,
-      row.dailyBudgetKobo, row.guaranteeAfterLosses, JSON.stringify(row.config), adminId, sourceKey,
+      row.dailyBudgetKobo, row.guaranteeAfterLosses, row.dailyResetTime, JSON.stringify(row.config), adminId, sourceKey,
     ],
     nativeDB,
   )
@@ -256,8 +268,8 @@ export async function resetSource(sourceKey: string, adminId: string, nativeDB?:
 
   await d1Query(
     `UPDATE spin_sources SET is_enabled = ?, starts_at = NULL, ends_at = NULL, tickets_per_award = ?, spins_per_day = ?,
-            expiry_mode = ?, expiry_hours = ?, daily_budget_kobo = ?, guarantee_after_losses = ?, config_json = ?,
-            updated_by = ?, updated_at = datetime('now')
+            expiry_mode = ?, expiry_hours = ?, daily_budget_kobo = ?, guarantee_after_losses = ?, daily_reset_time = NULL,
+            config_json = ?, updated_by = ?, updated_at = datetime('now')
       WHERE source_key = ?`,
     [
       def.isEnabled ? 1 : 0, def.ticketsPerAward, def.spinsPerDay, def.expiryMode, def.expiryHours, def.dailyBudgetKobo,

@@ -18,6 +18,15 @@
 //                             "waec-result-checker", set via a provider_plan_mappings override)
 //   /bet/purchase             { provider_id, amount, customer_id, recipient_name?, reference }
 //   GET /transaction/status?reference_code=...
+//   GET /providers/betting    { data: [{ id, name, slug }] } — the REAL provider_id
+//                             values for betting (e.g. "bet9ja", "sportybet",
+//                             "betking", "nairabet", "betway", "accessbet").
+//                             These are account-specific slugs, not something
+//                             safe to derive by lowercasing our own platform
+//                             label — see resolveBettingProviderSlug below,
+//                             which fetches and caches this list, then
+//                             matches it against the platform name the user
+//                             picked on our own betting page.
 // Betting funding uses a DIFFERENT path segment ("bet") than our
 // internal "betting" service type — mapped below.
 // Electricity token & exam pins are delivered asynchronously via
@@ -43,7 +52,68 @@ const SERVICE_ENDPOINT: Record<string, string> = {
   betting: "/bet/purchase",
 }
 
-function buildBody(req: VtuPurchaseRequest): Record<string, unknown> {
+// Pairgate's real betting-platform identifiers are account-specific slugs
+// ("bet9ja", "sportybet", "betking", "nairabet", "betway", "accessbet", ...)
+// returned by GET /providers/betting — NOT something we can safely guess by
+// lowercasing our own platform label. A guess works for some names by
+// coincidence (e.g. "SportyBet" → "sportybet") and silently fails for
+// others (e.g. "1xBet" isn't in Pairgate's list at all), which is exactly
+// the "wallet funding unavailable" failure this resolves.
+// Cached briefly in-memory since this list is effectively static and
+// funding requests shouldn't pay for an extra round-trip every time.
+let bettingSlugCache: { at: number; byName: Map<string, string> } | null = null
+const BETTING_SLUG_CACHE_MS = 10 * 60_000 // 10 minutes
+
+// Same "strip everything but letters/digits, lowercase" normalization
+// planNormalization.ts uses for network/biller names (see
+// normalizeNetworkOrBiller there) — kept local here since betting platform
+// names are a different identity space (no fixed label map to fall back
+// to), but the same normalization logic: it's what makes "SportyBet",
+// "Sporty Bet", and "sporty-bet" all match Pairgate's "Sportybet" name,
+// instead of only an exact-cased, exact-spaced string matching.
+function normalizeBettingName(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+async function resolveBettingProviderSlug(
+  platformLabel: string,
+  baseUrl: string,
+  apiKey: string,
+): Promise<{ slug: string } | { error: string }> {
+  const key = normalizeBettingName(platformLabel)
+
+  if (!bettingSlugCache || Date.now() - bettingSlugCache.at > BETTING_SLUG_CACHE_MS) {
+    try {
+      const res = await fetchWithRetry(
+        `${baseUrl}/providers/betting`,
+        { method: "GET", headers: { Authorization: `Bearer ${apiKey}`, "Cache-Control": "no-cache" } },
+        { retries: 1, timeoutMs: 10_000 },
+      )
+      const json = (await res.json()) as any
+      if (!res.ok || json?.status !== "success" || !Array.isArray(json?.data)) {
+        // Don't cache a failed fetch — try again next call rather than being
+        // stuck on an empty map for the full cache window.
+        return { error: "Couldn't load Pairgate's betting provider list right now." }
+      }
+      const byName = new Map<string, string>()
+      for (const p of json.data) {
+        if (p?.name && p?.slug) byName.set(normalizeBettingName(String(p.name)), String(p.slug))
+      }
+      bettingSlugCache = { at: Date.now(), byName }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Couldn't reach Pairgate's betting provider list." }
+    }
+  }
+
+  const slug = bettingSlugCache!.byName.get(key)
+  if (!slug) {
+    const known = Array.from(bettingSlugCache!.byName.keys()).join(", ")
+    return { error: `Pairgate doesn't support "${platformLabel}" for betting. Supported: ${known || "none configured"}.` }
+  }
+  return { slug }
+}
+
+function buildBody(req: VtuPurchaseRequest, resolvedProviderId?: string): Record<string, unknown> {
   switch (req.serviceType) {
     case "data":
       return {
@@ -92,8 +162,14 @@ function buildBody(req: VtuPurchaseRequest): Record<string, unknown> {
         reference: req.internalReference,
       }
     case "betting":
+      // provider_id MUST be Pairgate's own slug (e.g. "bet9ja"), resolved
+      // live via resolveBettingProviderSlug — never our own platform label
+      // lowercased, since that silently breaks for names Pairgate spells
+      // differently (or doesn't support at all, e.g. "1xBet"). See
+      // resolveBettingProviderSlug above; purchase() below is what
+      // actually resolves this before buildBody is called.
       return {
-        provider_id: req.networkOrBiller.toLowerCase(),
+        provider_id: resolvedProviderId,
         amount: req.amountKobo / 100,
         customer_id: req.recipient,
         ...(req.recipientName ? { recipient_name: req.recipientName } : {}),
@@ -124,6 +200,18 @@ export const pairgateAdapter: IVtuProviderAdapter = {
 
     const url = testMode ? `${baseUrl}/test${endpoint}` : `${baseUrl}${endpoint}`
 
+    // Betting needs Pairgate's own provider slug, not our platform label —
+    // resolve it live (cached) before building the request body. Every
+    // other service type sends networkOrBiller straight through as before.
+    let resolvedProviderId: string | undefined
+    if (req.serviceType === "betting") {
+      const resolved = await resolveBettingProviderSlug(req.networkOrBiller, baseUrl, apiKey)
+      if ("error" in resolved) {
+        return { success: false, message: resolved.error }
+      }
+      resolvedProviderId = resolved.slug
+    }
+
     try {
       const res = await fetchWithRetry(
         url,
@@ -133,7 +221,7 @@ export const pairgateAdapter: IVtuProviderAdapter = {
             "Content-Type": "application/json",
             Authorization: `Bearer ${apiKey}`,
           },
-          body: JSON.stringify(buildBody(req)),
+          body: JSON.stringify(buildBody(req, resolvedProviderId)),
         },
         { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
       )

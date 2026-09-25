@@ -28,6 +28,17 @@ export function SpinModal({
   const [result, setResult] = useState<SpinOutcome | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const { status, refresh } = spin
+  // The global daily spin cap resets at UTC midnight (see dayKeyOf in
+  // spinConfig.ts) — computed here, in the same 'YYYY-MM-DD HH:MM:SS' shape
+  // timeLeft()/parseServerTime() expect, so the "come back in X" message is
+  // accurate instead of vague, when a user still holds a valid ticket but
+  // has hit the sitewide limit for today.
+  const tomorrow = new Date(Date.UTC(
+    new Date().getUTCFullYear(),
+    new Date().getUTCMonth(),
+    new Date().getUTCDate() + 1,
+  ))
+  const endOfTodayUtc = tomorrow.toISOString().slice(0, 19).replace("T", " ")
 
   // keep the "expires in" text fresh
   useEffect(() => {
@@ -116,10 +127,13 @@ export function SpinModal({
             )}
             <div className="mt-6">
               {atGlobalLimit ? (
-                <p className="rounded-2xl bg-white/10 px-4 py-8 text-center text-sm text-blue-100">
-                  You&apos;ve used today&apos;s spin limit across all games. Your {actionWord}
-                  {remaining === 1 ? "" : "s"} will be waiting when the limit resets tomorrow.
-                </p>
+                <div className="rounded-2xl bg-white/10 px-4 py-8 text-center text-sm text-blue-100">
+                  <p>
+                    You&apos;ve used today&apos;s overall spin limit across all games on Zamorax Pay &mdash; this
+                    isn&apos;t a problem with this {actionWord}, your {remaining > 1 ? `${remaining} tickets are` : "ticket is"} still safe and waiting.
+                  </p>
+                  <p className="mt-2 text-xs text-blue-200/80">Resets at midnight (UTC) &mdash; {timeLeft(endOfTodayUtc, now)} left.</p>
+                </div>
               ) : ticket ? (
                 ticket.sourceKey === "scratch_card" ? (
                   <ScratchCard onSpin={doSpin} onDone={handleDone} disabled={!ticket} resetKey={ticket.id} />
@@ -159,7 +173,7 @@ export function SpinModal({
               )}
               {resultTicketsLeft > 0 && atGlobalLimit && (
                 <p className="text-center text-xs text-blue-200/80">
-                  {resultTicketsLeft} more waiting — today&apos;s overall limit is reached, come back tomorrow.
+                  {resultTicketsLeft} more waiting — today&apos;s overall limit is reached, resets in {timeLeft(endOfTodayUtc, now)}.
                 </p>
               )}
               {won && (result.prizeType === "airtime_voucher" || result.prizeType === "data_voucher") && (

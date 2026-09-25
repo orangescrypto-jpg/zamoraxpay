@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 // POST { action, ... }
 //   set_master        { enabled }
 //   save_settings     { settings: { key: value } }
-//   save_source       { sourceKey, isEnabled, startsAt, endsAt, ticketsPerAward, spinsPerDay, expiryMode, expiryHours, dailyBudgetKobo, guaranteeAfterLosses, config }
+//   save_source       { sourceKey, isEnabled, startsAt, endsAt, ticketsPerAward, spinsPerDay, expiryMode, expiryHours, dailyBudgetKobo, guaranteeAfterLosses, dailyResetTime, config }
 //   reset_source      { sourceKey }            — restore that source + its prize table to shipped defaults
 //   save_tier_bonus   { tierKey, sourceKey, extraTickets, weightBoostPercent, isActive }
 //   delete_tier_bonus { tierKey, sourceKey }

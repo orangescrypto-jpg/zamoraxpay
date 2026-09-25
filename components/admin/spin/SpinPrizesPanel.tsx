@@ -217,6 +217,25 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
     return Array.from(seen.values()).sort((a, b) => a.label.localeCompare(b.label))
   }, [plans])
 
+  // Per-network breakdown for whichever size/validity is currently selected
+  // under "All providers (any network)" — so the admin can see BEFORE saving
+  // which networks actually have a matching plan right now, instead of a
+  // winner on a missing network only finding out at claim time.
+  const anyNetworkBreakdown = useMemo(() => {
+    if (!draft?.voucherAnyNetwork || !draft.voucherPlanCode) return []
+    const base = draft.voucherPlanCode.match(/^\d+mb-\d+d/i)?.[0]?.toLowerCase()
+    if (!base) return []
+    return data.networks.map((n) => {
+      const match = plans.find((r) => r.network_or_biller === n && r.plan_code && r.plan_code.toLowerCase().startsWith(base) && r.is_active !== 0)
+      return {
+        network: n,
+        available: Boolean(match),
+        planCode: match?.plan_code ?? null,
+        priceKobo: match?.retail_price_kobo,
+      }
+    })
+  }, [draft?.voucherAnyNetwork, draft?.voucherPlanCode, plans, data.networks])
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -381,6 +400,25 @@ export function SpinPrizesPanel({ data, onChanged, onNotice }: { data: AdminOver
                     network they&apos;re actually on.
                   </p>
                 )}
+              </Field>
+            )}
+
+            {t === "data_voucher" && draft.voucherAnyNetwork && anyNetworkBreakdown.length > 0 && (
+              <Field label="Availability by network" help="Whether each network currently has a matching plan for this size/validity. A network shown missing will fail if a winner on it tries to claim — add that plan in Pricing first.">
+                <ul className="space-y-1 rounded-lg border border-border bg-muted/30 p-2 text-xs">
+                  {anyNetworkBreakdown.map((b) => (
+                    <li key={b.network} className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-primary">{b.network}</span>
+                      {b.available ? (
+                        <span className="text-emerald-600">
+                          ✅ {b.priceKobo != null ? fmt(b.priceKobo) : ""} live
+                        </span>
+                      ) : (
+                        <span className="text-red-600">❌ no matching plan</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </Field>
             )}
 

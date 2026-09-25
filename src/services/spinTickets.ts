@@ -21,6 +21,7 @@ import { d1Query } from "@/lib/d1"
 import { sendPushToUser } from "@/src/services/pushNotifications"
 import {
   dayKeyOf,
+  lazyDayKeyOf,
   computeExpiry,
   getSource,
   getSpinSettings,
@@ -80,7 +81,10 @@ export async function issueTickets(params: IssueTicketsParams, nativeDB?: any): 
   // Tier bonus tickets are on top of the normal cap, not squeezed inside it.
   const effectiveCap = cap > 0 ? cap + Math.max(0, bonus.extraTickets) : 0
 
-  const today = dayKeyOf(now)
+  // Non-lazy (event/manual) sources keep counting by UTC midnight, unchanged.
+  // Lazy sources count by their own daily_reset_time cycle, so the cap and
+  // the ticket issued by ensureLazyTickets always agree on what "today" is.
+  const today = kind === "lazy" ? lazyDayKeyOf(source.dailyResetTime, now) : dayKeyOf(now)
   const expiresAt = computeExpiry(source, now) // already clamped to this source's own end time
 
   let issued = 0
@@ -143,11 +147,16 @@ export async function ensureLazyTickets(userId: string, nativeDB?: any): Promise
   if (!(await isSpinEnabled(nativeDB))) return
 
   const now = new Date()
-  const today = dayKeyOf(now)
 
   for (const key of ["anytime", "weekend", "scratch_card", "pick_a_card"] as SpinSourceKey[]) {
     const source = await getSource(key, nativeDB)
     if (!source || !source.isEnabled || !isWithinWindow(source, now)) continue
+
+    // Each source's own daily_reset_time decides when its cycle rolls over
+    // (e.g. 17:00 UTC every day). No reset time set = UTC midnight, same as
+    // before. This "day" is used only for THIS lazy-ticket issue — daily
+    // budgets and spin caps elsewhere still key off UTC midnight.
+    const cycleKey = lazyDayKeyOf(source.dailyResetTime, now)
 
     if (key === "weekend") {
       const days = parseWeekdays(source.config.active_weekdays)
@@ -158,7 +167,7 @@ export async function ensureLazyTickets(userId: string, nativeDB?: any): Promise
       {
         userId,
         sourceKey: key,
-        issueKey: `lazy:${key}:${userId}:${today}`,
+        issueKey: `lazy:${key}:${userId}:${cycleKey}`,
         count: Math.max(1, source.ticketsPerAward),
         notify: false,
       },

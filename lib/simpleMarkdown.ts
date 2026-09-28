@@ -47,7 +47,7 @@ export function renderMarkdown(markdown: string): string {
   html = html.replace(/^> (.+)$/gm, "<blockquote>$1</blockquote>")
 
   // Images (before links, since the syntax overlaps)
-  html = html.replace(/!\[(.*?)\]\((.+?)\)/g, '<img src="$2" alt="$1" />')
+  html = html.replace(/!\[(.*?)\]\((.+?)\)/g, '<img src="$2" alt="$1" loading="lazy" decoding="async" />')
 
   // Links
   html = html.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')

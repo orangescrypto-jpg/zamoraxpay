@@ -11,12 +11,18 @@ const SERVICES = [
   { href: "/services/cable", label: "Cable TV", desc: "DSTV, GOtv, StarTimes" },
   { href: "/services/electricity", label: "Electricity", desc: "Prepaid & postpaid tokens" },
   { href: "/services/exam-pin", label: "Exam PINs", desc: "WAEC, NECO, JAMB" },
-  { href: "/services/betting", label: "Betting", desc: "Fund your sportsbook wallet" },
   { href: "/services/airtime-to-cash", label: "Airtime to Cash", desc: "Convert airtime to wallet funds" },
   { href: "/services/epin", label: "Buy ePIN", desc: "Instant PINs for redemption" },
   { href: "/services/bulk-airtime", label: "Bulk Airtime", desc: "Send airtime to many numbers at once" },
   { href: "/services/bulk-data", label: "Bulk Data", desc: "Send data to many numbers at once" },
   { href: "/services/international-topup", label: "International Airtime & Data", desc: "Top up a phone number in another country" },
+]
+
+const REWARDS = [
+  { icon: "💸", label: "Cashback", desc: "Earn cashback on eligible purchases and claim it straight to your wallet." },
+  { icon: "🤝", label: "Referral bonus", desc: "Invite friends to ZamoraxPay and earn a bonus when they start buying." },
+  { icon: "🔥", label: "Daily check-in streak", desc: "Check in every day to build a streak and unlock bigger rewards." },
+  { icon: "🎡", label: "Spin & Win", desc: "Spin for a chance to win wallet credit, airtime vouchers, data and discounts." },
 ]
 
 export const revalidate = 900 // 15 minutes — homepage content doesn't need to be second-fresh
@@ -84,9 +90,38 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* ── Rewards ──────────────────────────────────────────── */}
+      <section className="border-t border-border bg-bg py-16">
+        <div className="container">
+          <div className="mb-8 text-center">
+            <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">Get rewarded for every purchase</h2>
+            <p className="mt-2 text-muted-foreground">
+              Cashback, referral bonuses, daily streaks, and prizes, all credited to your ZamoraxPay wallet.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {REWARDS.map((r) => (
+              <div key={r.label} className="rounded-lg border border-border bg-white p-5">
+                <div className="mb-2 text-2xl" aria-hidden="true">{r.icon}</div>
+                <h3 className="font-heading font-semibold text-secondary">{r.label}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{r.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8 text-center">
+            <Link
+              href="/signup"
+              className="inline-block rounded-md bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            >
+              Create free account to start earning
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* ── Latest from the blog ─────────────────────────────── */}
       {latestPosts.length > 0 && (
-        <section className="border-t border-border bg-bg py-16">
+        <section className="border-t border-border py-16">
           <div className="container">
             <div className="mb-8 flex items-end justify-between">
               <div>

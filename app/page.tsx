@@ -25,6 +25,20 @@ const REWARDS = [
   { icon: "🎡", label: "Reward Spins", desc: "Use your reward spins to earn wallet credit, airtime and data vouchers, and purchase discounts." },
 ]
 
+const STEPS = [
+  { n: "1", title: "Create your account", desc: "Sign up with your email and phone number. It takes less than a minute and costs nothing." },
+  { n: "2", title: "Fund your wallet", desc: "Add money securely with Korapay. Your balance is ready to spend as soon as the payment clears." },
+  { n: "3", title: "Choose what to buy", desc: "Pick airtime, data, cable TV, electricity or an exam PIN, enter the details, and confirm." },
+  { n: "4", title: "Get it delivered", desc: "Your order goes to the best available provider. If one is down, the next takes over automatically." },
+]
+
+const TRUST = [
+  { title: "Multiple providers", desc: "Orders are routed through several independent providers, so one outage does not stop your purchase." },
+  { title: "Automatic refunds", desc: "If a purchase fails after every provider has been tried, your money returns to your wallet by itself." },
+  { title: "Clear records", desc: "Every transaction has a reference and sits in your history, so you always know what you paid for." },
+  { title: "Real support", desc: "Reach a real person by email or phone if something looks wrong. Details are on our contact page." },
+]
+
 export const revalidate = 900 // 15 minutes — homepage content doesn't need to be second-fresh
 
 export default async function HomePage() {
@@ -90,8 +104,49 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Rewards ──────────────────────────────────────────── */}
+      {/* ── How it works ─────────────────────────────────────── */}
+      <section className="border-t border-border py-16">
+        <div className="container">
+          <div className="mb-8 text-center">
+            <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">How ZamoraxPay works</h2>
+            <p className="mt-2 text-muted-foreground">Four simple steps from sign up to delivery.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {STEPS.map((step) => (
+              <div key={step.n} className="rounded-lg border border-border bg-white p-5">
+                <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                  {step.n}
+                </div>
+                <h3 className="font-heading font-semibold text-secondary">{step.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{step.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Why ZamoraxPay ───────────────────────────────────── */}
       <section className="border-t border-border bg-bg py-16">
+        <div className="container">
+          <div className="mb-8 text-center">
+            <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">Why people trust ZamoraxPay</h2>
+            <p className="mt-2 mx-auto max-w-2xl text-muted-foreground">
+              We built ZamoraxPay after seeing too many failed top-ups and slow refunds. Here is how we try to do better.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {TRUST.map((t) => (
+              <div key={t.title} className="rounded-lg border border-border bg-white p-5">
+                <h3 className="font-heading font-semibold text-secondary">{t.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{t.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Rewards ──────────────────────────────────────────── */}
+      <section className="border-t border-border py-16">
         <div className="container">
           <div className="mb-8 text-center">
             <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">Get rewarded for every purchase</h2>
@@ -121,7 +176,7 @@ export default async function HomePage() {
 
       {/* ── Latest from the blog ─────────────────────────────── */}
       {latestPosts.length > 0 && (
-        <section className="border-t border-border py-16">
+        <section className="border-t border-border bg-bg py-16">
           <div className="container">
             <div className="mb-8 flex items-end justify-between">
               <div>

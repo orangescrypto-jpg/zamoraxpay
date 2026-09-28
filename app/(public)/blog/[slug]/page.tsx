@@ -7,21 +7,44 @@ import { getSettingNumber } from "@/src/services/siteSettings"
 import { MarkdownContent } from "@/components/shared/MarkdownContent"
 import { ShareButton } from "@/components/shared/ShareButton"
 import { AdSenseSlot } from "@/components/shared/AdSenseSlot"
+import { formatDate } from "@/lib/utils"
 
 export const revalidate = 3600
+
+const BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://zamoraxpay.com.ng"
+
+function absolute(url: string): string {
+  return url.startsWith("http") ? url : `${BASE}${url.startsWith("/") ? "" : "/"}${url}`
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
   const post = await getPostBySlug(slug)
   if (!post) return {}
 
+  const description = post.metaDescription ?? post.excerpt ?? undefined
+  const image = absolute(post.coverImageUrl || "/blog-fallback-cover.svg")
+  const url = `${BASE}/blog/${post.slug}`
+
   return {
     title: `${post.title} — ZamoraxPay Blog`,
-    description: post.metaDescription ?? post.excerpt ?? undefined,
+    description,
+    alternates: { canonical: url },
     openGraph: {
+      type: "article",
+      url,
       title: post.title,
-      description: post.metaDescription ?? post.excerpt ?? undefined,
-      images: post.coverImageUrl ? [post.coverImageUrl] : ["/blog-fallback-cover.svg"],
+      description,
+      images: [{ url: image }],
+      publishedTime: post.publishedAt ?? undefined,
+      authors: post.authorName ? [post.authorName] : undefined,
+      siteName: "ZamoraxPay",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description,
+      images: [image],
     },
   }
 }
@@ -34,8 +57,21 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   const relatedCount = await getSettingNumber("related_post_count", 4)
   const relatedPosts = await getRelatedPosts(post, relatedCount)
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.metaDescription ?? post.excerpt ?? undefined,
+    image: absolute(post.coverImageUrl || "/blog-fallback-cover.svg"),
+    datePublished: post.publishedAt ?? undefined,
+    author: { "@type": "Organization", name: post.authorName || "ZamoraxPay Team" },
+    publisher: { "@type": "Organization", name: "ZamoraxPay" },
+    mainEntityOfPage: `${BASE}/blog/${post.slug}`,
+  }
+
   return (
     <div>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <article className="container max-w-3xl py-12">
         {post.category && (
           <Link
@@ -48,12 +84,18 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         <h1 className="mb-3 text-3xl font-heading font-bold text-secondary sm:text-4xl">{post.title}</h1>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {post.authorName && <span>{post.authorName}</span>}
+            <span>{post.authorName || "ZamoraxPay Team"}</span>
+            {post.publishedAt && (
+              <>
+                <span aria-hidden>·</span>
+                <time dateTime={post.publishedAt}>{formatDate(post.publishedAt)}</time>
+              </>
+            )}
           </div>
           <ShareButton
             title={post.title}
             text={post.excerpt ?? undefined}
-            url={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/blog/${post.slug}`}
+            url={`${BASE}/blog/${post.slug}`}
           />
         </div>
 

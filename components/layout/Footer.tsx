@@ -132,6 +132,38 @@ export function Footer() {
       <div className="container py-10">
         <FooterBanner />
 
+        {/* About + contact block: real, crawlable business information on every public page */}
+        <div className="mb-10 grid gap-8 border-b border-white/10 pb-10 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <h3 className="mb-3 text-sm font-semibold text-white">About ZamoraxPay</h3>
+            <p className="text-sm leading-relaxed text-white/70">
+              ZamoraxPay is a Nigerian payments platform that lets you buy airtime, data, cable TV
+              subscriptions, electricity tokens and exam PINs from one wallet. Every order is routed through
+              several independent service providers, so if one is slow or down, your purchase moves to the
+              next automatically. If it still fails, the money goes straight back to your wallet.
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-white/70">
+              Fund your wallet securely with Korapay, track every transaction in your history, and earn
+              cashback, referral bonuses and daily rewards as you go. We built ZamoraxPay so that paying for
+              everyday things online feels simple, fair and dependable.
+            </p>
+          </div>
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-white">Contact Us</h3>
+            <address className="space-y-2 text-sm not-italic text-white/70">
+              <p>Zamorax Enterprises Limited</p>
+              <p>Apete, Ibadan, Oyo State, Nigeria</p>
+              <p>
+                <a href="mailto:zamoraxpay@gmail.com" className="hover:text-white">zamoraxpay@gmail.com</a>
+              </p>
+              <p>
+                <a href="tel:+2347076479357" className="hover:text-white">+234 707 647 9357</a>
+              </p>
+              <p className="text-white/50">Mon to Sat, 8:00 AM to 8:00 PM</p>
+            </address>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           <div>
             <h3 className="mb-3 text-sm font-semibold text-white">ZamoraxPay</h3>
@@ -175,7 +207,7 @@ export function Footer() {
         {showAd && <AdSenseSlot slotKey="homepage_footer" className="mt-8" />}
 
         <div className="mt-8 border-t border-white/10 pt-6 text-center text-xs text-white/50">
-          <p>ZamoraxPay by Zamorax Enterprises Limited. RC9678731</p>
+          <p>ZamoraxPay by Zamorax Enterprises Limited. RC9678731. Apete, Ibadan, Oyo State, Nigeria.</p>
           <p>© {new Date().getFullYear()} ZamoraxPay. All rights reserved.</p>
         </div>
       </div>

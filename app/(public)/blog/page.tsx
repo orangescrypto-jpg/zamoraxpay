@@ -6,10 +6,53 @@ import { d1Query } from "@/lib/db"
 import { formatDate, cn } from "@/lib/utils"
 
 const POSTS_PER_PAGE = 30
+const BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://zamoraxpay.com.ng"
 
-export const metadata: Metadata = {
-  title: "Blog — ZamoraxPay",
-  description: "Guides, announcements, and updates from the ZamoraxPay team.",
+// Short intro shown on category pages (add more slugs as needed).
+// Falls back to a generic line for categories not listed here.
+const CATEGORY_INTROS: Record<string, string> = {
+  guides:
+    "Step-by-step guides on buying airtime and data, paying bills, and getting the most out of your ZamoraxPay wallet.",
+}
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ category?: string; page?: string }>
+}): Promise<Metadata> {
+  const { category, page: pageParam } = await searchParams
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1)
+
+  const label = category ? category.replace(/-/g, " ") : null
+  const title = label
+    ? `${label.charAt(0).toUpperCase()}${label.slice(1)} — ZamoraxPay Blog${page > 1 ? ` (Page ${page})` : ""}`
+    : `Blog — ZamoraxPay${page > 1 ? ` (Page ${page})` : ""}`
+  const description = "Guides, announcements, and updates from the ZamoraxPay team."
+
+  const params = new URLSearchParams()
+  if (category) params.set("category", category)
+  if (page > 1) params.set("page", String(page))
+  const qs = params.toString()
+  const canonical = `${BASE}/blog${qs ? `?${qs}` : ""}`
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "website",
+      url: canonical,
+      title,
+      description,
+      images: [{ url: "/blog-fallback-cover.svg" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["/blog-fallback-cover.svg"],
+    },
+  }
 }
 
 export const revalidate = 3600
@@ -37,12 +80,15 @@ export default async function BlogListPage({
     return qs ? `/blog?${qs}` : "/blog"
   }
 
+  const intro = category
+    ? CATEGORY_INTROS[category] ??
+      (activeLabel ? `Articles and guides about ${activeLabel.toLowerCase()} from the ZamoraxPay team.` : null)
+    : "Guides, announcements, and updates from the ZamoraxPay team."
+
   return (
     <div className="container py-12">
-      <h1 className="mb-2 text-3xl font-heading font-bold text-secondary">Blog</h1>
-      <p className="mb-6 text-muted-foreground">
-        {activeLabel ? `Posts in ${activeLabel}` : "Guides, announcements, and updates from the ZamoraxPay team."}
-      </p>
+      <h1 className="mb-2 text-3xl font-heading font-bold text-secondary">{activeLabel ?? "Blog"}</h1>
+      <p className="mb-6 max-w-2xl text-muted-foreground">{intro}</p>
 
       <div className="mb-10 flex flex-wrap gap-2">
         <Link
@@ -89,11 +135,9 @@ export default async function BlogListPage({
               {post.title}
             </h2>
             {post.excerpt && <p className="mb-2 text-sm text-muted-foreground">{post.excerpt}</p>}
-            {/* Date hidden for now — re-enable by uncommenting when ready to reveal.
             {post.publishedAt && (
               <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
             )}
-            */}
           </Link>
         ))}
 
@@ -105,6 +149,7 @@ export default async function BlogListPage({
           {page > 1 && (
             <Link
               href={buildPageHref(page - 1)}
+              rel="prev"
               className="rounded-md border border-border bg-white px-3 py-1.5 text-sm font-medium text-secondary hover:border-primary"
             >
               Previous
@@ -130,6 +175,7 @@ export default async function BlogListPage({
           {page < totalPages && (
             <Link
               href={buildPageHref(page + 1)}
+              rel="next"
               className="rounded-md border border-border bg-white px-3 py-1.5 text-sm font-medium text-secondary hover:border-primary"
             >
               Next

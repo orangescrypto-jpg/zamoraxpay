@@ -12,7 +12,7 @@ const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space
 export const metadata: Metadata = {
   title: "ZamoraxPay - Airtime, Data, Bills & More",
   description:
-    "Buy airtime, data, cable TV, electricity, exam PINs, and fund your betting wallet, all from one fast, reliable wallet.",
+    "Buy airtime, data, cable TV, electricity, and exam PINs, all from one fast, reliable wallet.",
   manifest: "/manifest.json",
   themeColor: "#0057FF",
   icons: {
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "ZamoraxPay - Airtime, Data, Bills & More",
     description:
-      "Buy airtime, data, cable TV, electricity, exam PINs, and fund your betting wallet, all from one fast, reliable wallet.",
+      "Buy airtime, data, cable TV, electricity, and exam PINs, all from one fast, reliable wallet.",
     images: [{ url: "/icon-512.png", width: 512, height: 512 }],
   },
   twitter: {

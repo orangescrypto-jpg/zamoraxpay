@@ -19,10 +19,10 @@ const SERVICES = [
 ]
 
 const REWARDS = [
-  { icon: "💸", label: "Cashback", desc: "Earn cashback on eligible purchases and claim it straight to your wallet." },
-  { icon: "🤝", label: "Referral bonus", desc: "Invite friends to ZamoraxPay and earn a bonus when they start buying." },
-  { icon: "🔥", label: "Daily check-in streak", desc: "Check in every day to build a streak and unlock bigger rewards." },
-  { icon: "🎡", label: "Spin & Win", desc: "Spin for a chance to win wallet credit, airtime vouchers, data and discounts." },
+  { icon: "💸", label: "Cashback", desc: "Get cashback on eligible purchases and move it to your wallet whenever you like." },
+  { icon: "🤝", label: "Referral bonus", desc: "Invite friends to ZamoraxPay and receive a bonus when they make their first purchase." },
+  { icon: "🔥", label: "Daily check-in streak", desc: "Check in daily to build a streak and earn extra wallet credit for staying active." },
+  { icon: "🎡", label: "Reward Spins", desc: "Use your reward spins to earn wallet credit, airtime and data vouchers, and purchase discounts." },
 ]
 
 export const revalidate = 900 // 15 minutes — homepage content doesn't need to be second-fresh

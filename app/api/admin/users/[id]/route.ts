@@ -8,6 +8,7 @@ import { requireStaff, requireSuperAdmin } from "@/lib/auth-server"
 import { d1Query } from "@/lib/db"
 import { createServiceRoleClient } from "@/src/services/providers/supabase/server"
 import { randomUUID } from "crypto"
+import { withDisplayAmount } from "@/src/services/vtuOrders"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireStaff(req)
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     supabase: supabaseUser,
     wallet: walletResult.results?.[0] ?? null,
     bvnVerification: bvnResult.results?.[0] ?? null,
-    recentOrders: ordersResult.results ?? [],
+    recentOrders: (ordersResult.results ?? []).map(withDisplayAmount),
     recentWalletTransactions: walletTxResult.results ?? [],
     fraudFlags: fraudResult.results ?? [],
   })

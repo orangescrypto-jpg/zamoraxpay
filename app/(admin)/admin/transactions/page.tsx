@@ -13,6 +13,8 @@ interface OrderRow {
   network_or_biller: string
   recipient: string
   amount_kobo: number
+  display_amount_kobo?: number
+  is_free_prize?: boolean
   provider_used: string | null
   status: string
   failure_reason: string | null
@@ -147,7 +149,7 @@ export default function AdminTransactionsPage() {
                     <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
                       <div>
                         <dt className="text-muted-foreground">Amount</dt>
-                        <dd className="font-medium">{formatNaira(o.amount_kobo)}</dd>
+                        <dd className="font-medium">{formatNaira(o.display_amount_kobo ?? o.amount_kobo)}</dd>
                       </div>
                       <div>
                         <dt className="text-muted-foreground">Provider</dt>
@@ -245,7 +247,7 @@ export default function AdminTransactionsPage() {
                             {o.service_type.replace("_", " ")} — {o.network_or_biller}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3">{o.recipient}</td>
-                          <td className="whitespace-nowrap px-4 py-3">{formatNaira(o.amount_kobo)}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{formatNaira(o.display_amount_kobo ?? o.amount_kobo)}</td>
                           <td className="px-4 py-3 text-muted-foreground">{o.provider_used ?? "—"}</td>
                           <td className="px-4 py-3">
                             <span className={orderBadge(o.status)}>{o.status}</span>

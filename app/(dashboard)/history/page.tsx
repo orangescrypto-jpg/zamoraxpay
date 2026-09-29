@@ -23,6 +23,8 @@ interface OrderRow {
   network_or_biller: string
   recipient: string
   amount_kobo: number
+  display_amount_kobo?: number
+  is_free_prize?: boolean
   status: string
   created_at: string
   delivered_data?: string | null // JSON string from D1 — parsed on render
@@ -139,7 +141,8 @@ export default function HistoryPage() {
                       )}
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-secondary">{formatNaira(order.amount_kobo)}</p>
+                      <p className="text-sm font-semibold text-secondary">{formatNaira(order.display_amount_kobo ?? order.amount_kobo)}</p>
+                      {order.is_free_prize && <p className="text-xs font-medium text-accent">Free prize</p>}
                       <span className={`text-xs font-medium capitalize ${statusColor(order.status)}`}>
                         {order.status}
                       </span>

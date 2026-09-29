@@ -12,6 +12,7 @@
 // req.meterType (defaults to "prepaid" if unset).
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
+import { readJsonOrThrow } from "@/src/services/providers/vtu/safeJson"
 import type {
   IVtuProviderAdapter,
   VtuPurchaseRequest,
@@ -152,7 +153,7 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
         { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
       )
 
-      const json = (await res.json()) as any
+      const json = await readJsonOrThrow(res, "CheapDataHub")
       const ok = res.ok && (json?.status === true || json?.status === "true" || json?.status === "success")
 
       if (ok) {
@@ -204,7 +205,7 @@ export const cheapdatahubAdapter: IVtuProviderAdapter = {
         { method: "GET", headers: { Authorization: `Bearer ${apiKey}` } },
         { retries: 2, timeoutMs: 10_000 },
       )
-      const json = (await res.json()) as any
+      const json = await readJsonOrThrow(res, "CheapDataHub")
       const raw = json?.data?.status ?? json?.status
       const status = raw === true || raw === "true" || raw === "successful" || raw === "success"
         ? "success"

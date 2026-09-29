@@ -42,6 +42,8 @@ interface Order {
   service_type: string
   network_or_biller: string
   amount_kobo: number
+  display_amount_kobo?: number
+  is_free_prize?: boolean
   status: string
   created_at: string
 }
@@ -344,8 +346,11 @@ export default function DashboardPage() {
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-[13.5px] font-medium tabular-nums text-primary">
-                          {formatNaira(order.amount_kobo)}
+                          {formatNaira(order.display_amount_kobo ?? order.amount_kobo)}
                         </p>
+                        {order.is_free_prize && (
+                          <p className="text-[11px] font-medium text-accent">Free prize</p>
+                        )}
                         <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${badge}`}>
                           {order.status}
                         </span>

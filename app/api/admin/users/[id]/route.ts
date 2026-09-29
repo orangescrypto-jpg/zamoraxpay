@@ -94,6 +94,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   await Promise.all([
     d1Query("DELETE FROM wallet_transactions WHERE user_id = ?", [id]),
     d1Query("DELETE FROM vtu_orders WHERE user_id = ?", [id]),
+    d1Query("DELETE FROM vtu_orders_archive WHERE user_id = ?", [id]),
     d1Query("DELETE FROM beneficiaries WHERE user_id = ?", [id]),
     d1Query("DELETE FROM auto_reload_rules WHERE user_id = ?", [id]),
     d1Query("DELETE FROM reseller_bvn_verifications WHERE user_id = ?", [id]),

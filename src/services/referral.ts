@@ -39,7 +39,7 @@ export async function maybeAwardReferralBonus(purchasingUserId: string, nativeDB
   const successfulOrders = await d1Query(
     // Only PAID orders count. Free prize deliveries (amount 0) must not qualify a referral,
     // or a referred account could win a voucher and trigger the referrer's bonus with no spend.
-    "SELECT COUNT(*) AS count FROM vtu_orders WHERE user_id = ? AND status = 'success' AND amount_kobo > 0",
+    "SELECT COUNT(*) AS count FROM vtu_orders_all WHERE user_id = ? AND status = 'success' AND amount_kobo > 0",
     [purchasingUserId],
     nativeDB,
   )

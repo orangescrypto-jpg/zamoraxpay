@@ -107,6 +107,8 @@ export default function AdminProvidersPage() {
   // default, so there's no need to fill this in unless you actually
   // need to point at a different host.
   const VTU_CRED_NOTES: Record<string, string> = {
+    vtugate:
+      "VTUGate needs its own numeric service_id for each network. Paste them as JSON in Service IDs, using lowercase network names (mtn, glo, airtel, 9mobile), with separate airtime and data sections.",
     clubkonnect:
       "This one UserID + APIKey pair authenticates every ClubKonnect service (Airtime, Data, Cable TV, Electricity, Betting, ePIN) — there's nothing separate to enter per service.",
   }
@@ -134,6 +136,7 @@ export default function AdminProvidersPage() {
     vtugate: [
       { key: "apiKey", label: "API Key", secret: true },
       { key: "baseUrl", label: "Base URL (leave blank for default)", placeholder: "https://api.vtugate.com/api/v1" },
+      { key: "serviceIds", label: "Service IDs (JSON)", placeholder: '{"airtime":{"mtn":"1","glo":"3"},"data":{"mtn":"5","glo":"7"}}' },
     ],
     connectbridge: [
       { key: "apiKey", label: "API Key", secret: true },

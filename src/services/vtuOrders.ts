@@ -173,7 +173,7 @@ export async function resolvePendingOrder(
 // is different and not guaranteed to be present yet at purchase time
 // for an async delivery).
 export async function getOrderById(orderId: string, nativeDB?: any) {
-  const result = await d1Query("SELECT * FROM vtu_orders WHERE id = ?", [orderId], nativeDB)
+  const result = await d1Query("SELECT * FROM vtu_orders_all WHERE id = ?", [orderId], nativeDB)
   return result.results?.[0] ?? null
 }
 
@@ -211,7 +211,7 @@ export function withDisplayAmount<T extends { amount_kobo?: number | null; base_
 
 export async function getOrderHistory(userId: string, limit = 50, nativeDB?: any) {
   const result = await d1Query(
-    "SELECT * FROM vtu_orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+    "SELECT * FROM vtu_orders_all WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
     [userId, limit],
     nativeDB,
   )

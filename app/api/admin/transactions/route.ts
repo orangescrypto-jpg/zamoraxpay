@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireStaff } from "@/lib/auth-server"
 import { d1Query } from "@/lib/db"
+import { withDisplayAmount } from "@/src/services/vtuOrders"
 
 export async function GET(req: NextRequest) {
   const auth = await requireStaff(req)
@@ -30,5 +31,5 @@ export async function GET(req: NextRequest) {
     : "SELECT * FROM vtu_orders ORDER BY created_at DESC LIMIT ?"
   const params = status ? [status, limit] : [limit]
   const result = await d1Query(sql, params)
-  return NextResponse.json({ orders: result.results ?? [] })
+  return NextResponse.json({ orders: (result.results ?? []).map(withDisplayAmount) })
 }

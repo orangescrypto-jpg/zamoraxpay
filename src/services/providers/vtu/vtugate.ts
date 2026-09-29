@@ -52,6 +52,7 @@
 // anything else simulates success (education: quantity >= 999 fails).
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
+import { readJsonOrThrow } from "@/src/services/providers/vtu/safeJson"
 import type {
   IVtuProviderAdapter,
   VtuPurchaseRequest,
@@ -86,7 +87,31 @@ async function postForm(
     },
     { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
   )
-  return res.json()
+  return readJsonOrThrow(res, "VTUGate")
+}
+
+// VTUGate identifies each network by its own numeric service_id, so the word
+// "Glo" is rejected with "Service not found!". The admin saves the IDs in the
+// VTUGate credentials as one JSON field, e.g.
+//   {"airtime":{"mtn":"1","glo":"3"},"data":{"mtn":"5","glo":"7"}}
+// (take the real IDs from the VTUGate dashboard/docs). A value that is already
+// numeric is sent as-is. For airtime and data with no ID configured we fail
+// with a clear message instead of sending a name VTUGate cannot read; other
+// services keep the previous behaviour.
+function resolveServiceId(req: VtuPurchaseRequest, credentials: VtuProviderCredentials): string | null {
+  const raw = (credentials as Record<string, string | undefined>).serviceIds
+  if (raw) {
+    try {
+      const table = JSON.parse(raw)
+      const id = table?.[req.serviceType]?.[req.networkOrBiller.toLowerCase()]
+      if (id !== undefined && id !== null && String(id).trim() !== "") return String(id).trim()
+    } catch {
+      // malformed JSON falls through to the checks below
+    }
+  }
+  if (/^\d+$/.test(req.networkOrBiller)) return req.networkOrBiller
+  if (req.serviceType === "airtime" || req.serviceType === "data") return null
+  return req.networkOrBiller
 }
 
 export const vtugateAdapter: IVtuProviderAdapter = {
@@ -107,7 +132,13 @@ export const vtugateAdapter: IVtuProviderAdapter = {
     // the router level. Falls back to networkOrBiller itself if no
     // mapping exists (works only if that field already holds the raw
     // numeric service_id).
-    const serviceId = req.networkOrBiller
+    const serviceId = resolveServiceId(req, credentials)
+    if (!serviceId) {
+      return {
+        success: false,
+        message: `VTUGate service_id for ${req.serviceType} on ${req.networkOrBiller} is not configured. Add it to "Service IDs" in Admin > Providers > VTUGate.`,
+      }
+    }
 
     try {
       switch (req.serviceType) {

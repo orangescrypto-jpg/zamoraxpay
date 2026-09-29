@@ -71,12 +71,12 @@ export async function getDashboardOverview(nativeDB?: any): Promise<DashboardOve
          SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success,
          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending
-       FROM vtu_orders`,
+       FROM vtu_orders_all`,
       [],
       nativeDB,
     ),
     d1Query(
-      `SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM vtu_orders WHERE status = 'success'`,
+      `SELECT COALESCE(SUM(amount_kobo), 0) AS total FROM vtu_orders_all WHERE status = 'success'`,
       [],
       nativeDB,
     ),
@@ -124,7 +124,7 @@ export async function getServiceBreakdown(nativeDB?: any): Promise<ServiceBreakd
        COUNT(*) AS order_count,
        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_count,
        COALESCE(SUM(CASE WHEN status = 'success' THEN amount_kobo ELSE 0 END), 0) AS volume_kobo
-     FROM vtu_orders
+     FROM vtu_orders_all
      GROUP BY service_type
      ORDER BY volume_kobo DESC`,
     [],
@@ -161,7 +161,7 @@ export async function getDailyVolume(days = 14, nativeDB?: any): Promise<DailyVo
 export async function getProviderPerformance(nativeDB?: any): Promise<ProviderPerformance[]> {
   const result = await d1Query(
     `SELECT provider_used AS provider_key, COUNT(*) AS fulfilled_count
-     FROM vtu_orders
+     FROM vtu_orders_all
      WHERE status = 'success' AND provider_used IS NOT NULL
      GROUP BY provider_used
      ORDER BY fulfilled_count DESC`,

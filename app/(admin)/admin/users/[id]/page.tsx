@@ -165,7 +165,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
             {recentOrders.slice(0, 20).map((o: any) => (
               <div key={o.id} className="flex justify-between text-sm">
                 <span className="capitalize text-secondary">{o.service_type.replace("_", " ")} — {o.network_or_biller}</span>
-                <span className="text-muted-foreground">{formatNaira(o.amount_kobo)} · {o.status}</span>
+                <span className="text-muted-foreground">{formatNaira(o.display_amount_kobo ?? o.amount_kobo)}{o.is_free_prize ? " (free prize)" : ""} · {o.status}</span>
               </div>
             ))}
           </div>

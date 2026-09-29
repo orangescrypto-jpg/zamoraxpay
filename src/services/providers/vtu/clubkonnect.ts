@@ -53,6 +53,7 @@
 // (e.g. "waecdirect", "de", "utme-mock").
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
+import { readJsonOrThrow } from "@/src/services/providers/vtu/safeJson"
 import type {
   IVtuProviderAdapter,
   VtuPurchaseRequest,
@@ -84,7 +85,7 @@ function buildUrl(baseUrl: string, path: string, params: Record<string, string |
 
 async function getJson(url: string): Promise<any> {
   const res = await fetchWithRetry(url, { method: "GET" }, { retries: 2, timeoutMs: 15_000, retryUnsafe: false })
-  return res.json()
+  return readJsonOrThrow(res, "ClubKonnect")
 }
 
 function isReceived(json: any): boolean {

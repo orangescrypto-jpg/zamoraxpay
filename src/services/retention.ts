@@ -41,6 +41,8 @@ export type RetentionJobKey =
   | "weekend_bonus"
   | "audit_log"
   | "order_attempts"
+  | "vtu_orders_archive"
+  | "vtu_orders_failed"
   | "pin_attempts"
 
 export interface RetentionJobDef {
@@ -52,7 +54,7 @@ export interface RetentionJobDef {
   /** Floor enforced no matter what the admin types. 1 = no special floor. */
   minDays: number
   /** What the job does, shown in the admin panel. */
-  action: "delete" | "blank" | "archive_delete"
+  action: "delete" | "blank" | "archive_delete" | "archive_move"
   /** Plain-English note shown under the job so the admin knows what is kept. */
   keeps: string
 }
@@ -73,7 +75,9 @@ export const RETENTION_JOBS: RetentionJobDef[] = [
   { key: "cashback_awards", label: "Cashback awards (claimed)", settingKey: "retention_cashback_awards_days", defaultDays: 90, minDays: 7, action: "delete", keeps: "Unclaimed awards are never deleted." },
   { key: "weekend_bonus", label: "Weekend bonus payout records", settingKey: "retention_weekend_bonus_days", defaultDays: 180, minDays: 30, action: "delete", keeps: "" },
   { key: "audit_log", label: "Admin audit log", settingKey: "retention_audit_log_days", defaultDays: 180, minDays: 30, action: "archive_delete", keeps: "Copied to R2 first." },
-  { key: "order_attempts", label: "VTU order provider-attempt logs", settingKey: "retention_order_attempts_days", defaultDays: 60, minDays: 14, action: "blank", keeps: "Only the attempts JSON is emptied, on success/refunded orders. Order rows are never deleted." },
+  { key: "order_attempts", label: "VTU order provider-attempt logs", settingKey: "retention_order_attempts_days", defaultDays: 60, minDays: 14, action: "blank", keeps: "Only the attempts JSON is emptied, on success/refunded/failed orders. Pending orders are never touched." },
+  { key: "vtu_orders_archive", label: "VTU orders: successful (archive)", settingKey: "retention_vtu_success_days", defaultDays: 180, minDays: 90, action: "archive_move", keeps: "Moved to an archive table, not deleted. Receipts, PIN/token lookup, referral checks and dashboard totals still read them; they only leave the Transactions list." },
+  { key: "vtu_orders_failed", label: "VTU orders: failed", settingKey: "retention_vtu_failed_days", defaultDays: 30, minDays: 30, action: "delete", keeps: "Deleted for good, no archive. Failed orders were never charged or were already refunded. Successful, refunded and pending orders are never touched." },
   { key: "pin_attempts", label: "Idle PIN-attempt rows", settingKey: "retention_pin_attempts_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Rows with failed attempts or an active lock are kept." },
 ]
 
@@ -291,17 +295,92 @@ async function jobWeekendBonus(ctx: RunContext, days: number): Promise<JobResult
 }
 
 async function jobOrderAttempts(ctx: RunContext, days: number): Promise<JobResult> {
-  // Only settled orders. A pending/failed order's attempt log is still what
-  // orphanedOrders.ts and the review queue read to decide what happened.
+  // Only settled orders. A PENDING order's attempt log is still what
+  // orphanedOrders.ts and the review queue read to decide what happened;
+  // failed orders are finished, nothing reads their attempts.
   const r = await updateInBatches(
     ctx,
     "vtu_orders",
     "id",
     "provider_attempts = NULL",
-    "status IN ('success','refunded') AND provider_attempts IS NOT NULL AND created_at < ?",
+    "status IN ('success','refunded','failed') AND provider_attempts IS NOT NULL AND created_at < ?",
     [cutoffSql(days, ctx.now)],
   )
   return result("order_attempts", r.updated, r.finished, "Order attempt logs cleared")
+}
+
+/**
+ * SUCCESSFUL VTU ORDERS: move to vtu_orders_archive (nothing is lost).
+ *
+ * Inserting an id into vtu_orders_archive_move fires trg_vtu_orders_archive_move
+ * (migrations/retention_vtu_orders.sql), which copies the row to the archive and
+ * deletes it from vtu_orders inside ONE statement. Live orders never sit in both
+ * tables, so the vtu_orders_all view never double counts. If the trigger or
+ * table is missing the job refuses to run, and after every chunk it checks the
+ * rows really left vtu_orders, so it can never loop on rows it failed to move.
+ */
+async function assertVtuArchiveReady(ctx: RunContext): Promise<void> {
+  const t = await d1Query(
+    `SELECT name FROM sqlite_master WHERE (type = 'trigger' AND name = 'trg_vtu_orders_archive_move') OR (type = 'table' AND name = 'vtu_orders_archive')`,
+    [],
+    ctx.nativeDB,
+  )
+  if ((t.results?.length ?? 0) < 2) {
+    throw new Error("Missing vtu_orders_archive table or trigger — run migrations/retention_vtu_orders.sql first. Nothing was moved.")
+  }
+}
+
+async function jobVtuOrdersArchive(ctx: RunContext, days: number): Promise<JobResult> {
+  await assertVtuArchiveReady(ctx)
+  const cutoff = cutoffSql(days, ctx.now)
+  let total = 0
+  while (timeLeft(ctx)) {
+    const sel = await d1Query(`SELECT id AS k FROM vtu_orders WHERE status = 'success' AND created_at < ? LIMIT ?`, [cutoff, ctx.batchSize], ctx.nativeDB)
+    const rows: any[] = sel.results ?? []
+    if (rows.length === 0) return result("vtu_orders_archive", total, true, "Successful orders archived")
+
+    for (let i = 0; i < rows.length; i += 90) {
+      const chunk = rows.slice(i, i + 90)
+      const ids = chunk.map((r) => r.k)
+      const values = ids.map(() => "(?)").join(",")
+      await d1Query(`INSERT INTO vtu_orders_archive_move (order_id) VALUES ${values}`, ids, ctx.nativeDB)
+
+      const marks = ids.map(() => "?").join(",")
+      const left = await d1Query(`SELECT COUNT(*) AS n FROM vtu_orders WHERE id IN (${marks})`, ids, ctx.nativeDB)
+      if (Number(left.results?.[0]?.n ?? 0) > 0) {
+        throw new Error("Orders did not leave vtu_orders after the archive step — stopped to avoid looping. Check trg_vtu_orders_archive_move.")
+      }
+      await d1Query(`DELETE FROM vtu_orders_archive_move WHERE order_id IN (${marks})`, ids, ctx.nativeDB)
+      total += ids.length
+    }
+    if (rows.length < ctx.batchSize) return result("vtu_orders_archive", total, true, "Successful orders archived")
+  }
+  return result("vtu_orders_archive", total, false, "Successful orders archived")
+}
+
+/**
+ * FAILED VTU ORDERS: deleted permanently, no archive.
+ * bulk_purchase_items.order_id is a foreign key to vtu_orders (write-only, nothing
+ * reads it), so it is cleared first; otherwise the delete can be rejected.
+ */
+async function jobVtuOrdersFailed(ctx: RunContext, days: number): Promise<JobResult> {
+  const cutoff = cutoffSql(days, ctx.now)
+  let total = 0
+  while (timeLeft(ctx)) {
+    const sel = await d1Query(`SELECT id AS k FROM vtu_orders WHERE status = 'failed' AND created_at < ? LIMIT ?`, [cutoff, ctx.batchSize], ctx.nativeDB)
+    const rows: any[] = sel.results ?? []
+    if (rows.length === 0) return result("vtu_orders_failed", total, true, "Failed orders deleted")
+
+    for (let i = 0; i < rows.length; i += 90) {
+      const ids = rows.slice(i, i + 90).map((r) => r.k)
+      const marks = ids.map(() => "?").join(",")
+      await d1Query(`UPDATE bulk_purchase_items SET order_id = NULL WHERE order_id IN (${marks})`, ids, ctx.nativeDB)
+      await d1Query(`DELETE FROM vtu_orders WHERE id IN (${marks}) AND status = 'failed'`, ids, ctx.nativeDB)
+      total += ids.length
+    }
+    if (rows.length < ctx.batchSize) return result("vtu_orders_failed", total, true, "Failed orders deleted")
+  }
+  return result("vtu_orders_failed", total, false, "Failed orders deleted")
 }
 
 async function jobPinAttempts(ctx: RunContext, days: number): Promise<JobResult> {
@@ -435,6 +514,8 @@ async function dispatch(job: RetentionJobDef, ctx: RunContext, days: number): Pr
     case "weekend_bonus": return jobWeekendBonus(ctx, days)
     case "audit_log": return jobAuditLog(ctx, days)
     case "order_attempts": return jobOrderAttempts(ctx, days)
+    case "vtu_orders_archive": return jobVtuOrdersArchive(ctx, days)
+    case "vtu_orders_failed": return jobVtuOrdersFailed(ctx, days)
     case "pin_attempts": return jobPinAttempts(ctx, days)
   }
 }
@@ -507,7 +588,9 @@ const PREVIEW_SQL: Record<RetentionJobKey, { sql: string; table: string }> = {
   cashback_awards: { table: "cashback_awards", sql: "SELECT COUNT(*) AS n FROM cashback_awards WHERE claimed = 1 AND created_at < ?" },
   weekend_bonus: { table: "weekend_bonus_payouts", sql: "SELECT COUNT(*) AS n FROM weekend_bonus_payouts WHERE created_at < ?" },
   audit_log: { table: "admin_audit_log", sql: "SELECT COUNT(*) AS n FROM admin_audit_log WHERE created_at < ?" },
-  order_attempts: { table: "vtu_orders", sql: "SELECT COUNT(*) AS n FROM vtu_orders WHERE status IN ('success','refunded') AND provider_attempts IS NOT NULL AND created_at < ?" },
+  order_attempts: { table: "vtu_orders", sql: "SELECT COUNT(*) AS n FROM vtu_orders WHERE status IN ('success','refunded','failed') AND provider_attempts IS NOT NULL AND created_at < ?" },
+  vtu_orders_archive: { table: "vtu_orders", sql: "SELECT COUNT(*) AS n FROM vtu_orders WHERE status = 'success' AND created_at < ?" },
+  vtu_orders_failed: { table: "vtu_orders", sql: "SELECT COUNT(*) AS n FROM vtu_orders WHERE status = 'failed' AND created_at < ?" },
   pin_attempts: { table: "pin_attempts", sql: "SELECT COUNT(*) AS n FROM pin_attempts WHERE failed_attempts = 0 AND (locked_until IS NULL OR locked_until <= datetime('now')) AND updated_at < ?" },
 }
 

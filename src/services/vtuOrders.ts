@@ -195,13 +195,27 @@ export async function attachDeliveredData(
   )
 }
 
+// Prize/voucher deliveries are stored with amount_kobo = 0 (nothing was charged to the
+// customer) and base_amount_kobo = what it really cost us. Everything that depends on
+// "was money charged?" (referral qualification, spend totals, analytics) reads amount_kobo,
+// so that stays 0. Screens should show the VALUE the customer received instead, so they
+// read display_amount_kobo, and is_free_prize lets them label it.
+export function withDisplayAmount<T extends { amount_kobo?: number | null; base_amount_kobo?: number | null }>(
+  order: T,
+): T & { display_amount_kobo: number; is_free_prize: boolean } {
+  const charged = Number(order.amount_kobo ?? 0)
+  const base = Number(order.base_amount_kobo ?? 0)
+  const isFreePrize = charged === 0 && base > 0
+  return { ...order, display_amount_kobo: isFreePrize ? base : charged, is_free_prize: isFreePrize }
+}
+
 export async function getOrderHistory(userId: string, limit = 50, nativeDB?: any) {
   const result = await d1Query(
     "SELECT * FROM vtu_orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
     [userId, limit],
     nativeDB,
   )
-  return result.results ?? []
+  return (result.results ?? []).map(withDisplayAmount)
 }
 
 // Wallet-level transactions: funding, withdrawals, cashback, referral

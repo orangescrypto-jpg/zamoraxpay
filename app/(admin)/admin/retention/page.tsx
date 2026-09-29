@@ -7,7 +7,7 @@ import { createClient } from "@/src/services/providers/supabase/client"
 interface JobStatus {
   key: string
   label: string
-  action: "delete" | "blank" | "archive_delete"
+  action: "delete" | "blank" | "archive_delete" | "archive_move"
   keeps: string
   days: number
   minDays: number
@@ -25,6 +25,7 @@ const ACTION_LABEL: Record<JobStatus["action"], string> = {
   delete: "Permanently deletes",
   blank: "Empties the data column of",
   archive_delete: "Copies to R2, then permanently deletes",
+  archive_move: "Moves to the archive table (not deleted)",
 }
 
 export default function AdminRetentionPage() {
@@ -119,8 +120,8 @@ export default function AdminRetentionPage() {
         <h1 className="text-2xl font-heading font-bold">Data Retention</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Keeps your database and storage small by removing old data on a schedule. Everything below is{" "}
-          <strong>permanent</strong> once it runs. Wallet transactions and the audit log are copied to R2 first; the
-          rest cannot be recovered. Set a job to <strong>0</strong> to turn it off.
+          <strong>permanent</strong> once it runs. Wallet transactions and the audit log are copied to R2 first, and old successful VTU orders are moved to an archive
+          table (not deleted); the rest cannot be recovered. Set a job to <strong>0</strong> to turn it off.
         </p>
       </div>
 
@@ -259,7 +260,7 @@ export default function AdminRetentionPage() {
                       title={changed ? "Save the new days first" : job.days === 0 ? "This job is off" : undefined}
                       className="ml-auto rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
                     >
-                      Delete now
+                      {job.action === "archive_move" ? "Archive now" : "Delete now"}
                     </button>
                   )}
                 </div>

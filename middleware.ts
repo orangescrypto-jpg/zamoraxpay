@@ -7,26 +7,7 @@
 
 import { NextResponse, type NextRequest } from "next/server"
 import { createMiddlewareClient } from "@/src/services/providers/supabase/middleware"
-
-const PROTECTED_PREFIXES = [
-  "/dashboard",
-  "/wallet",
-  "/services",
-  "/reseller",
-  "/history",
-  "/beneficiaries",
-  "/settings",
-  "/withdraw",
-  "/spin",
-  "/play",
-  "/rewards",
-  "/referrals",
-  "/refund",
-  "/daily-streak",
-  "/cashback",
-]
-const ADMIN_PREFIX = "/admin"
-const AUTH_PREFIXES = ["/login", "/signup"]
+import { PROTECTED_PREFIXES, ADMIN_PREFIX, AUTH_PREFIXES } from "@/lib/privateRoutes"
 
 export async function middleware(request: NextRequest) {
   const { supabase, supabaseResponse } = createMiddlewareClient(request)
@@ -59,6 +40,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
+  // Forward the current pathname as a request header so server
+  // components — AdSenseLoader in particular — can tell whether
+  // they're rendering a private route without needing client JS or a
+  // second copy of the path list.
+  supabaseResponse.headers.set("x-pathname", pathname)
   return supabaseResponse
 }
 

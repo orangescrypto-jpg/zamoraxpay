@@ -106,6 +106,38 @@ export async function listPublishedPostsPaginated(
   }
 }
 
+/**
+ * Latest published posts for each of the given category slugs, in one
+ * batch — used for the homepage's magazine-style "one row per
+ * category" layout so it doesn't issue a separate round-trip per
+ * category. Categories with zero published posts are simply absent
+ * from the returned map (caller decides whether to render the row).
+ */
+export async function listLatestPostsByCategories(
+  categorySlugs: string[],
+  limitPerCategory: number,
+  nativeDB?: any,
+): Promise<Record<string, BlogPost[]>> {
+  if (categorySlugs.length === 0) return {}
+
+  const results = await Promise.all(
+    categorySlugs.map((slug) =>
+      d1Query(
+        "SELECT * FROM blog_posts WHERE status = 'published' AND category = ? ORDER BY published_at DESC LIMIT ?",
+        [slug, limitPerCategory],
+        nativeDB,
+      ),
+    ),
+  )
+
+  const byCategory: Record<string, BlogPost[]> = {}
+  categorySlugs.forEach((slug, i) => {
+    const posts = (results[i].results ?? []).map(mapRow)
+    if (posts.length > 0) byCategory[slug] = posts
+  })
+  return byCategory
+}
+
 export async function getPostBySlug(slug: string, nativeDB?: any): Promise<BlogPost | null> {
   const result = await d1Query(
     `SELECT p.*, a.slug as author_slug, a.photo_url as author_photo_url, a.bio as author_bio

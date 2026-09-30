@@ -12,9 +12,21 @@
 // adsense_client_id) so the publisher ID lives in the database, not
 // hardcoded, and can be turned off instantly from the admin UI.
 
+import { headers } from "next/headers"
 import { getSetting, getSettingBoolean } from "@/src/services/siteSettings"
+import { isPrivatePath } from "@/lib/privateRoutes"
 
 export async function AdSenseLoader() {
+  const headerList = await headers()
+  const pathname = headerList.get("x-pathname")
+
+  // Never load the AdSense script at all on authenticated app pages,
+  // the admin panel, or the login/signup forms. These are noindex'd,
+  // never seen by any crawler, and on the dashboard/admin side may be
+  // showing a logged-in user's real account/transaction data — not a
+  // page you want an ad script (or, later, an ad unit) anywhere near.
+  if (isPrivatePath(pathname)) return null
+
   const [enabled, clientId] = await Promise.all([
     getSettingBoolean("adsense_enabled", false),
     getSetting("adsense_client_id"),

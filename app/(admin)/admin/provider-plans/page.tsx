@@ -93,6 +93,7 @@ export default function ProviderPlanMappingsPage() {
     | "clubkonnect-cable"
     | "clubkonnect-exam-pin"
     | "cheapdatahub-exam-pin"
+    | "inlomax"
   const [syncingProvider, setSyncingProvider] = useState<SyncKey | null>(null)
   const [syncResults, setSyncResults] = useState<
     Record<SyncKey, { fetched?: number; created?: number; updated?: number; skipped?: number; error?: string } | null>
@@ -106,6 +107,7 @@ export default function ProviderPlanMappingsPage() {
     "clubkonnect-cable": null,
     "clubkonnect-exam-pin": null,
     "cheapdatahub-exam-pin": null,
+    inlomax: null,
   })
 
   // VTUGate cable sync needs a real smartcard per biller (no
@@ -732,6 +734,36 @@ export default function ProviderPlanMappingsPage() {
                     ? `, ${syncResults["cheapdatahub-exam-pin"]!.skipped} skipped`
                     : ""}
                   .
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-white p-4">
+          <h2 className="mb-1 font-heading font-semibold text-secondary">Sync live plans — Inlomax</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Pulls Inlomax's entire live catalog in one call (GET /api/services) — data bundles, cable plans,
+            and exam pins — and upserts them into the mappings below. Requires the Inlomax API key saved on
+            the Providers page.
+          </p>
+          <button
+            onClick={() => syncProvider("inlomax")}
+            disabled={syncingProvider === "inlomax"}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncingProvider === "inlomax" ? "Syncing..." : "Sync from Inlomax"}
+          </button>
+
+          {syncResults.inlomax && (
+            <div className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
+              {syncResults.inlomax.error ? (
+                <p className="text-destructive">{syncResults.inlomax.error}</p>
+              ) : (
+                <p className="font-medium text-secondary">
+                  Fetched {syncResults.inlomax.fetched} plans — {syncResults.inlomax.created} new,{" "}
+                  {syncResults.inlomax.updated} updated
+                  {syncResults.inlomax.skipped ? `, ${syncResults.inlomax.skipped} skipped` : ""}.
                 </p>
               )}
             </div>

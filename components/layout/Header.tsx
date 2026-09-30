@@ -10,6 +10,20 @@ import type { Banner } from "@/src/types"
 
 const AUTO_SLIDE_INTERVAL_MS = 5000
 
+// The 5 featured blog categories shown in the Blog nav dropdown, in
+// display order. Kept in sync with the sort_order set in
+// migrations/2026-09-add-tech-news-category.sql. This is a small,
+// stable set curated for navigation — it intentionally doesn't
+// include every row in blog_categories (e.g. reseller-tips), and
+// doesn't need a DB round-trip just to render the header.
+const BLOG_NAV_CATEGORIES = [
+  { slug: "tech-news", label: "Tech News" },
+  { slug: "guides", label: "Guides" },
+  { slug: "network-news", label: "Network News" },
+  { slug: "promotions", label: "Promotions" },
+  { slug: "announcements", label: "Announcements" },
+]
+
 function BannerSlider() {
   const [banners, setBanners] = useState<Banner[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -101,6 +115,7 @@ export function Header() {
   const router = useRouter()
   const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [blogMenuOpen, setBlogMenuOpen] = useState(false)
   const [bannerVisible, setBannerVisible] = useState(true)
   const isAdmin = !!user?.adminRole
 
@@ -152,9 +167,52 @@ export function Header() {
               Dashboard
             </Link>
           )}
-          <Link href="/blog" className="text-sm font-medium text-secondary hover:text-primary">
-            Blog
-          </Link>
+          <div
+            className="relative"
+            onMouseEnter={() => setBlogMenuOpen(true)}
+            onMouseLeave={() => setBlogMenuOpen(false)}
+          >
+            <Link
+              href="/blog"
+              className="flex items-center gap-1 text-sm font-medium text-secondary hover:text-primary"
+              aria-expanded={blogMenuOpen}
+            >
+              Blog
+              <svg
+                className={cn("h-3.5 w-3.5 transition-transform", blogMenuOpen && "rotate-180")}
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </Link>
+
+            {blogMenuOpen && (
+              <div className="absolute left-0 top-full z-50 w-48 rounded-lg border border-border bg-white py-1 shadow-lg">
+                <Link
+                  href="/blog"
+                  className="block px-4 py-2 text-sm font-medium text-secondary hover:bg-muted hover:text-primary"
+                >
+                  All Posts
+                </Link>
+                <div className="my-1 border-t border-border" />
+                {BLOG_NAV_CATEGORIES.map((c) => (
+                  <Link
+                    key={c.slug}
+                    href={`/blog?category=${c.slug}`}
+                    className="block px-4 py-2 text-sm text-secondary hover:bg-muted hover:text-primary"
+                  >
+                    {c.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
           <Link href="/reseller" prefetch={false} className="text-sm font-medium text-secondary hover:text-primary">
             Become a Reseller
           </Link>
@@ -256,6 +314,18 @@ export function Header() {
             >
               Blog
             </Link>
+            <div className="flex flex-col pl-3">
+              {BLOG_NAV_CATEGORIES.map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/blog?category=${c.slug}`}
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-primary"
+                >
+                  {c.label}
+                </Link>
+              ))}
+            </div>
             <Link
               href="/reseller"
               prefetch={false}

@@ -20,6 +20,7 @@ export interface BlogPost {
   // undefined otherwise, distinct from an explicitly-linked-but-inactive author.
   authorSlug?: string | null
   authorPhotoUrl?: string | null
+  authorBio?: string | null
   metaDescription: string | null
   publishedAt: string | null
   sendPush: boolean
@@ -54,6 +55,7 @@ function mapRowWithAuthor(r: any): BlogPost {
     ...mapRow(r),
     authorSlug: r.author_slug ?? null,
     authorPhotoUrl: r.author_photo_url ?? null,
+    authorBio: r.author_bio ?? null,
   }
 }
 
@@ -106,7 +108,7 @@ export async function listPublishedPostsPaginated(
 
 export async function getPostBySlug(slug: string, nativeDB?: any): Promise<BlogPost | null> {
   const result = await d1Query(
-    `SELECT p.*, a.slug as author_slug, a.photo_url as author_photo_url
+    `SELECT p.*, a.slug as author_slug, a.photo_url as author_photo_url, a.bio as author_bio
      FROM blog_posts p
      LEFT JOIN blog_authors a ON a.id = p.author_id
      WHERE p.slug = ? AND p.status = 'published'`,

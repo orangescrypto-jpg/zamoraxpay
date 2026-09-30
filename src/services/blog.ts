@@ -15,6 +15,11 @@ export interface BlogPost {
   category: string | null
   status: "draft" | "published"
   authorName: string | null
+  authorId: string | null
+  // Populated only when the query joins blog_authors (see mapRowWithAuthor) —
+  // undefined otherwise, distinct from an explicitly-linked-but-inactive author.
+  authorSlug?: string | null
+  authorPhotoUrl?: string | null
   metaDescription: string | null
   publishedAt: string | null
   sendPush: boolean
@@ -32,10 +37,23 @@ function mapRow(r: any): BlogPost {
     category: r.category,
     status: r.status,
     authorName: r.author_name,
+    authorId: r.author_id ?? null,
     metaDescription: r.meta_description,
     publishedAt: r.published_at,
     sendPush: !!r.send_push,
     pushSentAt: r.push_sent_at,
+  }
+}
+
+// Same as mapRow, plus the linked author's slug/photo when the caller's
+// SQL joins blog_authors as `a` (see getPostBySlug). Used so the public
+// post page can link the byline to /blog/authors/[slug] and show a photo
+// without a second round-trip query.
+function mapRowWithAuthor(r: any): BlogPost {
+  return {
+    ...mapRow(r),
+    authorSlug: r.author_slug ?? null,
+    authorPhotoUrl: r.author_photo_url ?? null,
   }
 }
 
@@ -87,9 +105,16 @@ export async function listPublishedPostsPaginated(
 }
 
 export async function getPostBySlug(slug: string, nativeDB?: any): Promise<BlogPost | null> {
-  const result = await d1Query("SELECT * FROM blog_posts WHERE slug = ? AND status = 'published'", [slug], nativeDB)
+  const result = await d1Query(
+    `SELECT p.*, a.slug as author_slug, a.photo_url as author_photo_url
+     FROM blog_posts p
+     LEFT JOIN blog_authors a ON a.id = p.author_id
+     WHERE p.slug = ? AND p.status = 'published'`,
+    [slug],
+    nativeDB,
+  )
   const row = result.results?.[0]
-  return row ? mapRow(row) : null
+  return row ? mapRowWithAuthor(row) : null
 }
 
 export async function getRelatedPosts(post: BlogPost, limit: number, nativeDB?: any): Promise<BlogPost[]> {
@@ -141,6 +166,7 @@ export async function createPost(
     coverImageUrl?: string
     category?: string
     authorName?: string
+    authorId?: string
     metaDescription?: string
     status: "draft" | "published"
     sendPush?: boolean
@@ -151,8 +177,8 @@ export async function createPost(
   const id = randomUUID()
   await d1Query(
     `INSERT INTO blog_posts
-      (id, slug, title, excerpt, content_markdown, cover_image_url, category, status, author_name, meta_description, published_at, created_by, send_push)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, slug, title, excerpt, content_markdown, cover_image_url, category, status, author_name, author_id, meta_description, published_at, created_by, send_push)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       params.slug,
@@ -163,6 +189,7 @@ export async function createPost(
       params.category ?? null,
       params.status,
       params.authorName ?? null,
+      params.authorId ?? null,
       params.metaDescription ?? null,
       params.status === "published" ? new Date().toISOString() : null,
       adminUserId,
@@ -191,6 +218,7 @@ export async function updatePost(
     coverImageUrl: string
     category: string
     authorName: string
+    authorId: string | null
     metaDescription: string
     status: "draft" | "published"
     sendPush: boolean
@@ -214,6 +242,7 @@ export async function updatePost(
     coverImageUrl: "cover_image_url",
     category: "category",
     authorName: "author_name",
+    authorId: "author_id",
     metaDescription: "meta_description",
     status: "status",
   }

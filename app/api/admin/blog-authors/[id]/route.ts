@@ -1,7 +1,7 @@
-// app/api/admin/blog/posts/[id]/route.ts
+// app/api/admin/blog-authors/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { requireStaff } from "@/lib/auth-server"
-import { updatePost, deletePost } from "@/src/services/blog"
+import { updateAuthor, deleteAuthor } from "@/src/services/blogAuthors"
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireStaff(req)
@@ -9,9 +9,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params
   try {
-    const updates = await req.json()
-    await updatePost(id, updates)
-    return NextResponse.json({ success: true })
+    const body = await req.json()
+    const { name, bio, photoUrl, isActive } = body
+    if (!name || !String(name).trim()) {
+      return NextResponse.json({ error: "Name is required" }, { status: 400 })
+    }
+    const author = await updateAuthor(id, { name, bio, photoUrl, isActive })
+    return NextResponse.json({ success: true, author })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Update failed" }, { status: 500 })
   }
@@ -22,6 +26,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!auth.ok) return auth.error
 
   const { id } = await params
-  await deletePost(id)
+  await deleteAuthor(id)
   return NextResponse.json({ success: true })
 }

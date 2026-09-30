@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SimpleBlogEditor } from "@/components/admin/SimpleBlogEditor"
 import { ImagePicker } from "@/components/admin/ImagePicker"
+import { AuthorSelect } from "@/components/admin/AuthorSelect"
 import { createClient } from "@/src/services/providers/supabase/client"
 
 function slugify(title: string): string {
@@ -25,6 +26,7 @@ interface BlogPostFormProps {
     coverImageUrl: string
     category: string
     authorName: string
+    authorId?: string | null
     metaDescription: string
     status: "draft" | "published"
     sendPush?: boolean
@@ -41,6 +43,7 @@ export function BlogPostForm({ postId, initial }: BlogPostFormProps) {
   const [coverImageUrl, setCoverImageUrl] = useState(initial?.coverImageUrl ?? "")
   const [category, setCategory] = useState(initial?.category ?? "guides")
   const [authorName, setAuthorName] = useState(initial?.authorName ?? "The ZamoraxPay Team")
+  const [authorId, setAuthorId] = useState<string | null>(initial?.authorId ?? null)
   const [metaDescription, setMetaDescription] = useState(initial?.metaDescription ?? "")
   const [status, setStatus] = useState<"draft" | "published">(initial?.status ?? "draft")
   const [sendPush, setSendPush] = useState(initial?.sendPush ?? false)
@@ -74,6 +77,7 @@ export function BlogPostForm({ postId, initial }: BlogPostFormProps) {
       coverImageUrl,
       category,
       authorName,
+      authorId,
       metaDescription,
       status,
       sendPush,
@@ -196,11 +200,14 @@ export function BlogPostForm({ postId, initial }: BlogPostFormProps) {
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-secondary">Author Name</label>
-        <input
-          value={authorName}
-          onChange={(e) => setAuthorName(e.target.value)}
-          className="w-full rounded-md border border-border px-3 py-2 text-sm"
+        <label className="mb-1 block text-sm font-medium text-secondary">Author</label>
+        <AuthorSelect
+          authorId={authorId}
+          authorName={authorName}
+          onChange={(id, name) => {
+            setAuthorId(id)
+            setAuthorName(name)
+          }}
         />
       </div>
 

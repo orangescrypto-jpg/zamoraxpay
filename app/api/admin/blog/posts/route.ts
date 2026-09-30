@@ -1,10 +1,10 @@
 // app/api/admin/blog/posts/route.ts
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth-server"
+import { requireStaff } from "@/lib/auth-server"
 import { listAllPostsAdmin, createPost } from "@/src/services/blog"
 
 export async function GET(req: NextRequest) {
-  const auth = await requireAdmin(req)
+  const auth = await requireStaff(req)
   if (!auth.ok) return auth.error
 
   const posts = await listAllPostsAdmin()
@@ -12,12 +12,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAdmin(req)
+  const auth = await requireStaff(req)
   if (!auth.ok) return auth.error
 
   try {
     const body = await req.json()
-    const { slug, title, excerpt, contentMarkdown, coverImageUrl, category, authorName, metaDescription, status, sendPush } = body
+    const { slug, title, excerpt, contentMarkdown, coverImageUrl, category, authorName, authorId, metaDescription, status, sendPush } = body
 
     if (!slug || !title || !contentMarkdown) {
       return NextResponse.json({ error: "slug, title, and contentMarkdown are required" }, { status: 400 })
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
         coverImageUrl,
         category,
         authorName,
+        authorId: authorId || undefined,
         metaDescription,
         status: status === "published" ? "published" : "draft",
         sendPush: !!sendPush,

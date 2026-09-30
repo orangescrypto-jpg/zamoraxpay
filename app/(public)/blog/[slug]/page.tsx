@@ -7,6 +7,8 @@ import { getSettingNumber } from "@/src/services/siteSettings"
 import { MarkdownContent } from "@/components/shared/MarkdownContent"
 import { ShareButton } from "@/components/shared/ShareButton"
 import { AdSenseSlot } from "@/components/shared/AdSenseSlot"
+import { AuthorBox } from "@/components/shared/AuthorBox"
+import { BlogComments } from "@/components/shared/BlogComments"
 import { formatDate } from "@/lib/utils"
 
 export const revalidate = 3600
@@ -108,6 +110,12 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         <MarkdownContent markdown={post.contentMarkdown} />
 
         <AdSenseSlot slotKey="blog_post" className="mt-10" />
+
+        <div className="mt-10">
+          <AuthorBox authorName={post.authorName} authorSlug={post.authorSlug} authorPhotoUrl={post.authorPhotoUrl} />
+        </div>
+
+        <BlogComments postSlug={post.slug} />
       </article>
 
       {relatedPosts.length > 0 && (

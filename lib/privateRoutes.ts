@@ -11,7 +11,6 @@
 export const PROTECTED_PREFIXES = [
   "/dashboard",
   "/wallet",
-  "/services",
   "/reseller",
   "/history",
   "/beneficiaries",

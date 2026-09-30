@@ -133,3 +133,26 @@ export interface SitePage {
   contentMarkdown: string
   metaDescription: string | null
 }
+
+export interface ServicePageFaq {
+  question: string
+  answer: string
+}
+
+export interface ServicePagePricingRow {
+  label: string
+  value: string
+}
+
+export interface ServicePage {
+  slug: string
+  title: string
+  tagline: string | null
+  contentMarkdown: string
+  networks: string[]
+  pricing: ServicePagePricingRow[]
+  faqs: ServicePageFaq[]
+  buyButtonLabel: string
+  buyButtonHref: string
+  metaDescription: string | null
+}

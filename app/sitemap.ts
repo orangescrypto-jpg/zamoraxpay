@@ -18,6 +18,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/terms`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
     { url: `${base}/cookie-policy`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
     { url: `${base}/refund-policy`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
+    ...[
+      "airtime",
+      "data",
+      "cable",
+      "electricity",
+      "exam-pin",
+      "airtime-to-cash",
+      "epin",
+      "bulk-airtime",
+      "bulk-data",
+      "international-topup",
+    ].map((slug) => ({
+      url: `${base}/services/${slug}`,
+      lastModified: now,
+      changeFrequency: "monthly" as const,
+      priority: 0.8,
+    })),
   ]
 
   const listingRoutes: MetadataRoute.Sitemap = []

@@ -1221,3 +1221,167 @@ export async function syncPairgateCablePlans(
 
   return { fetched, ...counts }
 }
+
+// Inlomax — single GET /api/services call returns its entire live
+// catalog (data plans, cable plans, exam pins, airtime discounts,
+// electricity discos) in one response, unlike every other provider
+// above which needs one call per network/biller. See
+// src/services/providers/vtu/inlomax.ts for the purchase-side
+// adapter and https://inlomax.com/docs/services for the confirmed
+// response shape:
+//   { status, message, data: { airtime, dataPlans, cablePlans, electricity, education } }
+//
+// Only dataPlans, cablePlans, and education are synced here — these
+// are genuine per-item catalogs with their own serviceID + price.
+// airtime and electricity are flat percentage discounts off
+// face value (see adapter comment), same non-catalog shape as
+// ClubKonnect/VTUGate's airtime and electricity, so those stay
+// configured manually via pricing_rules rather than synced here.
+function parseInlomaxCurrency(raw: unknown): number {
+  // Inlomax's amounts are sometimes comma-formatted strings (e.g.
+  // "4,000.00" on cablePlans) and sometimes plain numbers/numeric
+  // strings (dataPlans' "amount"). Strip everything but digits and
+  // the decimal point before parsing either way.
+  if (typeof raw === "number") return raw
+  return parseFloat(String(raw ?? "").replace(/[^0-9.]/g, ""))
+}
+
+export async function syncInlomaxPlans(
+  adminUserId: string,
+  credentials: { apiKey?: string; baseUrl?: string; testMode?: string } = {},
+  nativeDB?: any,
+): Promise<PlanSyncResult> {
+  const testMode = credentials.testMode === "true" || credentials.testMode === "1"
+  const baseUrl =
+    credentials.baseUrl ||
+    process.env.INLOMAX_BASE_URL ||
+    (testMode ? "https://inlomax.com/sandbox" : "https://inlomax.com/api")
+  const apiKey = credentials.apiKey || process.env.INLOMAX_API_KEY
+  if (!apiKey) throw new Error("Inlomax API key not configured")
+
+  const res = await fetchWithRetry(
+    `${baseUrl}/services`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Token ${apiKey}`,
+      },
+    },
+    { retries: 2, timeoutMs: 15_000, retryUnsafe: false },
+  )
+  const json = await parseJsonOrThrow(res, "Inlomax", "services")
+  const data = json?.data ?? {}
+
+  let fetched = 0
+  let created = 0
+  let updated = 0
+  let skipped = 0
+
+  // Data plans — { serviceID, network, dataPlan, amount, dataType, validity }
+  const dataPlans: any[] = Array.isArray(data.dataPlans) ? data.dataPlans : []
+  fetched += dataPlans.length
+  for (const plan of dataPlans) {
+    const serviceId = String(plan.serviceID ?? "")
+    const network = NETWORK_LABEL[String(plan.network ?? "").toUpperCase()] ?? String(plan.network ?? "")
+    const priceNaira = parseInlomaxCurrency(plan.amount)
+    const costKobo = Math.round(priceNaira * 100)
+    if (!serviceId || !network || Number.isNaN(costKobo) || costKobo <= 0) {
+      skipped++
+      continue
+    }
+    // dataType (e.g. "CORPORATE GIFTING", "SME", "AWOOF") disambiguates
+    // otherwise-identical-looking plans on the same network — fold it
+    // into the label text canonicalizedPlanCode parses, same as every
+    // other provider's category/type field.
+    const label = [plan.dataPlan, plan.validity, plan.dataType].filter(Boolean).join(" ")
+    const planCode = canonicalizedPlanCode(label || String(plan.dataPlan ?? ""), network, "data")
+    const existing = await findMappingByNaturalKey("data", network, planCode, "inlomax", nativeDB)
+    await upsertPlanMapping(
+      {
+        id: existing?.id,
+        serviceType: "data",
+        networkOrBiller: network,
+        planCode,
+        providerKey: "inlomax",
+        providerPlanId: serviceId,
+        providerCostKobo: costKobo,
+        providerPlanLabel: label || null,
+      },
+      adminUserId,
+      nativeDB,
+    )
+    if (existing) updated++
+    else created++
+  }
+
+  // Cable plans — { serviceID, cablePlan, cable, amount, discount }
+  const cablePlans: any[] = Array.isArray(data.cablePlans) ? data.cablePlans : []
+  fetched += cablePlans.length
+  for (const plan of cablePlans) {
+    const serviceId = String(plan.serviceID ?? "")
+    const biller = String(plan.cable ?? "").toUpperCase()
+    const priceNaira = parseInlomaxCurrency(plan.amount)
+    const costKobo = Math.round(priceNaira * 100)
+    if (!serviceId || !biller || Number.isNaN(costKobo) || costKobo <= 0) {
+      skipped++
+      continue
+    }
+    const planCode = canonicalizedPlanCode(String(plan.cablePlan ?? ""), biller, "cable")
+    const existing = await findMappingByNaturalKey("cable", biller, planCode, "inlomax", nativeDB)
+    await upsertPlanMapping(
+      {
+        id: existing?.id,
+        serviceType: "cable",
+        networkOrBiller: biller,
+        planCode,
+        providerKey: "inlomax",
+        providerPlanId: serviceId,
+        providerCostKobo: costKobo,
+        providerPlanLabel: plan.cablePlan ?? null,
+      },
+      adminUserId,
+      nativeDB,
+    )
+    if (existing) updated++
+    else created++
+  }
+
+  // Exam pins — { serviceID, type, amount }. "type" is the exam board
+  // itself (e.g. "WAEC"), not the pin's registration/result_checker
+  // kind, which Inlomax's own docs sample doesn't separately expose —
+  // classify off the combined text same as every other provider, and
+  // skip (rather than guess) when classifyExamPinType can't tell.
+  const education: any[] = Array.isArray(data.education) ? data.education : []
+  fetched += education.length
+  for (const plan of education) {
+    const serviceId = String(plan.serviceID ?? "")
+    const board = String(plan.type ?? "").toUpperCase()
+    const priceNaira = parseInlomaxCurrency(plan.amount)
+    const costKobo = Math.round(priceNaira * 100)
+    const pinType = classifyExamPinType(`${plan.type ?? ""} ${plan.label ?? ""}`)
+    if (!serviceId || !board || !pinType || Number.isNaN(costKobo) || costKobo <= 0) {
+      skipped++
+      continue
+    }
+    const existing = await findMappingByNaturalKey("exam_pin", board, pinType, "inlomax", nativeDB)
+    await upsertPlanMapping(
+      {
+        id: existing?.id,
+        serviceType: "exam_pin",
+        networkOrBiller: board,
+        planCode: pinType,
+        providerKey: "inlomax",
+        providerPlanId: serviceId,
+        providerCostKobo: costKobo,
+        providerPlanLabel: String(plan.type ?? "") || null,
+      },
+      adminUserId,
+      nativeDB,
+    )
+    if (existing) updated++
+    else created++
+  }
+
+  return { fetched, created, updated, skipped }
+}

@@ -157,6 +157,10 @@ export default function DataPage() {
   const [bucket, setBucket] = useState<ValidityBucket>("daily")
   const [groupKey, setGroupKey] = useState("")
   const [planCode, setPlanCode] = useState("")
+  // Type (category) is now its own top-level dropdown, selected before
+  // the plan itself — mirrors Inlomax's Type -> Plan two-step flow
+  // instead of picking a plan first and category as an afterthought.
+  const [category, setCategory] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -182,6 +186,7 @@ export default function DataPage() {
       setPlansError(null)
       setGroupKey("")
       setPlanCode("")
+      setCategory("")
       setConfirmState(null)
 
       try {
@@ -213,12 +218,21 @@ export default function DataPage() {
               loadedGroups.some((g) => bucketFor(validityDaysFromPlanCode(g.groupKey.split(":").pop() ?? g.groupKey)) === b),
             ) ?? "daily"
           setBucket(firstNonEmpty)
+          const inFirstBucket = loadedGroups.filter(
+            (g) => bucketFor(validityDaysFromPlanCode(g.groupKey.split(":").pop() ?? g.groupKey)) === firstNonEmpty,
+          )
+          const firstCat = inFirstBucket.length
+            ? inFirstBucket[0].variants[0].category
+            : loadedGroups[0].variants[0].category
+          setCategory(firstCat)
           const firstInBucket =
-            loadedGroups.find(
-              (g) => bucketFor(validityDaysFromPlanCode(g.groupKey.split(":").pop() ?? g.groupKey)) === firstNonEmpty,
-            ) ?? loadedGroups[0]
+            inFirstBucket.find((g) => g.variants.some((v) => v.category === firstCat)) ??
+            inFirstBucket[0] ??
+            loadedGroups[0]
           setGroupKey(firstInBucket.groupKey)
-          setPlanCode(firstInBucket.variants[0].planCode)
+          setPlanCode(
+            (firstInBucket.variants.find((v) => v.category === firstCat) ?? firstInBucket.variants[0]).planCode,
+          )
         }
       } catch {
         if (!cancelled) setPlansError("Could not load data plans")
@@ -241,26 +255,71 @@ export default function DataPage() {
   }
   const groupsInBucket = groups.filter((g) => bucketOfGroup(g) === bucket)
 
+  // Every category present among this bucket's groups, in a stable
+  // order (CATEGORY_LABELS order first, then anything unrecognized).
+  const categoriesInBucket = Array.from(
+    new Set(groupsInBucket.flatMap((g) => g.variants.map((v) => v.category))),
+  ).sort((a, b) => {
+    const order = Object.keys(CATEGORY_LABELS)
+    const ai = order.indexOf(a), bi = order.indexOf(b)
+    if (ai === -1 && bi === -1) return a.localeCompare(b)
+    if (ai === -1) return 1
+    if (bi === -1) return -1
+    return ai - bi
+  })
+
+  // Groups within the current bucket that actually offer the selected
+  // category — this is what populates the Plan dropdown once a Type
+  // is chosen.
+  const groupsForCategory = groupsInBucket.filter((g) => g.variants.some((v) => v.category === category))
+
   const selectedGroup = groups.find((g) => g.groupKey === groupKey)
   const selectedVariant = selectedGroup?.variants.find((v) => v.planCode === planCode)
 
   const networkMismatch = phone.length > 0 && !matchesSelectedNetwork(phone, network)
   const detected = detectNetwork(phone)
 
-  function selectGroup(g: PlanGroup) {
+  // Picks the cheapest variant of a group that matches the given
+  // category (falls back to the group's cheapest variant overall if,
+  // for some reason, that category isn't present on it).
+  function selectGroup(g: PlanGroup, forCategory?: string) {
     setGroupKey(g.groupKey)
-    setPlanCode(g.variants[0].planCode) // default to the cheapest variant in the group
+    const v = (forCategory && g.variants.find((x) => x.category === forCategory)) ?? g.variants[0]
+    setPlanCode(v.planCode)
     setConfirmState(null)
   }
 
-  // Switching tabs re-picks groupKey/planCode from whatever's now
-  // visible so the form never keeps a hidden-tab selection active
+  // Switching tabs re-picks category/groupKey/planCode from whatever's
+  // now visible so the form never keeps a hidden-tab selection active
   // (which would let someone submit a plan they can no longer see).
   function selectBucket(b: ValidityBucket) {
     setBucket(b)
     const inBucket = groups.filter((g) => bucketOfGroup(g) === b)
-    if (inBucket.length) selectGroup(inBucket[0])
+    if (inBucket.length) {
+      const cats = Array.from(new Set(inBucket.flatMap((g) => g.variants.map((v) => v.category))))
+      const firstCat = cats.includes(category) ? category : cats[0]
+      setCategory(firstCat)
+      const firstGroup = inBucket.find((g) => g.variants.some((v) => v.category === firstCat)) ?? inBucket[0]
+      selectGroup(firstGroup, firstCat)
+    } else {
+      setCategory(""); setGroupKey(""); setPlanCode(""); setConfirmState(null)
+    }
+  }
+
+  // Changing Type: keep the bucket, switch to the first plan under the
+  // newly chosen category.
+  function selectCategory(c: string) {
+    setCategory(c)
+    const match = groupsInBucket.find((g) => g.variants.some((v) => v.category === c))
+    if (match) selectGroup(match, c)
     else { setGroupKey(""); setPlanCode(""); setConfirmState(null) }
+  }
+
+  // Changing Plan: planCode is the variant's own code, which already
+  // uniquely identifies its group too, so just look both up directly.
+  function selectVariantByCode(code: string) {
+    const g = groupsForCategory.find((x) => x.variants.some((v) => v.planCode === code))
+    if (g) { setGroupKey(g.groupKey); setPlanCode(code); setConfirmState(null) }
   }
 
   async function submitPurchase(expectedPriceKobo: number | undefined, useplanCode: string, confirmNetworkMismatch: boolean) {
@@ -474,36 +533,42 @@ export default function DataPage() {
               No {BUCKET_LABELS[bucket].toLowerCase()} plans for {network} right now — try another tab.
             </div>
           ) : (
-            <select value={groupKey} onChange={(e) => {
-              const g = groupsInBucket.find((x) => x.groupKey === e.target.value)
-              if (g) selectGroup(g)
-            }}
-              className="w-full rounded-md border border-border px-3 py-2 text-sm">
-              {groupsInBucket.map((g) => (
-                <option key={g.groupKey} value={g.groupKey}>
-                  {labelFromPlanCode(g.variants[0].planCode)} - from {formatNaira(g.cheapestPriceKobo)}
-                </option>
-              ))}
-            </select>
-          )}
+            <>
+              {/* Type dropdown: every category present across the groups
+                  in this bucket (cg/gifting/awoof/sme/direct/etc). Picking
+                  a type filters which plans show in the Plan dropdown
+                  below it, same two-step flow as Inlomax. */}
+              <select
+                value={category}
+                onChange={(e) => selectCategory(e.target.value)}
+                className="mb-2 w-full rounded-md border border-border px-3 py-2 text-sm"
+              >
+                {categoriesInBucket.map((c) => (
+                  <option key={c} value={c}>{categoryLabel(c)}</option>
+                ))}
+              </select>
 
-          {/* Category sub-options — only shown when a group actually has
-              more than one variant. Selecting one changes the exact
-              planCode that gets purchased/charged; it never happens
-              automatically. */}
-          {selectedGroup && selectedGroup.variants.length > 1 && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {selectedGroup.variants.map((v) => (
-                <button
-                  type="button"
-                  key={v.planCode}
-                  onClick={() => { setPlanCode(v.planCode); setConfirmState(null) }}
-                  className={`rounded-md border px-2.5 py-1 text-xs font-medium ${planCode === v.planCode ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"}`}
+              {groupsForCategory.length === 0 ? (
+                <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
+                  No {categoryLabel(category).toLowerCase()} plans for {network} in this tab.
+                </div>
+              ) : (
+                <select
+                  value={planCode}
+                  onChange={(e) => selectVariantByCode(e.target.value)}
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm"
                 >
-                  {categoryLabel(v.category)} - {formatNaira(v.priceKobo)}
-                </button>
-              ))}
-            </div>
+                  {groupsForCategory.map((g) => {
+                    const v = g.variants.find((x) => x.category === category)!
+                    return (
+                      <option key={v.planCode} value={v.planCode}>
+                        {labelFromPlanCode(v.planCode)} - {formatNaira(v.priceKobo)}
+                      </option>
+                    )
+                  })}
+                </select>
+              )}
+            </>
           )}
 
           {selectedVariant && (

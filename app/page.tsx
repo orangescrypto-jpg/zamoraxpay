@@ -213,28 +213,58 @@ export default async function HomePage() {
                       </Link>
                     </div>
 
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                      {posts.map((post) => (
-                        <Link key={post.id} href={`/blog/${post.slug}`} className="group block">
-                          <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
+                    {posts.length > 0 && (
+                      <div className="space-y-6">
+                        {/* Featured post */}
+                        <Link href={`/blog/${posts[0].slug}`} className="group block">
+                          <div className="mb-4 aspect-[1200/630] overflow-hidden rounded-xl bg-secondary">
                             <img
-                              src={post.coverImageUrl || "/blog-fallback-cover.svg"}
-                              alt={post.title}
+                              src={posts[0].coverImageUrl || "/blog-fallback-cover.svg"}
+                              alt={posts[0].title}
                               className="h-full w-full object-cover transition-transform group-hover:scale-105"
                             />
                           </div>
-                          <h4 className="mb-1 font-heading font-semibold text-secondary group-hover:text-primary">
-                            {post.title}
+                          <h4 className="mb-1 text-lg font-heading font-semibold text-secondary group-hover:text-primary sm:text-xl">
+                            {posts[0].title}
                           </h4>
-                          {post.excerpt && (
-                            <p className="mb-2 text-sm text-muted-foreground line-clamp-2">{post.excerpt}</p>
+                          {posts[0].excerpt && (
+                            <p className="mb-2 text-sm text-muted-foreground line-clamp-2">{posts[0].excerpt}</p>
                           )}
-                          {post.publishedAt && (
-                            <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
+                          {posts[0].publishedAt && (
+                            <p className="text-xs text-muted-foreground">{formatDate(posts[0].publishedAt)}</p>
                           )}
                         </Link>
-                      ))}
-                    </div>
+
+                        {/* Remaining posts as a list */}
+                        {posts.length > 1 && (
+                          <div className="divide-y divide-border rounded-xl border border-border">
+                            {posts.slice(1).map((post) => (
+                              <Link
+                                key={post.id}
+                                href={`/blog/${post.slug}`}
+                                className="group flex items-center gap-4 p-4"
+                              >
+                                <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-secondary sm:h-20 sm:w-28">
+                                  <img
+                                    src={post.coverImageUrl || "/blog-fallback-cover.svg"}
+                                    alt={post.title}
+                                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="mb-1 font-heading font-semibold text-secondary group-hover:text-primary line-clamp-2">
+                                    {post.title}
+                                  </h4>
+                                  {post.publishedAt && (
+                                    <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
+                                  )}
+                                </div>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}

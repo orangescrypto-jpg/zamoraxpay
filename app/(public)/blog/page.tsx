@@ -6,6 +6,7 @@ import { d1Query } from "@/lib/db"
 import { formatDate, cn } from "@/lib/utils"
 
 const POSTS_PER_PAGE = 30
+const CATEGORY_POSTS_PER_PAGE = 20
 const BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://zamoraxpay.com.ng"
 
 // Short intro shown on category pages (add more slugs as needed).
@@ -13,6 +14,10 @@ const BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://zamoraxpay.com.ng"
 const CATEGORY_INTROS: Record<string, string> = {
   guides:
     "Step-by-step guides on buying airtime and data, paying bills, and getting the most out of your ZamoraxPay wallet.",
+  "tech-news": "Broader technology news relevant to ZamoraxPay users.",
+  "network-news": "Airtime/data price changes, network outages, and provider updates.",
+  promotions: "Discounts, cashback campaigns, and limited-time offers.",
+  announcements: "Product updates, new features, and platform news.",
 }
 
 export async function generateMetadata({
@@ -65,8 +70,9 @@ export default async function BlogListPage({
   const { category, page: pageParam } = await searchParams
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1)
 
+  const pageSize = category ? CATEGORY_POSTS_PER_PAGE : POSTS_PER_PAGE
   const [{ posts, totalPages }, categoriesResult] = await Promise.all([
-    listPublishedPostsPaginated(category, page, POSTS_PER_PAGE),
+    listPublishedPostsPaginated(category, page, pageSize),
     d1Query("SELECT * FROM blog_categories ORDER BY sort_order"),
   ])
   const categories = categoriesResult.results ?? []
@@ -115,6 +121,23 @@ export default async function BlogListPage({
           </Link>
         ))}
       </div>
+
+      {category && posts.length > 0 && (
+        <nav aria-label="Table of contents" className="mb-10 rounded-lg border border-border bg-white p-5">
+          <p className="mb-3 text-sm font-semibold text-secondary">
+            In this category{totalPages > 1 ? ` (page ${page} of ${totalPages})` : ""}
+          </p>
+          <ol className="grid list-decimal gap-x-6 gap-y-1.5 pl-5 sm:grid-cols-2">
+            {posts.map((post) => (
+              <li key={post.id} className="text-sm">
+                <Link href={`/blog/${post.slug}`} className="text-secondary hover:text-primary hover:underline">
+                  {post.title}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
 
       <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
         {posts.map((post) => (

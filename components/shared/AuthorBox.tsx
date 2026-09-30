@@ -5,6 +5,7 @@ interface Props {
   authorName: string | null
   authorSlug?: string | null
   authorPhotoUrl?: string | null
+  authorBio?: string | null
 }
 
 /**
@@ -13,11 +14,11 @@ interface Props {
  * (authorSlug set) — a plain free-text byline like "The ZamoraxPay Team"
  * just renders as text with no link.
  */
-export function AuthorBox({ authorName, authorSlug, authorPhotoUrl }: Props) {
+export function AuthorBox({ authorName, authorSlug, authorPhotoUrl, authorBio }: Props) {
   if (!authorName) return null
 
   const content = (
-    <div className="flex items-center gap-3 rounded-lg border border-border p-4">
+    <div className="flex items-start gap-3 rounded-lg border border-border p-4">
       {authorPhotoUrl ? (
         <img src={authorPhotoUrl} alt={authorName} className="h-12 w-12 shrink-0 rounded-full object-cover" />
       ) : (
@@ -28,7 +29,8 @@ export function AuthorBox({ authorName, authorSlug, authorPhotoUrl }: Props) {
       <div>
         <p className="text-xs uppercase tracking-wide text-muted-foreground">Written by</p>
         <p className="font-heading font-medium text-secondary">{authorName}</p>
-        {authorSlug && <p className="text-xs text-primary">View profile →</p>}
+        {authorBio && <p className="mt-1 text-sm text-muted-foreground">{authorBio}</p>}
+        {authorSlug && <p className="mt-1 text-xs text-primary">View profile →</p>}
       </div>
     </div>
   )

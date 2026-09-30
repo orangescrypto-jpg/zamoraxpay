@@ -284,7 +284,7 @@ export default function DataPage() {
   // for some reason, that category isn't present on it).
   function selectGroup(g: PlanGroup, forCategory?: string) {
     setGroupKey(g.groupKey)
-    const v = (forCategory && g.variants.find((x) => x.category === forCategory)) ?? g.variants[0]
+    const v = (forCategory ? g.variants.find((x) => x.category === forCategory) : undefined) ?? g.variants[0]
     setPlanCode(v.planCode)
     setConfirmState(null)
   }

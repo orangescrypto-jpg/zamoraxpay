@@ -16,6 +16,7 @@ import { vtungAdapter } from "@/src/services/providers/vtu/vtung"
 import { vtugateAdapter } from "@/src/services/providers/vtu/vtugate"
 import { connectbridgeAdapter } from "@/src/services/providers/vtu/connectbridge"
 import { clubkonnectAdapter } from "@/src/services/providers/vtu/clubkonnect"
+import { inlomaxAdapter } from "@/src/services/providers/vtu/inlomax"
 
 export const VTU_PROVIDER_REGISTRY: Record<string, IVtuProviderAdapter> = {
   cheapdatahub: cheapdatahubAdapter,
@@ -25,6 +26,7 @@ export const VTU_PROVIDER_REGISTRY: Record<string, IVtuProviderAdapter> = {
   vtugate: vtugateAdapter,
   connectbridge: connectbridgeAdapter,
   clubkonnect: clubkonnectAdapter,
+  inlomax: inlomaxAdapter,
 }
 
 export function getVtuAdapter(providerKey: string): IVtuProviderAdapter | null {

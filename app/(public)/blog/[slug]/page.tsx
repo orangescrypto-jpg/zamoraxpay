@@ -112,7 +112,12 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         <AdSenseSlot slotKey="blog_post" className="mt-10" />
 
         <div className="mt-10">
-          <AuthorBox authorName={post.authorName} authorSlug={post.authorSlug} authorPhotoUrl={post.authorPhotoUrl} />
+          <AuthorBox
+            authorName={post.authorName}
+            authorSlug={post.authorSlug}
+            authorPhotoUrl={post.authorPhotoUrl}
+            authorBio={post.authorBio}
+          />
         </div>
 
         <BlogComments postSlug={post.slug} />

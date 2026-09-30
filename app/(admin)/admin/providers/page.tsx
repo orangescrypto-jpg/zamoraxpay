@@ -111,6 +111,8 @@ export default function AdminProvidersPage() {
       "VTUGate needs its own numeric service_id for each network. Paste them as JSON in Service IDs, using lowercase network names (mtn, glo, airtel, 9mobile), with separate airtime and data sections.",
     clubkonnect:
       "This one UserID + APIKey pair authenticates every ClubKonnect service (Airtime, Data, Cable TV, Electricity, Betting, ePIN) — there's nothing separate to enter per service.",
+    inlomax:
+      "One API Key authenticates every Inlomax service. Your webhook URL for Inlomax is set separately on their own dashboard (inlomax.com/app/developer), not here — paste your ZamoraxPay webhook endpoint there, pointing at /api/webhooks/inlomax.",
   }
 
   const VTU_CRED_FIELDS: Record<string, { key: string; label: string; secret?: boolean; placeholder?: string }[]> = {
@@ -146,6 +148,11 @@ export default function AdminProvidersPage() {
       { key: "userId", label: "UserID" },
       { key: "apiKey", label: "APIKey", secret: true },
       { key: "baseUrl", label: "Base URL (leave blank for default)", placeholder: "https://www.nellobytesystems.com" },
+    ],
+    inlomax: [
+      { key: "apiKey", label: "API Key", secret: true },
+      { key: "baseUrl", label: "Base URL (leave blank for default)", placeholder: "https://inlomax.com/api" },
+      { key: "testMode", label: "Test Mode (\"true\" or \"false\")", placeholder: "false" },
     ],
   }
   const PAYMENT_CRED_FIELDS: { key: string; label: string; secret?: boolean; placeholder?: string }[] = [

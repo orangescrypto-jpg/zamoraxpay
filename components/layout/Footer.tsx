@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import type { Banner } from "@/src/types"
 import { AdSenseSlot } from "@/components/shared/AdSenseSlot"
+import { isPrivatePath } from "@/lib/privateRoutes"
 
 const FOOTER_AUTO_SLIDE_INTERVAL_MS = 5000
 
@@ -101,31 +102,13 @@ function FooterBanner() {
 // app screen" — the footer is rendered site-wide from the root layout,
 // so it needs its own check to keep the ad out of the dashboard/admin
 // even though the Footer component itself doesn't know about auth.
-const DASHBOARD_PATHS = [
-  "/dashboard",
-  "/wallet",
-  "/services",
-  "/history",
-  "/referrals",
-  "/rewards",
-  "/reseller",
-  "/settings",
-  "/beneficiaries",
-  "/daily-streak",
-  "/cashback",
-  "/refund",
-]
-
-function isDashboardOrAdminPath(pathname: string | null) {
-  if (!pathname) return false
-  if (pathname.startsWith("/admin")) return true
-  return DASHBOARD_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
-}
-
 export function Footer() {
   const pathname = usePathname()
   const marketplaceUrl = "https://zamorax.com"
-  const showAd = !isDashboardOrAdminPath(pathname)
+  // isPrivatePath is the same list middleware.ts uses to gate auth —
+  // one source of truth, so a newly protected route can't slip
+  // through and show ads next to real account data.
+  const showAd = !isPrivatePath(pathname)
 
   return (
     <footer className="border-t border-border bg-secondary text-white">

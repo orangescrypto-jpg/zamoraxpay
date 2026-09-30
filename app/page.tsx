@@ -1,8 +1,6 @@
 // app/page.tsx
 import Link from "next/link"
-import { listPublishedPosts } from "@/src/services/blog"
-import { getSettingNumber } from "@/src/services/siteSettings"
-import { d1Query } from "@/lib/db"
+import { listLatestPostsByCategories } from "@/src/services/blog"
 import { formatDate } from "@/lib/utils"
 
 const SERVICES = [
@@ -39,17 +37,29 @@ const TRUST = [
   { title: "Real support", desc: "Reach a real person by email or phone if something looks wrong. Details are on our contact page." },
 ]
 
+// The 5 featured homepage categories, in display order — mirrors the
+// nav dropdown (components/layout/Header.tsx) and the sort_order set
+// in migrations/2026-09-add-tech-news-category.sql. Each gets its own
+// magazine-style row on the homepage.
+const HOMEPAGE_BLOG_CATEGORIES = [
+  { slug: "tech-news", label: "Tech News" },
+  { slug: "guides", label: "Guides" },
+  { slug: "network-news", label: "Network News" },
+  { slug: "promotions", label: "Promotions" },
+  { slug: "announcements", label: "Announcements" },
+]
+
+const HOMEPAGE_POSTS_PER_CATEGORY = 10
+
 export const revalidate = 900 // 15 minutes — homepage content doesn't need to be second-fresh
 
 export default async function HomePage() {
-  const [postCount, allPosts, categoriesResult] = await Promise.all([
-    getSettingNumber("homepage_post_count", 6),
-    listPublishedPosts(),
-    d1Query("SELECT * FROM blog_categories ORDER BY sort_order"),
-  ])
+  const postsByCategory = await listLatestPostsByCategories(
+    HOMEPAGE_BLOG_CATEGORIES.map((c) => c.slug),
+    HOMEPAGE_POSTS_PER_CATEGORY,
+  )
 
-  const latestPosts = allPosts.slice(0, postCount)
-  const categories = categoriesResult.results ?? []
+  const categorySections = HOMEPAGE_BLOG_CATEGORIES.filter((c) => postsByCategory[c.slug]?.length)
 
   return (
     <div>
@@ -174,11 +184,11 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Latest from the blog ─────────────────────────────── */}
-      {latestPosts.length > 0 && (
+      {/* ── From the blog — one magazine-style row per category ─ */}
+      {categorySections.length > 0 && (
         <section className="border-t border-border bg-bg py-16">
           <div className="container">
-            <div className="mb-8 flex items-end justify-between">
+            <div className="mb-10 flex items-end justify-between">
               <div>
                 <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">From the blog</h2>
                 <p className="mt-2 text-muted-foreground">Guides, updates, and tips.</p>
@@ -188,49 +198,49 @@ export default async function HomePage() {
               </Link>
             </div>
 
-            {categories.length > 0 && (
-              <div className="mb-8 flex flex-wrap gap-2">
-                {categories.map((c: any) => (
-                  <Link
-                    key={c.slug}
-                    href={`/blog?category=${c.slug}`}
-                    className="rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-secondary hover:border-primary hover:text-primary"
-                  >
-                    {c.label}
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="space-y-14">
+              {categorySections.map((cat) => {
+                const posts = postsByCategory[cat.slug] ?? []
+                return (
+                  <div key={cat.slug}>
+                    <div className="mb-5 flex items-end justify-between">
+                      <h3 className="text-xl font-heading font-bold text-secondary">{cat.label}</h3>
+                      <Link
+                        href={`/blog?category=${cat.slug}`}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        See more →
+                      </Link>
+                    </div>
 
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {latestPosts.map((post) => (
-                <Link key={post.id} href={`/blog/${post.slug}`} className="group block">
-                  <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
-                    <img
-                      src={post.coverImageUrl || "/blog-fallback-cover.svg"}
-                      alt={post.title}
-                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                    />
+                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                      {posts.map((post) => (
+                        <Link key={post.id} href={`/blog/${post.slug}`} className="group block">
+                          <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
+                            <img
+                              src={post.coverImageUrl || "/blog-fallback-cover.svg"}
+                              alt={post.title}
+                              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                            />
+                          </div>
+                          <h4 className="mb-1 font-heading font-semibold text-secondary group-hover:text-primary">
+                            {post.title}
+                          </h4>
+                          {post.excerpt && (
+                            <p className="mb-2 text-sm text-muted-foreground line-clamp-2">{post.excerpt}</p>
+                          )}
+                          {post.publishedAt && (
+                            <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
+                          )}
+                        </Link>
+                      ))}
+                    </div>
                   </div>
-                  {post.category && (
-                    <span className="mb-1 inline-block text-xs font-medium uppercase tracking-wide text-primary">
-                      {post.category.replace(/-/g, " ")}
-                    </span>
-                  )}
-                  <h3 className="mb-1 font-heading font-semibold text-secondary group-hover:text-primary">
-                    {post.title}
-                  </h3>
-                  {post.excerpt && <p className="mb-2 text-sm text-muted-foreground line-clamp-2">{post.excerpt}</p>}
-                  {/* Date hidden for now — re-enable by uncommenting when ready to reveal.
-                  {post.publishedAt && (
-                    <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
-                  )}
-                  */}
-                </Link>
-              ))}
+                )
+              })}
             </div>
 
-            <div className="mt-8 text-center sm:hidden">
+            <div className="mt-10 text-center sm:hidden">
               <Link href="/blog" className="text-sm font-medium text-primary hover:underline">
                 View all posts →
               </Link>

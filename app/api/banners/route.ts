@@ -39,5 +39,12 @@ export async function GET(req: NextRequest) {
   const result = await d1Query(sql, params)
 
   const banners = (result.results ?? []).map(mapBannerRow)
-  return NextResponse.json({ banners })
+  // Header and Footer (root layout — every page, every visitor) each fetch
+  // this on mount with no cache, so every single page view was an uncached
+  // Vercel Function invocation + D1 round trip. s-maxage lets the edge
+  // answer repeat requests from cache across all visitors instead.
+  return NextResponse.json(
+    { banners },
+    { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } },
+  )
 }

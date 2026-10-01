@@ -8,6 +8,14 @@
 import { NextResponse } from "next/server"
 import { getSetting, getSettingBoolean } from "@/src/services/siteSettings"
 
+// Was uncached: AdSenseSlot fetches this client-side on mount, and Footer
+// (which renders it) is in SiteChrome — i.e. on EVERY non-admin page view.
+// That meant a full function invocation + DB read per page view, site-wide.
+// These values change rarely (an admin toggling ads or rotating a slot id),
+// so cache aggressively at the CDN/browser and let the admin save action
+// bust it manually if an instant update is ever needed.
+export const revalidate = 3600 // Next's data cache / ISR hint for this route
+
 export async function GET() {
   const [enabled, clientId, homepageFooterSlot, blogPostSlot] = await Promise.all([
     getSettingBoolean("adsense_enabled", false),
@@ -16,12 +24,23 @@ export async function GET() {
     getSetting("adsense_blog_post_slot"),
   ])
 
-  return NextResponse.json({
-    enabled,
-    clientId: clientId ?? "",
-    slots: {
-      homepage_footer: homepageFooterSlot ?? "",
-      blog_post: blogPostSlot ?? "",
+  return NextResponse.json(
+    {
+      enabled,
+      clientId: clientId ?? "",
+      slots: {
+        homepage_footer: homepageFooterSlot ?? "",
+        blog_post: blogPostSlot ?? "",
+      },
     },
-  })
+    {
+      headers: {
+        // Browser/CDN can serve this for an hour, and keep serving a stale
+        // copy for up to a day while revalidating in the background — so a
+        // settings change still propagates within minutes in practice, not
+        // just once an hour on the dot.
+        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+      },
+    },
+  )
 }

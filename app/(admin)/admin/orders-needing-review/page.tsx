@@ -24,6 +24,7 @@ export default function OrdersNeedingReviewPage() {
   const [orders, setOrders] = useState<ReviewOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
+  const [sweeping, setSweeping] = useState(false)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -67,6 +68,30 @@ export default function OrdersNeedingReviewPage() {
     load()
   }
 
+  // New: "Run sweep now" — distinct from resolving one already-flagged
+  // order above. This re-invokes the whole reconcile-orphaned-orders
+  // cron sweep itself (which is intentionally sequential internally —
+  // see its own file comment re: provider 429s — this button doesn't
+  // change that, it only exposes a manual way to trigger it).
+  async function runSweep() {
+    if (!confirm("Run the orphaned-orders reconciliation sweep now?")) return
+    setSweeping(true)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/admin/orders-needing-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ runSweep: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) alert(data.error ?? "Sweep failed")
+      else alert(`Sweep complete. ${JSON.stringify(data)}`)
+      load()
+    } finally {
+      setSweeping(false)
+    }
+  }
+
   function attemptedProviders(order: ReviewOrder): string[] {
     if (!order.provider_attempts) return []
     try {
@@ -80,11 +105,21 @@ export default function OrdersNeedingReviewPage() {
 
   return (
     <div className="p-6">
-      <h1 className="mb-2 text-2xl font-heading font-bold">Orders Needing Review</h1>
+      <div className="mb-2 flex items-center justify-between">
+        <h1 className="text-2xl font-heading font-bold">Orders Needing Review</h1>
+        <button
+          onClick={runSweep}
+          disabled={sweeping}
+          className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-secondary hover:bg-muted disabled:opacity-50"
+        >
+          {sweeping ? "Running..." : "Run sweep now"}
+        </button>
+      </div>
       <p className="mb-6 text-sm text-muted-foreground">
         Orders the reconcile cron could not resolve on its own after asking every provider it could — the
         customer&apos;s wallet is already debited for each of these. Check the provider&apos;s own dashboard using
-        the reference shown, then mark the outcome.
+        the reference shown, then mark the outcome. "Run sweep now" re-runs the whole reconciliation sweep
+        itself (it only checks orders needing a requery — it won't instantly clear this list).
       </p>
 
       {loading ? (

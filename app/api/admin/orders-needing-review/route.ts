@@ -12,8 +12,11 @@
 // requires admin — same split as /api/admin/withdrawals.
 
 import { NextRequest, NextResponse } from "next/server"
-import { requireStaff } from "@/lib/auth-server"
+import { randomUUID } from "crypto"
+import { requireStaff, requireAdmin } from "@/lib/auth-server"
 import { d1Query } from "@/lib/d1"
+import { getCronSecret } from "@/src/services/siteSettings"
+import { GET as reconcileOrphanedOrdersCron } from "@/app/api/cron/reconcile-orphaned-orders/route"
 
 export async function GET(req: NextRequest) {
   const auth = await requireStaff(req)
@@ -34,4 +37,46 @@ export async function GET(req: NextRequest) {
   )
 
   return NextResponse.json({ orders: result.results ?? [] })
+}
+
+// POST { runSweep: true } — new. Admin manual-trigger gap: this page
+// already let an admin resolve individually-flagged orders (see
+// [id]/resolve/route.ts), but there was no "run the sweep now" button
+// distinct from that — i.e. no way to manually re-run the whole
+// reconcile-orphaned-orders cron sweep itself. Same in-process
+// cron-GET-handler pattern as the other admin trigger routes added
+// alongside it. Note: reconcile-orphaned-orders is intentionally
+// sequential internally (provider 429 avoidance) — this route does not
+// change that, it only exposes a manual way to invoke it.
+export async function POST(req: NextRequest) {
+  const auth = await requireAdmin(req)
+  if (!auth.ok) return auth.error
+
+  try {
+    const body = await req.json().catch(() => ({}))
+    if (body?.runSweep !== true) {
+      return NextResponse.json({ error: "Expected { runSweep: true }" }, { status: 400 })
+    }
+
+    const secret = (await getCronSecret()) || process.env.CRON_SECRET
+    if (!secret) {
+      return NextResponse.json({ error: "Cron secret is not configured; cannot run this job." }, { status: 500 })
+    }
+
+    const cronReq = new NextRequest(new URL("/api/cron/reconcile-orphaned-orders", req.url), {
+      headers: { authorization: `Bearer ${secret}` },
+    })
+    const cronRes = await reconcileOrphanedOrdersCron(cronReq)
+    const result = await cronRes.json()
+
+    await d1Query(
+      `INSERT INTO admin_audit_log (id, admin_user_id, action, target_table, target_id, before_json, after_json)
+       VALUES (?, ?, 'reconcile_orphaned_orders.manual_run', 'vtu_orders', NULL, NULL, ?)`,
+      [randomUUID(), auth.uid, JSON.stringify(result)],
+    )
+
+    return NextResponse.json(result, { status: cronRes.status })
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Sweep run failed" }, { status: 500 })
+  }
 }

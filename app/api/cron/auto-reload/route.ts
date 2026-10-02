@@ -13,6 +13,7 @@ import { d1Query } from "@/lib/db"
 import { runPurchaseFlow } from "@/src/services/purchaseFlow"
 import { hashPin } from "@/src/services/pin"
 import { verifyCronAuth } from "@/src/services/cronAuth"
+import { runInChunks } from "@/lib/concurrency"
 
 function computeNextRun(frequency: string, from: Date): string {
   const next = new Date(from)
@@ -34,9 +35,26 @@ export async function GET(req: NextRequest) {
     [now],
   )
 
-  const results: Array<{ ruleId: string; success: boolean; message: string }> = []
-
+  // app/api/cron/auto-reload/route.ts
+  // Was: `for (const rule of dueRules.results ?? [])` — fully
+  // sequential over every due rule. Each rule does wallet debit → VTU
+  // purchase → refund-on-failure, the same wallet-race risk as
+  // Zamorax's escrow-release. A single user can have multiple
+  // auto-reload rules, and those must stay strictly sequential against
+  // each other (debit→purchase→refund ordering matters for that
+  // user's wallet), but different users' rules are independent and can
+  // run concurrently. Changed to: group rules by user_id, run each
+  // user's rules sequentially within their own group (via reduce), and
+  // run different users' groups concurrently in bounded chunks
+  // (10 users/chunk) via runInChunks.
+  const rulesByUser = new Map<string, any[]>()
   for (const rule of dueRules.results ?? []) {
+    const list = rulesByUser.get(rule.user_id) ?? []
+    list.push(rule)
+    rulesByUser.set(rule.user_id, list)
+  }
+
+  async function runRuleAndAdvance(rule: any): Promise<{ ruleId: string; success: boolean; message: string }> {
     try {
       // Auto-reload bypasses the transaction-PIN prompt (no user present
       // to type it), so we verify against a system-known constant only
@@ -50,8 +68,7 @@ export async function GET(req: NextRequest) {
       const pinHash = userResult.results?.[0]?.transaction_pin_hash
 
       if (!pinHash) {
-        results.push({ ruleId: rule.id, success: false, message: "No transaction PIN set; skipping" })
-        continue
+        return { ruleId: rule.id, success: false, message: "No transaction PIN set; skipping" }
       }
 
       // Auto-reload is pre-authorized at rule-creation time (the user set
@@ -59,20 +76,34 @@ export async function GET(req: NextRequest) {
       // for each scheduled run — this mirrors how most recurring-payment
       // systems work (initial consent, no re-auth per cycle).
       const result = await runPurchaseFlowForAutoReload(rule)
-      results.push({ ruleId: rule.id, success: result.success, message: result.message })
 
       await d1Query(
         "UPDATE auto_reload_rules SET next_run_at = ?, updated_at = datetime('now') WHERE id = ?",
         [computeNextRun(rule.frequency, new Date()), rule.id],
       )
+
+      return { ruleId: rule.id, success: result.success, message: result.message }
     } catch (err) {
-      results.push({
+      return {
         ruleId: rule.id,
         success: false,
         message: err instanceof Error ? err.message : "Unexpected error",
-      })
+      }
     }
   }
+
+  const userGroups = Array.from(rulesByUser.values())
+  const chunked = await runInChunks(userGroups, 10, async (rulesForUser) => {
+    // Sequential within one user's own rules — do not let two rules
+    // for the same user run concurrently (shared wallet balance).
+    const perUserResults: Array<{ ruleId: string; success: boolean; message: string }> = []
+    for (const rule of rulesForUser) {
+      perUserResults.push(await runRuleAndAdvance(rule))
+    }
+    return perUserResults
+  })
+
+  const results = chunked.flatMap((c) => c.result ?? [])
 
   return NextResponse.json({ processed: results.length, results })
 }

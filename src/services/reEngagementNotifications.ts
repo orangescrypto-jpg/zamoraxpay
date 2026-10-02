@@ -17,6 +17,7 @@ import { d1Query } from "@/lib/d1"
 import { isFeatureEnabled } from "@/src/services/config"
 import { getSettingNumber } from "@/src/services/siteSettings"
 import { sendPushToUser, type PushPayload } from "@/src/services/pushNotifications"
+import { runInChunks } from "@/lib/concurrency"
 
 function todayKey(date: Date = new Date()): string {
   return date.toISOString().slice(0, 10)
@@ -36,19 +37,26 @@ async function claimTriggerSlot(userId: string, triggerKey: string, nativeDB?: a
   }
 }
 
+// src/services/reEngagementNotifications.ts — fireForUsers()
+// Was: plain `for...of userIds` with 2 sequential awaits/user
+// (claimTriggerSlot, sendPushToUser), unbounded by row count. This is
+// the shared helper behind all 6 re-engagement triggers plus all 3
+// win-back stages (9 call sites), so it was the single highest-leverage
+// Hobby-plan duration risk in this project. Changed to bounded
+// concurrent chunks (20/chunk) via runInChunks; one user's failure is
+// isolated (allSettled) so it can't abort the rest of its chunk.
 async function fireForUsers(
   triggerKey: string,
   userIds: string[],
   buildPayload: (userId: string) => PushPayload,
   nativeDB?: any,
 ): Promise<{ eligible: number; sent: number }> {
-  let sent = 0
-  for (const userId of userIds) {
+  const results = await runInChunks(userIds, 20, async (userId) => {
     const claimed = await claimTriggerSlot(userId, triggerKey, nativeDB)
-    if (!claimed) continue
-    const count = await sendPushToUser(userId, buildPayload(userId), nativeDB)
-    if (count > 0) sent++
-  }
+    if (!claimed) return 0
+    return sendPushToUser(userId, buildPayload(userId), nativeDB)
+  })
+  const sent = results.filter((r) => (r.result ?? 0) > 0).length
   return { eligible: userIds.length, sent }
 }
 

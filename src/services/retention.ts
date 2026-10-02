@@ -21,6 +21,7 @@ import { gzipSync } from "zlib"
 import { d1Query } from "@/lib/d1"
 import { r2Put } from "@/lib/r2/client"
 import { getSettingBoolean, getSettingNumber } from "@/src/services/siteSettings"
+import { runInChunks } from "@/lib/concurrency"
 
 // ── Job catalogue ────────────────────────────────────────────────────
 
@@ -481,7 +482,18 @@ async function jobWalletTx(ctx: RunContext, days: number): Promise<JobResult> {
     part += 1
     await archiveRowsToR2("wallet-transactions", rows, part, runId, ctx)
 
-    for (const r of rows) await applyRowToRollup(r, ctx)
+    // src/services/retention.ts — jobWalletTx(), applyRowToRollup loop
+    // (was line ~484). Was: `for (const r of rows) await
+    // applyRowToRollup(r, ctx)` — genuine per-row sequential D1 insert
+    // inside an already time-budgeted/batched job (ctx.batchSize rows
+    // per iteration). It relies on an insert-order for idempotency
+    // detection via a UNIQUE constraint, but that only needs the
+    // constraint itself, not strict ordering across *different* rows
+    // (each row's reference is independent) — safe to chunk. Changed
+    // to bounded concurrent chunks (20/chunk) via runInChunks; the
+    // surrounding while(timeLeft) batching and the existing
+    // chunk()-based delete loop below are left as-is.
+    await runInChunks(rows, 20, (r) => applyRowToRollup(r, ctx))
 
     for (let i = 0; i < rows.length; i += 90) {
       const chunk = rows.slice(i, i + 90)

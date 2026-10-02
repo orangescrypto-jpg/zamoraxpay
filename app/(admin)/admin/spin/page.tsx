@@ -4,7 +4,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { adminApi, Notice, type AdminOverview } from "@/components/admin/spin/shared"
+import { adminApi, Notice, btnGhost, type AdminOverview } from "@/components/admin/spin/shared"
 import { SpinSettingsPanel } from "@/components/admin/spin/SpinSettingsPanel"
 import { SpinSourcesPanel } from "@/components/admin/spin/SpinSourcesPanel"
 import { SpinPrizesPanel } from "@/components/admin/spin/SpinPrizesPanel"
@@ -28,6 +28,7 @@ export default function AdminSpinPage() {
   const [error, setError] = useState("")
   const [tab, setTab] = useState<TabKey>("settings")
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
+  const [running, setRunning] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -48,12 +49,45 @@ export default function AdminSpinPage() {
     return () => clearTimeout(t)
   }, [notice])
 
+  // New: "Run sweep now" button. /admin/spin previously had settings
+  // and stats but no way to manually invoke the cron sweep (expiring
+  // spin tickets/vouchers, expiry/ready nudges) — this was one of the
+  // admin manual-trigger gaps identified alongside the bounded-
+  // concurrency fixes to runSpinCron()'s two per-row loops.
+  async function runCronNow() {
+    setRunning(true)
+    try {
+      const result = await adminApi<{
+        ticketsExpired: number
+        vouchersExpired: number
+        expiryNudges: number
+        readyNudges: number
+      }>("/api/admin/spin", { method: "POST", body: JSON.stringify({ action: "run_cron" }) })
+      setNotice({
+        ok: true,
+        text: `Sweep ran: ${result.ticketsExpired} tickets + ${result.vouchersExpired} vouchers expired, ${result.expiryNudges} expiry + ${result.readyNudges} ready nudges sent.`,
+      })
+      load()
+    } catch (e) {
+      setNotice({ ok: false, text: (e as Error).message })
+    } finally {
+      setRunning(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="text-2xl font-bold text-primary">Spin &amp; Win</h1>
-      <p className="mt-1 text-sm text-secondary">
-        Every setting here takes effect immediately — no redeploy. Days and times are UTC. Prizes are spend-only: they can never be withdrawn.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-primary">Spin &amp; Win</h1>
+          <p className="mt-1 text-sm text-secondary">
+            Every setting here takes effect immediately — no redeploy. Days and times are UTC. Prizes are spend-only: they can never be withdrawn.
+          </p>
+        </div>
+        <button onClick={runCronNow} disabled={running} className={btnGhost}>
+          {running ? "Running…" : "Run sweep now"}
+        </button>
+      </div>
 
       <nav className="mt-6 flex gap-1 overflow-x-auto border-b border-border">
         {TABS.map((t) => (

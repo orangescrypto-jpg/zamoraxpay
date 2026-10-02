@@ -8,6 +8,7 @@ import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
 import { sendPushToUser } from "@/src/services/pushNotifications"
 import { addHours, dayKeyOf, getSource, getSpinSettings, isSpinEnabled, isWithinWindow, sqlTime, weekdayNameOf, parseWeekdays } from "@/src/services/spinConfig"
+import { runInChunks } from "@/lib/concurrency"
 
 /** Inserts the (user, trigger, day) log row. Returns false if it already existed = already nudged today. */
 async function claimSlot(userId: string, triggerKey: string, periodKey: string, nativeDB?: any): Promise<boolean> {
@@ -61,9 +62,14 @@ export async function runSpinCron(nativeDB?: any): Promise<SpinCronResult> {
       [nowSql, nowSql, nowSql, soon],
       nativeDB,
     )
-    for (const r of rows.results ?? []) {
-      if (!(await claimSlot(r.user_id, "spin_expiring", today, nativeDB))) continue
-      const sent = await sendPushToUser(
+    // src/services/spinNotifications.ts — expiry-nudge loop (was line ~64)
+    // Was: `for (const r of rows.results ?? [])` with claimSlot + sendPushToUser
+    // sequentially per row, capped at 1000 by the query's LIMIT but still
+    // linear. Same shape as reEngagementNotifications' fireForUsers.
+    // Changed to bounded concurrent chunks (20/chunk).
+    const expiryResults = await runInChunks(rows.results ?? [], 20, async (r: any) => {
+      if (!(await claimSlot(r.user_id, "spin_expiring", today, nativeDB))) return 0
+      return sendPushToUser(
         r.user_id,
         {
           title: r.n > 1 ? `${r.n} spins expire soon ⏳` : "Your spin expires soon ⏳",
@@ -73,8 +79,8 @@ export async function runSpinCron(nativeDB?: any): Promise<SpinCronResult> {
         },
         nativeDB,
       ).catch(() => 0)
-      if (sent > 0) result.expiryNudges++
-    }
+    })
+    result.expiryNudges += expiryResults.filter((r) => (r.result ?? 0) > 0).length
   }
 
   // "Your free spin is ready" — one nudge PER SOURCE, only while that source is inside its
@@ -93,15 +99,20 @@ export async function runSpinCron(nativeDB?: any): Promise<SpinCronResult> {
         [today, key],
         nativeDB,
       )
-      for (const r of rows.results ?? []) {
-        if (!(await claimSlot(r.user_id, `spin_daily_ready:${key}`, today, nativeDB))) continue
-        const sent = await sendPushToUser(
+      // src/services/spinNotifications.ts — ready-nudge loop (was line ~96)
+      // Was: `for (const r of rows.results ?? [])` with claimSlot +
+      // sendPushToUser sequentially per row, capped at 500 by the
+      // query's LIMIT but still linear. Changed to bounded concurrent
+      // chunks (20/chunk), same as the expiry-nudge loop above.
+      const readyResults = await runInChunks(rows.results ?? [], 20, async (r: any) => {
+        if (!(await claimSlot(r.user_id, `spin_daily_ready:${key}`, today, nativeDB))) return 0
+        return sendPushToUser(
           r.user_id,
           { title: `${s.label} is ready 🎡`, body: "Open the app and play before it expires.", url: "/dashboard", tag: `spin-ready-${key}` },
           nativeDB,
         ).catch(() => 0)
-        if (sent > 0) result.readyNudges++
-      }
+      })
+      result.readyNudges += readyResults.filter((r) => (r.result ?? 0) > 0).length
     }
   }
 

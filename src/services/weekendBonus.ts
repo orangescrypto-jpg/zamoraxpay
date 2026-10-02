@@ -27,6 +27,7 @@ import { d1Query } from "@/lib/d1"
 import { creditWallet } from "@/src/services/wallet"
 import { getSetting, getSettingNumber } from "@/src/services/siteSettings"
 import { isFeatureEnabled } from "@/src/services/config"
+import { runInChunks } from "@/lib/concurrency"
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
@@ -100,15 +101,19 @@ export async function runWeekendBonusForToday(
   )
   const users: Array<{ id: string }> = activeUsers.results ?? []
 
-  let paidCount = 0
-  let skippedCount = 0
-
-  for (const user of users) {
+  // src/services/weekendBonus.ts — runWeekendBonusForToday()
+  // Was: `SELECT id FROM users WHERE status = 'active'` with no LIMIT,
+  // feeding a sequential per-user loop (idempotency insert + wallet
+  // credit). Highest-stakes risk found in the project: real money,
+  // no row cap, and this function has no external cron — the only
+  // way it runs is an admin's manual "Run Now" click, which would be
+  // the thing timing out on a non-trivial active-user base. Changed
+  // to bounded concurrent chunks (15/chunk) via runInChunks. The
+  // insert-first idempotency check is kept as-is — it's correct and
+  // safe to chunk since each user's UNIQUE(user_id, period_key) row
+  // is independent of its siblings.
+  const results = await runInChunks(users, 15, async (user) => {
     try {
-      // The UNIQUE(user_id, period_key) constraint is the real
-      // idempotency guard — this insert-first approach means a
-      // duplicate cron run fails fast on the DB constraint rather
-      // than relying on a slower "check then credit" race.
       await d1Query(
         "INSERT INTO weekend_bonus_payouts (id, user_id, period_key, amount_kobo) VALUES (?, ?, ?, ?)",
         [randomUUID(), user.id, periodKey, amountKobo],
@@ -117,8 +122,7 @@ export async function runWeekendBonusForToday(
     } catch {
       // UNIQUE constraint failed — this user was already paid for
       // this period, most likely by an earlier run of the same cron.
-      skippedCount++
-      continue
+      return "skipped" as const
     }
 
     await creditWallet(
@@ -131,7 +135,14 @@ export async function runWeekendBonusForToday(
       },
       nativeDB,
     )
-    paidCount++
+    return "paid" as const
+  })
+
+  let paidCount = 0
+  let skippedCount = 0
+  for (const r of results) {
+    if (r.result === "paid") paidCount++
+    else skippedCount++
   }
 
   return {

@@ -25,37 +25,43 @@ import { maybeAwardReferralBonus } from "@/src/services/referral"
 import { sendPurchaseReceiptEmail } from "@/src/services/email"
 import { d1Query } from "@/lib/d1"
 import { verifyCronAuth } from "@/src/services/cronAuth"
+import { runInChunks } from "@/lib/concurrency"
 
 export async function GET(req: NextRequest) {
   const authError = await verifyCronAuth(req)
   if (authError) return authError
 
   const pendingOrders = await getPendingOrders(2, 100)
-  const results: Array<{ orderId: string; providerUsed: string | null; resolvedTo: string; message: string }> = []
 
-  for (const order of pendingOrders) {
+  // app/api/cron/reconcile-pending-orders/route.ts
+  // Was: `for (const order of pendingOrders)` — fully sequential, up to
+  // 100 rows, each doing an external provider checkStatus() call plus
+  // up to ~4 more awaits (refund, resolve, cashback, referral, email).
+  // Each order here is independent (different providers, different
+  // users), so no per-user/per-seller grouping is needed — unlike
+  // auto-reload's per-rule loop below. Changed to bounded concurrent
+  // chunks (15/chunk) via runInChunks.
+  const chunked = await runInChunks(pendingOrders, 15, async (order) => {
     const providerKey = order.provider_used as string | null
     const providerReference = order.provider_reference as string | null
 
     if (!providerKey || !providerReference) {
-      results.push({
+      return {
         orderId: order.id,
         providerUsed: providerKey,
         resolvedTo: "skipped",
         message: "Missing provider_used or provider_reference — cannot requery",
-      })
-      continue
+      }
     }
 
     const adapter = getVtuAdapter(providerKey)
     if (!adapter) {
-      results.push({
+      return {
         orderId: order.id,
         providerUsed: providerKey,
         resolvedTo: "skipped",
         message: "No adapter registered for this provider key",
-      })
-      continue
+      }
     }
 
     try {
@@ -66,8 +72,7 @@ export async function GET(req: NextRequest) {
       // endpoint at all, e.g. ConnectBridge — see its checkStatus
       // comment) — leave the order as-is and try again next run.
       if (statusResult.status === "pending") {
-        results.push({ orderId: order.id, providerUsed: providerKey, resolvedTo: "still_pending", message: statusResult.message })
-        continue
+        return { orderId: order.id, providerUsed: providerKey, resolvedTo: "still_pending", message: statusResult.message }
       }
 
       // REFUND FIRST, THEN FLIP STATUS. The refund is idempotent
@@ -118,16 +123,25 @@ export async function GET(req: NextRequest) {
         }).catch((err) => console.error("[reconcile-pending-orders] Receipt email failed:", err))
       }
 
-      results.push({ orderId: order.id, providerUsed: providerKey, resolvedTo: statusResult.status, message: statusResult.message })
+      return { orderId: order.id, providerUsed: providerKey, resolvedTo: statusResult.status, message: statusResult.message }
     } catch (err) {
-      results.push({
+      return {
         orderId: order.id,
         providerUsed: providerKey,
         resolvedTo: "error",
         message: err instanceof Error ? err.message : "Unexpected error during reconciliation",
-      })
+      }
     }
-  }
+  })
+
+  const results = chunked.map((c) =>
+    c.result ?? {
+      orderId: c.item.id,
+      providerUsed: c.item.provider_used as string | null,
+      resolvedTo: "error",
+      message: c.error instanceof Error ? c.error.message : "Unexpected error during reconciliation",
+    },
+  )
 
   return NextResponse.json({ checked: pendingOrders.length, results })
 }

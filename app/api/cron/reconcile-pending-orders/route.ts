@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   // users), so no per-user/per-seller grouping is needed — unlike
   // auto-reload's per-rule loop below. Changed to bounded concurrent
   // chunks (15/chunk) via runInChunks.
-  const chunked = await runInChunks(pendingOrders, 15, async (order) => {
+  const chunked = await runInChunks(pendingOrders, 15, async (order: any) => {
     const providerKey = order.provider_used as string | null
     const providerReference = order.provider_reference as string | null
 

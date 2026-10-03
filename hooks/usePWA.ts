@@ -145,21 +145,13 @@ export function usePWA() {
           // single load, which looks like the page "loading then
           // disappearing" and can surface as a failed load on a flaky
           // connection.
-          reg.addEventListener("updatefound", () => {
-            const newWorker = reg.installing
-            if (!newWorker) return
-            newWorker.addEventListener("statechange", () => {
-              if (
-                newWorker.state === "activated" &&
-                navigator.serviceWorker.controller
-              ) {
-                const RELOAD_FLAG = "zamoraxpay_sw_reloaded"
-                if (sessionStorage.getItem(RELOAD_FLAG) === "true") return
-                sessionStorage.setItem(RELOAD_FLAG, "true")
-                window.location.reload()
-              }
-            })
-          })
+          // NOTE: we intentionally do NOT force window.location.reload()
+          // here anymore. Reloading as soon as a new SW activates — which
+          // can happen mid-session right after a fresh deploy, while the
+          // page is already rendered — produced exactly the "page loads
+          // then immediately disappears" symptom. The new SW/cache takes
+          // over on the *next* navigation instead, which is safe because
+          // fetch handling above is network-first for navigations.
         })
         .catch(() => {})
     }

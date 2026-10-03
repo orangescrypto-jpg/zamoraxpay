@@ -138,7 +138,13 @@ export function usePWA() {
           // Check for SW updates on every page load
           reg.update().catch(() => {})
 
-          // If a new SW activates, reload once so stale JS is cleared
+          // If a new SW activates, reload once so stale JS is cleared.
+          // Guarded by a sessionStorage flag so this fires at most once per
+          // tab — without it, a page load during active deployment (when
+          // the SW version keeps changing) can trigger a reload on every
+          // single load, which looks like the page "loading then
+          // disappearing" and can surface as a failed load on a flaky
+          // connection.
           reg.addEventListener("updatefound", () => {
             const newWorker = reg.installing
             if (!newWorker) return
@@ -147,6 +153,9 @@ export function usePWA() {
                 newWorker.state === "activated" &&
                 navigator.serviceWorker.controller
               ) {
+                const RELOAD_FLAG = "zamoraxpay_sw_reloaded"
+                if (sessionStorage.getItem(RELOAD_FLAG) === "true") return
+                sessionStorage.setItem(RELOAD_FLAG, "true")
                 window.location.reload()
               }
             })

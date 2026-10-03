@@ -34,6 +34,8 @@
     "NEXT_PUBLIC_APP_URL": "https://zamoraxpay.com.ng",
     "NEXT_PUBLIC_SITE_TAG": "zamoraxpay.com.ng",
     "NEXT_PUBLIC_ZAMORAX_MARKETPLACE_URL": "https://zamorax.com",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://cpcmztekihkmdeeybezc.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwcm16dGVraWhrbWRlZXliZXpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4MDgxOTcsImV4cCI6MjEwNDM4NDE5N30.RHZd_VD7Hv-QYiig5ldi9TLPLkkp1kMHEbe_GVMAI-A",
     "RESEND_FROM_EMAIL": "ZamoraxPay <noreply@zamoraxpay.com.ng>",
     "BVN_VERIFICATION_PROVIDER": "stub",
     "CHEAPDATAHUB_BASE_URL": "https://www.cheapdatahub.ng/api/v1/resellers",

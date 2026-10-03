@@ -8,6 +8,9 @@ import { NextResponse } from "next/server"
 import { listPublishedPosts } from "@/src/services/blog"
 import { getSettingNumber } from "@/src/services/siteSettings"
 
+// Renders per request: reads D1 at runtime, not at build time.
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   const count = await getSettingNumber("homepage_post_count", 6)
   const posts = await listPublishedPosts()

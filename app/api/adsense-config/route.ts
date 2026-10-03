@@ -14,6 +14,9 @@ import { getSetting, getSettingBoolean } from "@/src/services/siteSettings"
 // These values change rarely (an admin toggling ads or rotating a slot id),
 // so cache aggressively at the CDN/browser and let the admin save action
 // bust it manually if an instant update is ever needed.
+// Renders per request: reads D1 at runtime, not at build time.
+export const dynamic = "force-dynamic"
+
 export const revalidate = 3600 // Next's data cache / ISR hint for this route
 
 export async function GET() {

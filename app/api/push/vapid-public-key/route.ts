@@ -5,6 +5,9 @@
 import { NextResponse } from "next/server"
 import { getVapidPublicKey } from "@/src/services/pushNotifications"
 
+// Renders per request: reads D1 at runtime, not at build time.
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   const publicKey = await getVapidPublicKey()
   if (!publicKey) {

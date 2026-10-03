@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zamoraxpay",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-05-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "zamoraxpay",
+      "database_id": "48ab37de-0617-41c1-b1af-86d2cd817e7a"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ZAMORAXPAY_BUCKET",
+      "bucket_name": "zamoraxpay-files"
+    },
+    {
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "zamoraxpay-files"
+    }
+  ],
+  "vars": {
+    "CF_ACCOUNT_ID": "eb336be2ddffa37662cfc9a1319f37e4",
+    "CF_D1_DATABASE_ID": "48ab37de-0617-41c1-b1af-86d2cd817e7a",
+    "R2_BUCKET": "zamoraxpay-files",
+    "R2_ENDPOINT": "https://eb336be2ddffa37662cfc9a1319f37e4.r2.cloudflarestorage.com",
+    "R2_PUBLIC_URL": "https://files.zamoraxpay.com.ng",
+    "NEXT_PUBLIC_APP_URL": "https://zamoraxpay.com.ng",
+    "NEXT_PUBLIC_SITE_TAG": "zamoraxpay.com.ng",
+    "NEXT_PUBLIC_ZAMORAX_MARKETPLACE_URL": "https://zamorax.com",
+    "RESEND_FROM_EMAIL": "ZamoraxPay <noreply@zamoraxpay.com.ng>",
+    "BVN_VERIFICATION_PROVIDER": "stub",
+    "CHEAPDATAHUB_BASE_URL": "https://www.cheapdatahub.ng/api/v1/resellers",
+    "PAIRGATE_BASE_URL": "https://api.pairgate.com/v1",
+    "VTPASS_BASE_URL": "https://vtpass.com/api",
+    "VTUNG_BASE_URL": "https://vtu.ng/wp-json/api/v2"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

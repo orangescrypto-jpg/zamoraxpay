@@ -3,35 +3,12 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import { getAuthorBySlug } from "@/src/services/blogAuthors"
-import { d1Query } from "@/lib/d1"
+import { listPublishedPostsByAuthor } from "@/src/services/blogAuthorPosts"
 import { formatDate } from "@/lib/utils"
 
 export const revalidate = 3600
 
 const BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://zamoraxpay.com.ng"
-
-interface PostSummary {
-  slug: string
-  title: string
-  excerpt: string | null
-  coverImageUrl: string | null
-  publishedAt: string | null
-}
-
-async function getAuthorPosts(authorId: string): Promise<PostSummary[]> {
-  const result = await d1Query(
-    `SELECT slug, title, excerpt, cover_image_url, published_at
-     FROM blog_posts WHERE author_id = ? AND status = 'published' ORDER BY published_at DESC`,
-    [authorId],
-  )
-  return (result.results ?? []).map((r: any) => ({
-    slug: r.slug,
-    title: r.title,
-    excerpt: r.excerpt,
-    coverImageUrl: r.cover_image_url,
-    publishedAt: r.published_at,
-  }))
-}
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
@@ -54,7 +31,7 @@ export default async function AuthorProfilePage({ params }: { params: Promise<{ 
   const author = await getAuthorBySlug(slug)
   if (!author) notFound()
 
-  const posts = await getAuthorPosts(author.id)
+  const posts = await listPublishedPostsByAuthor(author.id)
 
   return (
     <div className="container max-w-3xl py-12">

@@ -1,7 +1,10 @@
 /// <reference lib="webworker" />
 const sw = self;
 
-const CACHE_NAME = "zamoraxpay-v1";
+// Bump this on every deploy so old caches are torn down instead of served
+// stale. (Previously hardcoded "v1" forever — stale cache was likely the
+// cause of the "loads then disappears" bug.)
+const CACHE_NAME = "zamoraxpay-v2";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",

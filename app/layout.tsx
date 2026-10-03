@@ -6,6 +6,10 @@ import "./globals.css"
 import { SiteChrome } from "@/components/layout/SiteChrome"
 import { AdSenseLoader } from "@/components/shared/AdSenseLoader"
 
+// Every page under this layout renders per request. The build on
+// Cloudflare has no D1 tables, so prerendering any DB-backed page fails.
+export const dynamic = "force-dynamic"
+
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" })
 

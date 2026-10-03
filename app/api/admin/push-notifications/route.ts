@@ -1,8 +1,7 @@
 // app/api/admin/push-notifications/route.ts
 // Admin-only: generate/view VAPID public key status, and read/update
 // the per-trigger threshold settings used by the re-engagement cron.
-// Mirrors the write-only-credential pattern used for cron_secret: the
-// private key is never returned in the GET response.
+// The private key is never returned in the GET response.
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth-server"
@@ -47,7 +46,7 @@ export async function POST(req: NextRequest) {
     const { action } = await req.json()
 
     if (action === "generate_vapid_keys") {
-      const { publicKey, privateKey } = generateVapidKeys()
+      const { publicKey, privateKey } = await generateVapidKeys()
       await saveVapidKeys(publicKey, privateKey, auth.uid)
 
       await d1Query(

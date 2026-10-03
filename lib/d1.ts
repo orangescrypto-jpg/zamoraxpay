@@ -1,35 +1,52 @@
 // lib/d1.ts
-// Universal D1 helper for ZAMORAXPAY_DB — works on Vercel (HTTP API),
-// Cloudflare Pages/Workers (native binding), or any other Node host.
-// This is intentionally identical in shape to Zamorax Marketplace's
-// lib/d1.ts, but points at ZamoraxPay's OWN separate D1 database
-// (different CF_D1_DATABASE_ID) — the two platforms never share a
-// database connection.
+// Universal D1 helper for ZAMORAXPAY_DB.
 //
-// Usage:
-//   import { d1Query } from "@/lib/d1"
-//   await d1Query(sql, params)          // Vercel / generic host (uses CF_API_TOKEN)
-//   await d1Query(sql, params, env.DB)  // Cloudflare Pages/Workers (native binding)
+// Resolution order for every query:
+//   1. An explicitly passed nativeDB (legacy callers) is used as-is.
+//   2. On Cloudflare Workers, the native binding env.DB is resolved
+//      automatically through getCloudflareContext(). No caller changes.
+//   3. Anywhere else (Vercel, next dev, any non-Cloudflare host), the
+//      Cloudflare REST API is used with CF_ACCOUNT_ID, CF_D1_DATABASE_ID,
+//      and CF_API_TOKEN.
 //
-// D1 REJECTS raw "BEGIN TRANSACTION" / "SAVEPOINT" SQL sent through
-// either the HTTP query endpoint or the native .prepare()/.run() path.
-// There is no true cross-statement transaction available here: D1's
-// HTTP API has no real /batch endpoint, and even the native .batch()
-// binding does not roll back on a per-statement failure. Callers that
-// need multi-row writes should issue independent, idempotent d1Query()
-// calls and handle partial failure at the application level rather
-// than assuming atomicity.
+// The REST API is rate limited (1,200 requests / 5 minutes per token), so
+// it must never be the path used in production on Workers.
+//
+// D1 REJECTS raw "BEGIN TRANSACTION" / "SAVEPOINT" SQL sent through either
+// the HTTP query endpoint or the native .prepare()/.run() path. There is no
+// true cross-statement transaction available here. Callers that need
+// multi-row writes should issue independent, idempotent d1Query() calls and
+// handle partial failure at the application level.
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
+
+// Once we learn there is no Workers binding in this runtime, remember it so
+// Vercel and dev pay the probe cost only once.
+let bindingUnavailable = false
+
+async function resolveNativeDB(): Promise<any | undefined> {
+  if (bindingUnavailable) return undefined
+  try {
+    const { getCloudflareContext } = await import("@opennextjs/cloudflare")
+    const { env } = await getCloudflareContext({ async: true })
+    const db = (env as any)?.DB
+    if (db && typeof db.prepare === "function") return db
+  } catch {
+    // Not running inside a Workers request (Vercel, next dev, Node).
+  }
+  bindingUnavailable = true
+  return undefined
+}
 
 export async function d1Query(
   sql: string,
   params: unknown[] = [],
-  nativeDB?: any, // Pass env.DB here when running on Cloudflare Pages/Workers
+  nativeDB?: any,
 ) {
   // ── Cloudflare native binding ────────────────────────────────
-  if (nativeDB) {
-    const stmt = nativeDB.prepare(sql)
+  const db = nativeDB ?? (await resolveNativeDB())
+  if (db) {
+    const stmt = db.prepare(sql)
     const bound = params.length ? stmt.bind(...params) : stmt
     const result = await bound.run()
     return { results: result.results ?? [], success: true }
@@ -42,17 +59,14 @@ export async function d1Query(
 
   if (!accountId || !databaseId || !apiToken) {
     throw new Error(
-      "ZamoraxPay D1 not configured: set CF_ACCOUNT_ID, CF_D1_DATABASE_ID, and " +
-        "CF_API_TOKEN in your environment variables. This must point at ZamoraxPay's " +
-        "OWN D1 database — do not reuse Zamorax Marketplace's database ID.",
+      "ZamoraxPay D1 not configured: no DB binding found and CF_ACCOUNT_ID, " +
+        "CF_D1_DATABASE_ID, or CF_API_TOKEN is missing. This must point at " +
+        "ZamoraxPay's OWN D1 database, not Zamorax Marketplace's.",
     )
   }
 
-  // retryUnsafe: true — this endpoint is POST-shaped but semantically a
-  // query dispatch (the SQL text decides read vs write, not the HTTP verb).
-  // Safe to re-hit on a timeout/5xx: a dropped connection means the
-  // request never reached Cloudflare or the response never came back —
-  // not that the query silently ran twice.
+  // retryUnsafe: true. This endpoint is POST-shaped but is semantically a
+  // query dispatch. The SQL text decides read vs write, not the HTTP verb.
   const res = await fetchWithRetry(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`,
     {
@@ -70,5 +84,3 @@ export async function d1Query(
   if (!json.success) throw new Error(json.errors?.[0]?.message ?? "ZamoraxPay D1 query failed")
   return json.result?.[0]
 }
-
-

@@ -1,6 +1,6 @@
 # ZamoraxPay
 
-VTU and bills-payment platform (airtime, data, cable TV, electricity, exam PINs, betting wallet funding) built with Next.js 16, Supabase (own project, separate from Zamorax Marketplace), and Cloudflare D1 (own database, separate from Zamorax Marketplace).
+VTU and bills-payment platform (airtime, data, cable TV, electricity, exam PINs, betting wallet funding) built with Next.js 16, Supabase (own project, separate from Zamorax Marketplace), and Cloudflare D1 (own database, separate from Zamorax Marketplace)
 
 ## Getting starte
 

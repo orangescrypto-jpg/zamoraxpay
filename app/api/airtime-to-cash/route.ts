@@ -12,6 +12,9 @@
 import { NextResponse } from "next/server"
 import { d1Query } from "@/lib/d1"
 
+// Renders per request: reads D1 at runtime, not at build time.
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   const [flagResult, settingsResult] = await Promise.all([
     d1Query("SELECT is_enabled FROM feature_flags WHERE key = 'airtime_to_cash'", []),

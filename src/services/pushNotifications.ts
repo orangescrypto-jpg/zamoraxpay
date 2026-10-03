@@ -1,18 +1,15 @@
 // src/services/pushNotifications.ts
-// Service abstraction layer — web push subscriptions and delivery.
+// Web push subscriptions and delivery. Uses web-push-neo (Web Crypto + fetch),
+// so it runs on Cloudflare Workers as well as Node.
 //
-// VAPID keys follow the same admin-editable / write-only pattern as
-// cron_secret in siteSettings.ts: public key readable (client needs
-// it to subscribe), private key write-only (never sent back to the
-// browser, only read server-side to sign pushes).
+// VAPID keys follow the admin-editable / write-only pattern used for
+// cron_secret: public key readable (browsers need it to subscribe), private
+// key write-only (never returned to the browser).
 //
-// Subscriptions are stored per-user in push_subscriptions (a user can
-// have more than one — multiple devices/browsers). Sending is best
-// effort: a 404/410 from the push service means the subscription is
-// gone (user uninstalled, cleared data, etc) and we delete it instead
-// of retrying forever.
+// Dead subscriptions (404/410 from the push service) are deleted instead of
+// retried forever. Other failures are left alone.
 
-import webpush from "web-push"
+import { sendNotification, generateVAPIDKeys } from "web-push-neo"
 import { randomUUID } from "crypto"
 import { d1Query } from "@/lib/d1"
 import { getSetting } from "@/src/services/siteSettings"
@@ -30,24 +27,28 @@ export interface PushPayload {
   body: string
   url?: string
   tag?: string
-  image?: string // large hero image shown in the notification body (Android Chrome; ignored where unsupported, e.g. iOS Safari)
+  image?: string
 }
+
+interface VapidDetails {
+  subject: string
+  publicKey: string
+  privateKey: string
+}
+
+const SEND_TIMEOUT_MS = 10_000
 
 export async function getVapidPublicKey(nativeDB?: any): Promise<string | null> {
   return getSetting("vapid_public_key", nativeDB)
 }
 
-// vapid_private_key is deliberately kept out of getAllSettings (same
-// treatment as cron_secret) — it's a signing credential, not a
-// displayable setting. Only this getter and saveVapidKeys touch it.
+// vapid_private_key is kept out of getAllSettings (same as cron_secret).
 export async function getVapidPrivateKey(nativeDB?: any): Promise<string | null> {
   return getSetting("vapid_private_key", nativeDB)
 }
 
-// Uses INSERT ... ON CONFLICT rather than a plain UPDATE (like
-// updateSetting) because these two keys are generated on first admin
-// use, not pre-seeded in schema.sql — a plain UPDATE would silently
-// no-op against a row that doesn't exist yet.
+// INSERT ... ON CONFLICT, because these keys are generated on first admin
+// use and are not pre-seeded in schema.sql.
 export async function saveVapidKeys(
   publicKey: string,
   privateKey: string,
@@ -70,26 +71,24 @@ export async function saveVapidKeys(
   )
 }
 
-export function generateVapidKeys(): { publicKey: string; privateKey: string } {
-  return webpush.generateVAPIDKeys()
+// web-push-neo's key generator is async.
+export async function generateVapidKeys(): Promise<{ publicKey: string; privateKey: string }> {
+  return generateVAPIDKeys()
 }
 
-async function configureWebPush(nativeDB?: any): Promise<boolean> {
+async function loadVapidDetails(nativeDB?: any): Promise<VapidDetails | null> {
   const publicKey = await getVapidPublicKey(nativeDB)
   const privateKey = await getVapidPrivateKey(nativeDB)
-  if (!publicKey || !privateKey) return false
+  if (!publicKey || !privateKey) return null
 
   const contactEmail = (await getSetting("vapid_contact_email", nativeDB)) || "ZamoraxLogic@gmail.com"
-  webpush.setVapidDetails(`mailto:${contactEmail}`, publicKey, privateKey)
-  return true
+  return { subject: `mailto:${contactEmail}`, publicKey, privateKey }
 }
 
 /**
- * Upserts a push subscription. userId is null for anonymous/logged-out
- * subscribers (banner shown outside the dashboard); when the person
- * later logs in on the same device, the caller can re-call this with
- * their uid so the row is claimed and future user-targeted sends (not
- * just broadcasts) can reach them too.
+ * Upserts a push subscription. userId is null for anonymous subscribers
+ * (banner shown outside the dashboard). When the person later logs in on the
+ * same device, call again with their uid to claim the row.
  */
 export async function saveSubscription(
   userId: string | null,
@@ -122,76 +121,23 @@ export async function removeSubscription(endpoint: string, nativeDB?: any): Prom
   await d1Query("DELETE FROM push_subscriptions WHERE endpoint = ?", [endpoint], nativeDB)
 }
 
+function toRecord(r: any): PushSubscriptionRecord {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    endpoint: r.endpoint,
+    p256dh: r.p256dh,
+    auth: r.auth,
+  }
+}
+
 async function getSubscriptionsForUser(userId: string, nativeDB?: any): Promise<PushSubscriptionRecord[]> {
   const result = await d1Query(
     "SELECT id, user_id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?",
     [userId],
     nativeDB,
   )
-  return (result.results ?? []).map((r: any) => ({
-    id: r.id,
-    userId: r.user_id,
-    endpoint: r.endpoint,
-    p256dh: r.p256dh,
-    auth: r.auth,
-  }))
-}
-
-/**
- * Sends a push to every subscription a user has. Returns how many
- * sends succeeded. Dead subscriptions (410 Gone / 404) are pruned
- * automatically. Silently no-ops (returns 0) if VAPID keys aren't
- * configured yet, so calling this from a cron job before an admin has
- * set up push is safe rather than throwing.
- */
-export async function sendPushToUser(userId: string, payload: PushPayload, nativeDB?: any): Promise<number> {
-  const configured = await configureWebPush(nativeDB)
-  if (!configured) return 0
-
-  const subscriptions = await getSubscriptionsForUser(userId, nativeDB)
-  if (subscriptions.length === 0) return 0
-
-  let sent = 0
-  for (const sub of subscriptions) {
-    try {
-      await webpush.sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: { p256dh: sub.p256dh, auth: sub.auth },
-        },
-        JSON.stringify(payload),
-      )
-      sent++
-    } catch (err: any) {
-      const statusCode = err?.statusCode
-      if (statusCode === 404 || statusCode === 410) {
-        await removeSubscription(sub.endpoint, nativeDB)
-      }
-      // Other errors (network blip, service outage) are left alone —
-      // the subscription may still be valid on the next attempt.
-    }
-  }
-  return sent
-}
-
-/**
- * Sends the same push to a batch of user IDs. Used by the
- * re-engagement cron jobs, which fan out to many users per run.
- * Returns total successful sends across all users.
- */
-export async function sendPushToUsers(
-  userIds: string[],
-  payload: PushPayload,
-  nativeDB?: any,
-): Promise<number> {
-  const configured = await configureWebPush(nativeDB)
-  if (!configured) return 0
-
-  let sent = 0
-  for (const userId of userIds) {
-    sent += await sendPushToUser(userId, payload, nativeDB)
-  }
-  return sent
+  return (result.results ?? []).map(toRecord)
 }
 
 async function getAllSubscriptions(nativeDB?: any): Promise<PushSubscriptionRecord[]> {
@@ -200,48 +146,77 @@ async function getAllSubscriptions(nativeDB?: any): Promise<PushSubscriptionReco
     [],
     nativeDB,
   )
-  return (result.results ?? []).map((r: any) => ({
-    id: r.id,
-    userId: r.user_id,
-    endpoint: r.endpoint,
-    p256dh: r.p256dh,
-    auth: r.auth,
-  }))
+  return (result.results ?? []).map(toRecord)
 }
 
-/**
- * Sends the same push to every subscribed endpoint site-wide, regardless
- * of user — for broadcasts like "new blog post published" where there's
- * no target user list, just "everyone who opted in". Unlike
- * sendPushToUser/sendPushToUsers this queries push_subscriptions
- * directly instead of looping per user, since a per-user fan-out would
- * mean one extra query per subscriber for no benefit here. Returns how
- * many sends succeeded; dead subscriptions are pruned the same way.
- */
-export async function broadcastPush(payload: PushPayload, nativeDB?: any): Promise<number> {
-  const configured = await configureWebPush(nativeDB)
-  if (!configured) return 0
+// Sends one notification. Returns true on success. Prunes the subscription on
+// 404/410. Any other failure returns false and leaves the row alone.
+async function sendOne(
+  sub: PushSubscriptionRecord,
+  body: string,
+  vapid: VapidDetails,
+  nativeDB?: any,
+): Promise<boolean> {
+  try {
+    await sendNotification(
+      { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+      body,
+      { vapidDetails: vapid, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) } as any,
+    )
+    return true
+  } catch (err: any) {
+    const statusCode = err?.statusCode ?? err?.status
+    if (statusCode === 404 || statusCode === 410) {
+      await removeSubscription(sub.endpoint, nativeDB)
+    }
+    return false
+  }
+}
 
-  const subscriptions = await getAllSubscriptions(nativeDB)
-  if (subscriptions.length === 0) return 0
+/** Sends a push to every subscription a user has. Returns successful sends. */
+export async function sendPushToUser(userId: string, payload: PushPayload, nativeDB?: any): Promise<number> {
+  const vapid = await loadVapidDetails(nativeDB)
+  if (!vapid) return 0
 
+  const subscriptions = await getSubscriptionsForUser(userId, nativeDB)
+  const body = JSON.stringify(payload)
   let sent = 0
   for (const sub of subscriptions) {
-    try {
-      await webpush.sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: { p256dh: sub.p256dh, auth: sub.auth },
-        },
-        JSON.stringify(payload),
-      )
-      sent++
-    } catch (err: any) {
-      const statusCode = err?.statusCode
-      if (statusCode === 404 || statusCode === 410) {
-        await removeSubscription(sub.endpoint, nativeDB)
-      }
+    if (await sendOne(sub, body, vapid, nativeDB)) sent++
+  }
+  return sent
+}
+
+/** Sends the same push to a batch of users. Returns total successful sends. */
+export async function sendPushToUsers(
+  userIds: string[],
+  payload: PushPayload,
+  nativeDB?: any,
+): Promise<number> {
+  const vapid = await loadVapidDetails(nativeDB)
+  if (!vapid) return 0
+
+  const body = JSON.stringify(payload)
+  let sent = 0
+  for (const userId of userIds) {
+    const subscriptions = await getSubscriptionsForUser(userId, nativeDB)
+    for (const sub of subscriptions) {
+      if (await sendOne(sub, body, vapid, nativeDB)) sent++
     }
+  }
+  return sent
+}
+
+/** Sends the same push to every subscribed endpoint site-wide (broadcasts). */
+export async function broadcastPush(payload: PushPayload, nativeDB?: any): Promise<number> {
+  const vapid = await loadVapidDetails(nativeDB)
+  if (!vapid) return 0
+
+  const subscriptions = await getAllSubscriptions(nativeDB)
+  const body = JSON.stringify(payload)
+  let sent = 0
+  for (const sub of subscriptions) {
+    if (await sendOne(sub, body, vapid, nativeDB)) sent++
   }
   return sent
 }

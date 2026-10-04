@@ -28,6 +28,7 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
   const [pickerOpen, setPickerOpen] = useState(false)
   const [previous, setPrevious] = useState<UploadedFile[]>([])
   const [loadingPrevious, setLoadingPrevious] = useState(false)
+  const [pickerError, setPickerError] = useState<string | null>(null)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -58,11 +59,30 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
   async function openPicker() {
     setPickerOpen(true)
     setLoadingPrevious(true)
-    const headers = await getAuthHeader()
-    const res = await fetch(`/api/admin/uploads?folder=${folder}`, { headers })
-    const data = await res.json()
-    setPrevious(data.files ?? [])
-    setLoadingPrevious(false)
+    setPickerError(null)
+    try {
+      const headers = await getAuthHeader()
+      // Images uploaded before folders existed live under "banners/", so
+      // the blog picker also looks there instead of showing an empty list.
+      const folders = folder === "blog" ? ["blog", "banners"] : [folder]
+      const results = await Promise.all(
+        folders.map(async (f) => {
+          const res = await fetch(`/api/admin/uploads?folder=${f}`, { headers })
+          const data = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(data.error ?? `Could not load uploads (${res.status})`)
+          return (data.files ?? []) as UploadedFile[]
+        }),
+      )
+      const merged = results
+        .flat()
+        .sort((a, b) => new Date(b.uploadedAt ?? 0).getTime() - new Date(a.uploadedAt ?? 0).getTime())
+      setPrevious(merged)
+    } catch (err) {
+      setPrevious([])
+      setPickerError(err instanceof Error ? err.message : "Could not load uploads")
+    } finally {
+      setLoadingPrevious(false)
+    }
   }
 
   return (
@@ -113,6 +133,8 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
 
             {loadingPrevious ? (
               <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : pickerError ? (
+              <p className="text-sm text-destructive">{pickerError}</p>
             ) : previous.length === 0 ? (
               <p className="text-sm text-muted-foreground">No previous uploads yet. Upload a new image first.</p>
             ) : (

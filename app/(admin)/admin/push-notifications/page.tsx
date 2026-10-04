@@ -21,6 +21,8 @@ export default function AdminPushNotificationsPage() {
   const [vapidConfigured, setVapidConfigured] = useState(false)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [vapidPublicKey, setVapidPublicKey] = useState<string | null>(null)
+  const [keyMessage, setKeyMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -42,6 +44,7 @@ export default function AdminPushNotificationsPage() {
     setFlags((flagsData.flags ?? []).filter((f: FeatureFlag) => PUSH_FLAG_KEYS.includes(f.key)))
     setSettings(pushData.settings ?? [])
     setVapidConfigured(!!pushData.vapidConfigured)
+    setVapidPublicKey(pushData.vapidPublicKey ?? null)
     setLoading(false)
   }
 
@@ -60,14 +63,36 @@ export default function AdminPushNotificationsPage() {
   }
 
   async function generateKeys() {
+    if (
+      vapidConfigured &&
+      !window.confirm("Regenerate the VAPID keys? Every device that already allowed push will stop receiving notifications until its user re-enables push.")
+    ) {
+      return
+    }
     setGenerating(true)
-    const headers = await getAuthHeader()
-    await fetch("/api/admin/push-notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ action: "generate_vapid_keys" }),
-    })
-    setGenerating(false)
+    setKeyMessage(null)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/admin/push-notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ action: "generate_vapid_keys" }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) {
+        setKeyMessage({ type: "error", text: data.error ?? `Could not generate keys (HTTP ${res.status}).` })
+      } else {
+        setVapidPublicKey(data.publicKey ?? null)
+        setKeyMessage({
+          type: "ok",
+          text: `New keys generated at ${new Date().toLocaleTimeString()}. Users must re-enable push on their next visit.`,
+        })
+      }
+    } catch (err) {
+      setKeyMessage({ type: "error", text: err instanceof Error ? err.message : "Network error" })
+    } finally {
+      setGenerating(false)
+    }
     await load()
   }
 
@@ -100,6 +125,28 @@ export default function AdminPushNotificationsPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   No VAPID keys configured yet. Generate a key pair to enable push notifications.
+                </p>
+              )}
+              {vapidConfigured && vapidPublicKey && (
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-secondary">Current public key</p>
+                  <p className="mt-1 break-all rounded-md bg-muted p-2 font-mono text-xs">{vapidPublicKey}</p>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(vapidPublicKey)}
+                    className="mt-1 text-xs text-accent underline"
+                  >
+                    Copy
+                  </button>
+                </div>
+              )}
+              {keyMessage && (
+                <p
+                  className={`mt-3 rounded-md p-2 text-sm ${
+                    keyMessage.type === "ok" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                  }`}
+                >
+                  {keyMessage.text}
                 </p>
               )}
               <button

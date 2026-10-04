@@ -18,19 +18,19 @@
   "r2_buckets": [
     {
       "binding": "ZAMORAXPAY_BUCKET",
-      "bucket_name": "zamoraxpay-files"
+      "bucket_name": "zamoraxpay-storage"
     },
     {
       "binding": "NEXT_INC_CACHE_R2_BUCKET",
-      "bucket_name": "zamoraxpay-files"
+      "bucket_name": "zamoraxpay-storage"
     }
   ],
   "vars": {
     "CF_ACCOUNT_ID": "eb336be2ddffa37662cfc9a1319f37e4",
     "CF_D1_DATABASE_ID": "48ab37de-0617-41c1-b1af-86d2cd817e7a",
-    "R2_BUCKET": "zamoraxpay-files",
+    "R2_BUCKET": "zamoraxpay-storage",
     "R2_ENDPOINT": "https://eb336be2ddffa37662cfc9a1319f37e4.r2.cloudflarestorage.com",
-    "R2_PUBLIC_URL": "https://files.zamoraxpay.com.ng",
+    "R2_PUBLIC_URL": "https://pub-ffeec18d6e584990bd35436a4e99ef0e.r2.dev",
     "NEXT_PUBLIC_APP_URL": "https://zamoraxpay.com.ng",
     "NEXT_PUBLIC_SITE_TAG": "zamoraxpay.com.ng",
     "NEXT_PUBLIC_ZAMORAX_MARKETPLACE_URL": "https://zamorax.com",

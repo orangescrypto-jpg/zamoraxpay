@@ -37,7 +37,12 @@
 // so electricity remains configured manually via pricing_rules.
 
 import { fetchWithRetry } from "@/lib/fetch-with-retry"
-import { upsertPlanMapping, findMappingByNaturalKey } from "@/src/services/providerPlanMappings"
+import {
+  upsertPlanMapping,
+  findMappingByNaturalKey,
+  batchUpsertPlanMappings,
+  type PlanMappingInput,
+} from "@/src/services/providerPlanMappings"
 import { canonicalPlanKey, parsePlanIdentity } from "@/src/services/planNormalization"
 
 // Every sync function below calls a provider's HTTP API and expects
@@ -1278,41 +1283,31 @@ export async function syncInlomaxPlans(
   let updated = 0
   let skipped = 0
 
+  const rows: PlanMappingInput[] = []
+
   // Data plans — { serviceID, network, dataPlan, amount, dataType, validity }
   const dataPlans: any[] = Array.isArray(data.dataPlans) ? data.dataPlans : []
   fetched += dataPlans.length
   for (const plan of dataPlans) {
     const serviceId = String(plan.serviceID ?? "")
     const network = NETWORK_LABEL[String(plan.network ?? "").toUpperCase()] ?? String(plan.network ?? "")
-    const priceNaira = parseInlomaxCurrency(plan.amount)
-    const costKobo = Math.round(priceNaira * 100)
+    const costKobo = Math.round(parseInlomaxCurrency(plan.amount) * 100)
     if (!serviceId || !network || Number.isNaN(costKobo) || costKobo <= 0) {
       skipped++
       continue
     }
     // dataType (e.g. "CORPORATE GIFTING", "SME", "AWOOF") disambiguates
-    // otherwise-identical-looking plans on the same network — fold it
-    // into the label text canonicalizedPlanCode parses, same as every
-    // other provider's category/type field.
+    // otherwise-identical-looking plans on the same network.
     const label = [plan.dataPlan, plan.validity, plan.dataType].filter(Boolean).join(" ")
-    const planCode = canonicalizedPlanCode(label || String(plan.dataPlan ?? ""), network, "data")
-    const existing = await findMappingByNaturalKey("data", network, planCode, "inlomax", nativeDB)
-    await upsertPlanMapping(
-      {
-        id: existing?.id,
-        serviceType: "data",
-        networkOrBiller: network,
-        planCode,
-        providerKey: "inlomax",
-        providerPlanId: serviceId,
-        providerCostKobo: costKobo,
-        providerPlanLabel: label || null,
-      },
-      adminUserId,
-      nativeDB,
-    )
-    if (existing) updated++
-    else created++
+    rows.push({
+      serviceType: "data",
+      networkOrBiller: network,
+      planCode: canonicalizedPlanCode(label || String(plan.dataPlan ?? ""), network, "data"),
+      providerKey: "inlomax",
+      providerPlanId: serviceId,
+      providerCostKobo: costKobo,
+      providerPlanLabel: label || null,
+    })
   }
 
   // Cable plans — { serviceID, cablePlan, cable, amount, discount }
@@ -1321,67 +1316,51 @@ export async function syncInlomaxPlans(
   for (const plan of cablePlans) {
     const serviceId = String(plan.serviceID ?? "")
     const biller = String(plan.cable ?? "").toUpperCase()
-    const priceNaira = parseInlomaxCurrency(plan.amount)
-    const costKobo = Math.round(priceNaira * 100)
+    const costKobo = Math.round(parseInlomaxCurrency(plan.amount) * 100)
     if (!serviceId || !biller || Number.isNaN(costKobo) || costKobo <= 0) {
       skipped++
       continue
     }
-    const planCode = canonicalizedPlanCode(String(plan.cablePlan ?? ""), biller, "cable")
-    const existing = await findMappingByNaturalKey("cable", biller, planCode, "inlomax", nativeDB)
-    await upsertPlanMapping(
-      {
-        id: existing?.id,
-        serviceType: "cable",
-        networkOrBiller: biller,
-        planCode,
-        providerKey: "inlomax",
-        providerPlanId: serviceId,
-        providerCostKobo: costKobo,
-        providerPlanLabel: plan.cablePlan ?? null,
-      },
-      adminUserId,
-      nativeDB,
-    )
-    if (existing) updated++
-    else created++
+    rows.push({
+      serviceType: "cable",
+      networkOrBiller: biller,
+      planCode: canonicalizedPlanCode(String(plan.cablePlan ?? ""), biller, "cable"),
+      providerKey: "inlomax",
+      providerPlanId: serviceId,
+      providerCostKobo: costKobo,
+      providerPlanLabel: plan.cablePlan ?? null,
+    })
   }
 
-  // Exam pins — { serviceID, type, amount }. "type" is the exam board
-  // itself (e.g. "WAEC"), not the pin's registration/result_checker
-  // kind, which Inlomax's own docs sample doesn't separately expose —
-  // classify off the combined text same as every other provider, and
-  // skip (rather than guess) when classifyExamPinType can't tell.
+  // Exam pins — { serviceID, type, amount }. Skip (rather than guess)
+  // when classifyExamPinType can't tell the pin kind.
   const education: any[] = Array.isArray(data.education) ? data.education : []
   fetched += education.length
   for (const plan of education) {
     const serviceId = String(plan.serviceID ?? "")
     const board = String(plan.type ?? "").toUpperCase()
-    const priceNaira = parseInlomaxCurrency(plan.amount)
-    const costKobo = Math.round(priceNaira * 100)
+    const costKobo = Math.round(parseInlomaxCurrency(plan.amount) * 100)
     const pinType = classifyExamPinType(`${plan.type ?? ""} ${plan.label ?? ""}`)
     if (!serviceId || !board || !pinType || Number.isNaN(costKobo) || costKobo <= 0) {
       skipped++
       continue
     }
-    const existing = await findMappingByNaturalKey("exam_pin", board, pinType, "inlomax", nativeDB)
-    await upsertPlanMapping(
-      {
-        id: existing?.id,
-        serviceType: "exam_pin",
-        networkOrBiller: board,
-        planCode: pinType,
-        providerKey: "inlomax",
-        providerPlanId: serviceId,
-        providerCostKobo: costKobo,
-        providerPlanLabel: String(plan.type ?? "") || null,
-      },
-      adminUserId,
-      nativeDB,
-    )
-    if (existing) updated++
-    else created++
+    rows.push({
+      serviceType: "exam_pin",
+      networkOrBiller: board,
+      planCode: pinType,
+      providerKey: "inlomax",
+      providerPlanId: serviceId,
+      providerCostKobo: costKobo,
+      providerPlanLabel: String(plan.type ?? "") || null,
+    })
   }
+
+  // One SELECT per service type + a few native batch() calls total,
+  // instead of 2 D1 calls per plan (the cause of the subrequest-limit error).
+  const written = await batchUpsertPlanMappings(rows, adminUserId, nativeDB)
+  created += written.created
+  updated += written.updated
 
   return { fetched, created, updated, skipped }
 }

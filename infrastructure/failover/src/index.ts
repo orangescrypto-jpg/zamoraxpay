@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 export interface Env {
   PRIMARY_APP: Fetcher
   PRIMARY_HEALTH_PATH?: string

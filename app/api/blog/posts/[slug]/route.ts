@@ -6,5 +6,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
   const { slug } = await params
   const post = await getPostBySlug(slug)
   if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 })
-  return NextResponse.json({ post })
+  return NextResponse.json(
+    { post },
+    { headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600" } },
+  )
 }

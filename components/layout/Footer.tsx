@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import type { Banner } from "@/src/types"
+import { getPublicBanners } from "./bannerClient"
 import { AdSenseSlot } from "@/components/shared/AdSenseSlot"
 import { isPrivatePath } from "@/lib/privateRoutes"
 
@@ -15,9 +16,8 @@ function FooterBanner() {
   const [activeIndex, setActiveIndex] = useState(0)
 
   useEffect(() => {
-    fetch("/api/banners?placement=footer")
-      .then((res) => res.json())
-      .then((data) => setBanners(data.banners ?? []))
+    getPublicBanners()
+      .then((items) => setBanners(items.filter((item) => item.placement === "footer")))
       .catch(() => setBanners([]))
   }, [])
 

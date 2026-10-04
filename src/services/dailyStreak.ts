@@ -128,16 +128,19 @@ export async function getStreakStatus(userId: string, nativeDB?: any): Promise<S
   const graceUsedOnDate = row?.grace_used_on_date ?? null
 
   const alreadyCheckedInToday = lastCheckinDate === today
-  const graceDaysPerWeek = await getSettingNumber("daily_streak_grace_days_per_week", 1, nativeDB)
+  const [graceDaysPerWeek, tiers, protectionTokens] = await Promise.all([
+    getSettingNumber("daily_streak_grace_days_per_week", 1, nativeDB),
+    getActiveTiers(nativeDB),
+    getProtectionTokens(userId, nativeDB),
+  ])
   const graceAvailable = graceDaysPerWeek > 0 && (!graceUsedOnDate || daysBetween(graceUsedOnDate, today) >= 7)
 
-  const tiers = await getActiveTiers(nativeDB)
   // Whatever day *would* be reached with today's check-in, for display.
   const projectedNextStreak = alreadyCheckedInToday
     ? currentStreak
     : lastCheckinDate && daysBetween(lastCheckinDate, today) === 1
       ? currentStreak + 1
-      : 1 // fresh start (or forgiven via grace, still counts as continuing — see checkIn())
+      : 1
   const nextRewardKobo = computeRewardForDay(Math.max(projectedNextStreak, 1), tiers)
 
   return {
@@ -147,7 +150,7 @@ export async function getStreakStatus(userId: string, nativeDB?: any): Promise<S
     alreadyCheckedInToday,
     nextRewardKobo,
     graceAvailable,
-    protectionTokens: await getProtectionTokens(userId, nativeDB),
+    protectionTokens,
   }
 }
 

@@ -12,10 +12,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
   if (!page) return NextResponse.json({ error: "Page not found" }, { status: 404 })
 
-  return NextResponse.json({
-    slug: page.slug,
-    title: page.title,
-    contentMarkdown: page.content_markdown,
-    metaDescription: page.meta_description,
-  })
+  return NextResponse.json(
+    {
+      slug: page.slug,
+      title: page.title,
+      contentMarkdown: page.content_markdown,
+      metaDescription: page.meta_description,
+    },
+    { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=1800" } },
+  )
 }

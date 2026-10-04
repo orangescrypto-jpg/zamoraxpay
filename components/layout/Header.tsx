@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import type { Banner } from "@/src/types"
+import { getPublicBanners } from "./bannerClient"
 
 const AUTO_SLIDE_INTERVAL_MS = 5000
 
@@ -29,9 +30,8 @@ function BannerSlider() {
   const [activeIndex, setActiveIndex] = useState(0)
 
   useEffect(() => {
-    fetch("/api/banners?placement=header_slider")
-      .then((res) => res.json())
-      .then((data) => setBanners(data.banners ?? []))
+    getPublicBanners()
+      .then((items) => setBanners(items.filter((item) => item.placement === "header_slider")))
       .catch(() => setBanners([]))
   }, [])
 

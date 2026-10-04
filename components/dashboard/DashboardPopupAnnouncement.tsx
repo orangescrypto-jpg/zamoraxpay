@@ -20,7 +20,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { createClient } from "@/src/services/providers/supabase/client"
+import { getDashboardAnnouncements } from "./announcementClient"
 
 interface PopupAnnouncement {
   id: string
@@ -67,12 +67,7 @@ export function DashboardPopupAnnouncement({
 
     async function load() {
       try {
-        const supabase = createClient()
-        const { data: { session } } = await supabase.auth.getSession()
-        const res = await fetch("/api/dashboard-announcement", {
-          headers: { Authorization: `Bearer ${session?.access_token}` },
-        })
-        const data = await res.json()
+        const data = await getDashboardAnnouncements()
         const popups: PopupAnnouncement[] = data.popups ?? []
         const next = popups.find((p) => !isDismissed(p))
         if (cancelled) return

@@ -7,8 +7,6 @@ import { NextResponse } from "next/server"
 import { d1Query } from "@/lib/db"
 
 // Renders per request: reads D1 at runtime, not at build time.
-export const dynamic = "force-dynamic"
-
 export async function GET() {
   const result = await d1Query(
     "SELECT key, value FROM site_settings WHERE key IN ('whatsapp_support_enabled', 'whatsapp_support_number')",
@@ -18,5 +16,8 @@ export async function GET() {
   const enabled = rows.find((r: any) => r.key === "whatsapp_support_enabled")?.value === "true"
   const number = rows.find((r: any) => r.key === "whatsapp_support_number")?.value ?? ""
 
-  return NextResponse.json({ enabled: enabled && number.length > 0, number })
+  return NextResponse.json(
+    { enabled: enabled && number.length > 0, number },
+    { headers: { "Cache-Control": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400" } },
+  )
 }

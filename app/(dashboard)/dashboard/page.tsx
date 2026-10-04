@@ -124,34 +124,22 @@ export default function DashboardPage() {
         const { data: { session } } = await supabase.auth.getSession()
         const headers = { Authorization: `Bearer ${session?.access_token}` }
 
-        const [balanceRes, historyRes] = await Promise.all([
-          fetch("/api/wallet/balance", { headers }),
-          fetch("/api/history", { headers }),
-        ])
-        const balanceData = await balanceRes.json()
-        const historyData = await historyRes.json()
+        const res = await fetch("/api/dashboard/summary", { headers })
+        if (!res.ok) throw new Error("Dashboard summary failed")
+        const data = await res.json()
         if (cancelled) return
 
-        setBalanceKobo(balanceData.balanceKobo ?? 0)
+        setBalanceKobo(data.balanceKobo ?? 0)
+        setCanCheckInToday(Boolean(data.streak?.canCheckInToday))
+        setNextRewardKobo(data.streak?.nextRewardKobo ?? 0)
+        setStreakLoaded(true)
 
-        // Independent of the above — a failure here shouldn't block
-        // balance/history from rendering, so it's fetched separately.
-        fetch("/api/daily-streak", { headers })
-          .then((res) => res.json())
-          .then((data) => {
-            if (cancelled) return
-            setCanCheckInToday(Boolean(data.canCheckInToday))
-            setNextRewardKobo(data.nextRewardKobo ?? 0)
-            setStreakLoaded(true)
-          })
-          .catch(() => { if (!cancelled) setStreakLoaded(true) /* notice just stays hidden */ })
-
-        const orders: Order[] = historyData.orders ?? []
-        const walletTransactions: WalletTx[] = historyData.walletTransactions ?? []
+        const orders: Order[] = data.orders ?? []
+        const walletTransactions: WalletTx[] = data.walletTransactions ?? []
 
         // Purchases already appear as an order row, so skip the paired
         // "purchase" wallet_transactions row here to avoid double-listing
-        // the same event — everything else (funding, refunds, cashback,
+        // the same event - everything else (funding, refunds, cashback,
         // bonuses, admin adjustments) is wallet-only and shown as-is.
         const merged: ActivityItem[] = [
           ...orders.map((o): ActivityItem => ({ kind: "order", id: o.id, created_at: o.created_at, data: o })),
@@ -187,7 +175,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Balance card — the one bold move on this page */}
+      {/* Balance card - the one bold move on this page */}
       <div className="relative mt-5 overflow-hidden rounded-[20px] bg-[#0F1E4D] p-6 text-white shadow-[0_20px_40px_-16px_rgba(15,30,77,0.55)] sm:p-7">
         <svg
           aria-hidden
@@ -323,7 +311,7 @@ export default function DashboardPage() {
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-50">
                 <Clock className="h-5 w-5 text-gray-300" />
               </span>
-              <p className="text-sm text-secondary">No transactions yet — fund your wallet to get started.</p>
+              <p className="text-sm text-secondary">No transactions yet - fund your wallet to get started.</p>
             </div>
           ) : (
             <div className="divide-y divide-border/70">

@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { createClient } from "@/src/services/providers/supabase/client"
+import { getDashboardAnnouncements } from "./announcementClient"
 import { cn } from "@/lib/utils"
 
 const AUTO_SLIDE_INTERVAL_MS = 5000
@@ -60,12 +60,7 @@ export function DashboardAnnouncement() {
 
     async function load() {
       try {
-        const supabase = createClient()
-        const { data: { session } } = await supabase.auth.getSession()
-        const res = await fetch("/api/dashboard-announcement", {
-          headers: { Authorization: `Bearer ${session?.access_token}` },
-        })
-        const data = await res.json()
+        const data = await getDashboardAnnouncements()
         if (!cancelled) setAnnouncements(data.announcements ?? [])
       } catch {
         if (!cancelled) setAnnouncements([])

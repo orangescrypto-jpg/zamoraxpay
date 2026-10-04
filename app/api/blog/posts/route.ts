@@ -5,5 +5,8 @@ import { listPublishedPosts } from "@/src/services/blog"
 export async function GET(req: NextRequest) {
   const category = req.nextUrl.searchParams.get("category") ?? undefined
   const posts = await listPublishedPosts(category)
-  return NextResponse.json({ posts })
+  return NextResponse.json(
+    { posts },
+    { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } },
+  )
 }

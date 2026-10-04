@@ -10,6 +10,7 @@
 // "homepage_footer" reads adsense_homepage_footer_slot.
 
 import { useEffect, useRef, useState } from "react"
+import { getAdSenseConfig } from "./publicConfigClient"
 
 interface AdSenseSlotProps {
   slotKey: "homepage_footer" | "blog_post"
@@ -22,8 +23,7 @@ export function AdSenseSlot({ slotKey, className }: AdSenseSlotProps) {
   const pushed = useRef(false)
 
   useEffect(() => {
-    fetch("/api/adsense-config")
-      .then((res) => res.json())
+    getAdSenseConfig()
       .then((data) =>
         setConfig({
           enabled: !!data.enabled,

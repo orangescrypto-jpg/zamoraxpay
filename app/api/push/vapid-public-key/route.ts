@@ -6,12 +6,13 @@ import { NextResponse } from "next/server"
 import { getVapidPublicKey } from "@/src/services/pushNotifications"
 
 // Renders per request: reads D1 at runtime, not at build time.
-export const dynamic = "force-dynamic"
-
 export async function GET() {
   const publicKey = await getVapidPublicKey()
   if (!publicKey) {
     return NextResponse.json({ error: "Push notifications are not configured yet" }, { status: 404 })
   }
-  return NextResponse.json({ publicKey })
+  return NextResponse.json(
+    { publicKey },
+    { headers: { "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800" } },
+  )
 }

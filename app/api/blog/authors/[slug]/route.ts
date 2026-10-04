@@ -25,5 +25,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
     publishedAt: r.published_at,
   }))
 
-  return NextResponse.json({ author, posts })
+  return NextResponse.json(
+    { author, posts },
+    { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=1800" } },
+  )
 }

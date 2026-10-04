@@ -2,13 +2,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { getWhatsAppSupport } from "./publicConfigClient"
 
 export default function WhatsAppSupportButton() {
   const [state, setState] = useState<{ enabled: boolean; number: string } | null>(null)
 
   useEffect(() => {
-    fetch("/api/whatsapp-support")
-      .then((res) => res.json())
+    getWhatsAppSupport()
       .then((data) => setState({ enabled: !!data.enabled, number: data.number ?? "" }))
       .catch(() => setState({ enabled: false, number: "" }))
   }, [])

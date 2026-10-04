@@ -94,7 +94,7 @@ Spin tickets, per-source prize tables, vouchers and coupons. Everything is confi
 - `migrations/schema.sql` — the entire database schema and seed data in one file.
 - `components/` — UI components, organized by feature area (admin, auth, wallet, services, layout, legal, shared).
 
-## Notes
+## Note
 
 - Wallet balances are stored in **kobo** (integer) throughout, to avoid floating-point rounding errors. Divide by 100 for display naira amounts — `lib/utils.ts` has a `formatNaira()` helper for this.
 - The VTU fallback router (`src/services/vtuRouter.ts`) tries enabled providers **sequentially** in admin-configured priority order — never in parallel — to avoid double-charging float capital on two providers for one purchase.

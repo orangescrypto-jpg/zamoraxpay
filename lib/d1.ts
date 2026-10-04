@@ -84,3 +84,30 @@ export async function d1Query(
   if (!json.success) throw new Error(json.errors?.[0]?.message ?? "ZamoraxPay D1 query failed")
   return json.result?.[0]
 }
+
+
+// Runs many independent statements as ONE native D1 batch() call per chunk.
+// On Workers every D1 call counts toward the per-invocation subrequest cap,
+// so N individual d1Query() calls = N subrequests, while batch() = 1 per
+// chunk. D1 batch() is also atomic per call. Off Workers (REST fallback)
+// it degrades to sequential d1Query() calls. Chunked to stay well inside
+// D1's statement-size limits.
+export async function d1Batch(
+  statements: { sql: string; params?: unknown[] }[],
+  nativeDB?: any,
+  chunkSize = 50,
+): Promise<void> {
+  if (statements.length === 0) return
+  const db = nativeDB ?? (await resolveNativeDB())
+  if (db && typeof db.batch === "function") {
+    for (let i = 0; i < statements.length; i += chunkSize) {
+      const chunk = statements.slice(i, i + chunkSize).map((st) => {
+        const stmt = db.prepare(st.sql)
+        return st.params?.length ? stmt.bind(...st.params) : stmt
+      })
+      await db.batch(chunk)
+    }
+    return
+  }
+  for (const st of statements) await d1Query(st.sql, st.params ?? [], nativeDB)
+}

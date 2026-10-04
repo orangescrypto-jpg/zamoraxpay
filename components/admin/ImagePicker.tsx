@@ -29,6 +29,7 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
   const [previous, setPrevious] = useState<UploadedFile[]>([])
   const [loadingPrevious, setLoadingPrevious] = useState(false)
   const [pickerError, setPickerError] = useState<string | null>(null)
+  const [pickerInfo, setPickerInfo] = useState("")
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -37,23 +38,46 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+    const input = e.target
+    const file = input.files?.[0]
     if (!file) return
 
     setUploading(true)
-    const headers = await getAuthHeader()
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("folder", folder)
+    // Abort after 40s so the button can never sit on "Uploading..." forever.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 40_000)
+    try {
+      const headers = await getAuthHeader()
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("folder", folder)
 
-    const res = await fetch("/api/admin/upload", { method: "POST", headers, body: formData })
-    const data = await res.json()
-    setUploading(false)
-
-    if (res.ok) onChange(data.url)
-    else alert(data.error ?? "Upload failed")
-
-    e.target.value = ""
+      const res = await fetch("/api/admin/upload", {
+        method: "POST",
+        headers,
+        body: formData,
+        signal: controller.signal,
+      })
+      const text = await res.text()
+      let data: any = {}
+      try {
+        data = JSON.parse(text)
+      } catch {
+        // Non-JSON body means the server crashed or a proxy answered.
+      }
+      if (res.ok && data.url) onChange(data.url)
+      else alert(data.error ?? `Upload failed (HTTP ${res.status}). ${text.slice(0, 120)}`)
+    } catch (err) {
+      alert(
+        err instanceof DOMException && err.name === "AbortError"
+          ? "Upload timed out after 40 seconds. The server did not respond."
+          : `Upload failed: ${err instanceof Error ? err.message : "network error"}`,
+      )
+    } finally {
+      clearTimeout(timer)
+      setUploading(false)
+      input.value = ""
+    }
   }
 
   async function openPicker() {
@@ -77,6 +101,7 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
         .flat()
         .sort((a, b) => new Date(b.uploadedAt ?? 0).getTime() - new Date(a.uploadedAt ?? 0).getTime())
       setPrevious(merged)
+      setPickerInfo(folders.map((f, i) => `${f}/: ${results[i].length}`).join(", "))
     } catch (err) {
       setPrevious([])
       setPickerError(err instanceof Error ? err.message : "Could not load uploads")
@@ -137,6 +162,9 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
               <p className="text-sm text-destructive">{pickerError}</p>
             ) : previous.length === 0 ? (
               <p className="text-sm text-muted-foreground">No previous uploads yet. Upload a new image first.</p>
+            ) : null}
+            {!loadingPrevious && !pickerError && previous.length === 0 ? (
+              <p className="mt-2 text-xs text-muted-foreground">Checked {pickerInfo}</p>
             ) : (
               <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
                 {previous.map((file) => (

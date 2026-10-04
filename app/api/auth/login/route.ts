@@ -47,6 +47,17 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error || !data.user) {
+      // TEMP DEBUG: logs the real Supabase error to `wrangler tail` so we
+      // can see what's actually failing post-migration (network/DNS error
+      // vs genuine bad credentials vs project misconfig). Remove once
+      // diagnosed.
+      console.error("[login] supabase signInWithPassword failed", {
+        status: (error as any)?.status,
+        code: (error as any)?.code,
+        message: error?.message,
+        name: error?.name,
+      })
+
       // Supabase returns a specific error when email confirmation is
       // required and hasn't happened yet — surface that distinctly so
       // the frontend can show "check your email" instead of a generic

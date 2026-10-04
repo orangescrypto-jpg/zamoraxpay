@@ -11,7 +11,7 @@
 // enabled provider first for plan-coded purchases, instead of a flat
 // priority order.
 
-import { d1Query } from "@/lib/d1"
+import { d1Query, d1Batch } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import type { VtuServiceType, VtuProviderKey } from "@/src/types"
 import { canonicalPlanKey, normalizeNetworkOrBiller } from "@/src/services/planNormalization"
@@ -264,6 +264,82 @@ export async function upsertPlanMapping(
     ],
     nativeDB,
   )
+}
+
+export interface PlanMappingInput {
+  serviceType: VtuServiceType
+  networkOrBiller: string
+  planCode: string
+  providerKey: string
+  providerPlanId: string
+  providerCostKobo: number
+  providerPlanLabel?: string | null
+}
+
+// Bulk version of findMappingByNaturalKey + upsertPlanMapping for sync jobs.
+// Cost: 1 SELECT per (serviceType, providerKey) group + ceil(N/50) native
+// batch() calls, instead of 2 D1 calls per plan. Like the per-row sync path
+// (which passed the existing row's id), it does NOT re-activate a mapping an
+// admin switched off.
+export async function batchUpsertPlanMappings(
+  rows: PlanMappingInput[],
+  adminUserId: string,
+  nativeDB?: any,
+): Promise<{ created: number; updated: number }> {
+  const byKey = new Map<string, PlanMappingInput>()
+  for (const r of rows) {
+    const networkOrBiller = normalizeNetworkOrBiller(r.networkOrBiller)
+    const planCode = canonicalPlanKey(r.planCode, r.networkOrBiller, r.serviceType).planCode
+    // Duplicate natural keys inside one sync: last one wins, as sequential upserts did.
+    byKey.set([r.serviceType, networkOrBiller, planCode, r.providerKey].join("\u0000"), {
+      ...r,
+      networkOrBiller,
+      planCode,
+    })
+  }
+  if (byKey.size === 0) return { created: 0, updated: 0 }
+
+  const groups = new Set<string>()
+  for (const r of byKey.values()) groups.add(`${r.serviceType}\u0000${r.providerKey}`)
+  const existingKeys = new Set<string>()
+  for (const g of groups) {
+    const [serviceType, providerKey] = g.split("\u0000")
+    const res = await d1Query(
+      `SELECT network_or_biller, plan_code FROM provider_plan_mappings
+       WHERE service_type = ? AND provider_key = ?`,
+      [serviceType, providerKey],
+      nativeDB,
+    )
+    for (const row of (res.results ?? []) as any[]) {
+      existingKeys.add([serviceType, row.network_or_biller, row.plan_code, providerKey].join("\u0000"))
+    }
+  }
+
+  let created = 0
+  let updated = 0
+  const statements: { sql: string; params: unknown[] }[] = []
+  for (const [key, r] of byKey) {
+    if (existingKeys.has(key)) updated++
+    else created++
+    statements.push({
+      sql: `INSERT INTO provider_plan_mappings
+        (id, service_type, network_or_biller, plan_code, provider_key, provider_plan_id, provider_cost_kobo, provider_plan_label, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(service_type, network_or_biller, plan_code, provider_key)
+       DO UPDATE SET
+         provider_plan_id = excluded.provider_plan_id,
+         provider_cost_kobo = excluded.provider_cost_kobo,
+         provider_plan_label = excluded.provider_plan_label,
+         updated_by = excluded.updated_by,
+         updated_at = datetime('now')`,
+      params: [
+        randomUUID(), r.serviceType, r.networkOrBiller, r.planCode, r.providerKey,
+        r.providerPlanId, r.providerCostKobo, r.providerPlanLabel ?? null, adminUserId,
+      ],
+    })
+  }
+  await d1Batch(statements, nativeDB)
+  return { created, updated }
 }
 
 export async function setPlanMappingActive(id: string, isActive: boolean, nativeDB?: any): Promise<void> {

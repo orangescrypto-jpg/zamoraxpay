@@ -104,7 +104,7 @@ export function SimpleBlogEditor({ value, onChange, minHeight = 400 }: SimpleBlo
       formData.append("file", file)
       formData.append("folder", "blog")
 
-      const res = await fetch("/api/admin/upload", { method: "POST", headers, body: formData })
+      const res = await fetch("/api/admin/upload-file", { method: "POST", headers, body: formData })
       const data = await res.json()
       if (res.ok) {
         insertImage(data.url)

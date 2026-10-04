@@ -52,7 +52,7 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
       formData.append("file", file)
       formData.append("folder", folder)
 
-      const res = await fetch("/api/admin/upload", {
+      const res = await fetch("/api/admin/upload-file", {
         method: "POST",
         headers,
         body: formData,
@@ -66,7 +66,7 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
         // Non-JSON body means the server crashed or a proxy answered.
       }
       if (res.ok && data.url) onChange(data.url)
-      else alert(data.error ?? `Upload failed (HTTP ${res.status}). ${text.slice(0, 120)}`)
+      else alert(data.error ?? `Upload failed (HTTP ${res.status}). Allow: ${res.headers.get("allow") ?? "n/a"}. Redirected: ${res.redirected}. URL: ${res.url}. ${text.slice(0, 120)}`)
     } catch (err) {
       alert(
         err instanceof DOMException && err.name === "AbortError"

@@ -67,7 +67,7 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
       const folders = folder === "blog" ? ["blog", "banners"] : [folder]
       const results = await Promise.all(
         folders.map(async (f) => {
-          const res = await fetch(`/api/admin/uploads?folder=${f}`, { headers })
+          const res = await fetch(`/api/admin/uploads?folder=${f}`, { headers, cache: "no-store" })
           const data = await res.json().catch(() => ({}))
           if (!res.ok) throw new Error(data.error ?? `Could not load uploads (${res.status})`)
           return (data.files ?? []) as UploadedFile[]

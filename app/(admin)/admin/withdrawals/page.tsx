@@ -104,7 +104,7 @@ export default function AdminWithdrawalsPage() {
     const headers = await getAuthHeader()
     const formData = new FormData()
     formData.append("file", file)
-    const uploadRes = await fetch("/api/admin/upload", { method: "POST", headers, body: formData })
+    const uploadRes = await fetch("/api/admin/upload-file", { method: "POST", headers, body: formData })
     const uploadData = await uploadRes.json()
     setUploadingFor(null)
 

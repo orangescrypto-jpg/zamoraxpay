@@ -49,7 +49,7 @@
 // stacked. Manually-overridden (auto_priced = 0) rows are untouched
 // and may still use that column however the admin set it by hand.
 
-import { d1Query } from "@/lib/d1"
+import { d1Query, d1Batch } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import type { VtuServiceType } from "@/src/types"
 import { getPricingPolicy, applyFee, type PricingBasisStrategy } from "@/src/services/pricingPolicies"
@@ -202,7 +202,7 @@ export async function reconcilePricingFromMappings(
     existingRuleByPlan.set(`${row.network_or_biller}\u0000${row.plan_code}`, { id: row.id, auto_priced: row.auto_priced })
   }
 
-  const writes: Promise<void>[] = []
+  const writes: { sql: string; params: unknown[] }[] = []
 
   for (const { network_or_biller: networkOrBiller, plan_code: planCode } of distinctPlans) {
     result.scanned++
@@ -252,15 +252,14 @@ export async function reconcilePricingFromMappings(
 
     if (existing) {
       result.updated++
-      writes.push(
-        d1Query(
-          `UPDATE pricing_rules SET
+      writes.push({
+        sql: `UPDATE pricing_rules SET
             retail_price_kobo = ?, wholesale_price_kobo = ?, convenience_fee_kobo = 0,
             pricing_basis_provider_key = ?, pricing_basis_cost_kobo = ?,
             cheapest_live_cost_kobo = ?, worst_live_cost_kobo = ?, live_provider_count = ?,
             updated_by = ?, updated_at = datetime('now')
            WHERE id = ?`,
-          [
+        params: [
             retailPriceKobo,
             wholesalePriceKobo,
             basis.providerKey,
@@ -271,19 +270,16 @@ export async function reconcilePricingFromMappings(
             adminUserId,
             existing.id,
           ],
-          nativeDB,
-        ).then(() => undefined),
-      )
+      })
     } else {
       result.created++
-      writes.push(
-        d1Query(
-          `INSERT INTO pricing_rules
+      writes.push({
+        sql: `INSERT INTO pricing_rules
             (id, service_type, network_or_biller, plan_code, retail_price_kobo, wholesale_price_kobo,
              convenience_fee_kobo, auto_priced, pricing_basis_provider_key, pricing_basis_cost_kobo,
              cheapest_live_cost_kobo, worst_live_cost_kobo, live_provider_count, updated_by)
            VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?)`,
-          [
+        params: [
             randomUUID(),
             serviceType,
             networkOrBiller,
@@ -297,9 +293,7 @@ export async function reconcilePricingFromMappings(
             options.length,
             adminUserId,
           ],
-          nativeDB,
-        ).then(() => undefined),
-      )
+      })
     }
   }
 
@@ -312,7 +306,7 @@ export async function reconcilePricingFromMappings(
   // throws on the first rejection, matching the previous sequential
   // behavior's own failure mode (an early exception also aborted
   // everything after it in the old for-loop).
-  await Promise.all(writes)
+  await d1Batch(writes, nativeDB)
 
   return result
 }

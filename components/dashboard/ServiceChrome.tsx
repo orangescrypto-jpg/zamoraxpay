@@ -174,11 +174,14 @@ export function ServiceChrome({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <div className="grid shrink-0 grid-cols-3 gap-1.5 rounded-xl bg-muted/70 p-1.5 sm:min-w-[280px]">
+            <div className="grid w-full shrink-0 grid-cols-3 gap-1.5 rounded-xl bg-muted/70 p-1.5 sm:w-auto sm:min-w-[320px]">
               {service.steps.map((step, index) => (
-                <div key={step} className="flex min-w-0 items-center gap-1.5 rounded-lg bg-card px-2.5 py-2 text-xs font-medium text-secondary shadow-sm">
+                <div
+                  key={step}
+                  className="flex min-w-0 flex-col items-center gap-1 rounded-lg bg-card px-1.5 py-2 text-center text-[11px] font-medium leading-tight text-secondary shadow-sm sm:flex-row sm:gap-1.5 sm:px-2.5 sm:text-xs"
+                >
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">{index + 1}</span>
-                  <span className="truncate">{step}</span>
+                  <span className="whitespace-normal break-words">{step}</span>
                 </div>
               ))}
             </div>

@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import type { Banner } from "@/src/types"
 import { getPublicBanners } from "./bannerClient"
+import { CommandPalette } from "@/components/layout/CommandPalette"
 
 const AUTO_SLIDE_INTERVAL_MS = 5000
 
@@ -224,6 +225,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-3">
+          <CommandPalette />
           {isAuthenticated ? (
             <>
               <Link href="/wallet" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">

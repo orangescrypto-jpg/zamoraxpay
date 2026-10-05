@@ -36,6 +36,7 @@ import {
 import { SpinCard } from "@/components/dashboard/SpinCard"
 import { SpinPopup } from "@/components/dashboard/SpinPopup"
 import { useSpinStatus } from "@/components/dashboard/useSpinStatus"
+import { ReceiptButton } from "@/components/dashboard/ReceiptButton"
 
 interface Order {
   id: string
@@ -264,7 +265,7 @@ export default function DashboardPage() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="group relative flex flex-col items-center gap-2.5 rounded-2xl border border-border/70 bg-white px-4 py-5 text-center transition hover:border-blue-200 hover:shadow-[0_4px_16px_-6px_rgba(15,30,77,0.18)]"
+                className="group relative flex min-h-[118px] flex-col items-center justify-center gap-2.5 rounded-2xl border border-border/70 bg-white px-3 py-4 text-center shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_8px_20px_-10px_rgba(15,30,77,0.22)]"
               >
                 {showBadge && (
                   <span className="absolute right-3 top-3 flex h-2.5 w-2.5 rounded-full bg-red-500" aria-hidden="true" />
@@ -279,6 +280,35 @@ export default function DashboardPage() {
             )
           })}
         </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Link
+          href="/history"
+          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <Clock className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-secondary">Need a past receipt?</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">Open your full transaction history.</span>
+          </span>
+          <ArrowRight className="h-4 w-4 text-primary transition-transform group-hover:translate-x-0.5" />
+        </Link>
+        <Link
+          href="/contact"
+          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            <CheckCircle2 className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-secondary">Need help?</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">Get support without leaving your account.</span>
+          </span>
+          <ArrowRight className="h-4 w-4 text-primary transition-transform group-hover:translate-x-0.5" />
+        </Link>
       </div>
 
       <div className="mt-9">
@@ -342,6 +372,13 @@ export default function DashboardPage() {
                         <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${badge}`}>
                           {order.status}
                         </span>
+                        <ReceiptButton
+                          service={`${order.service_type} · ${order.network_or_biller}`}
+                          reference={order.id}
+                          amount={formatNaira(order.display_amount_kobo ?? order.amount_kobo)}
+                          status={order.status}
+                          date={new Date(order.created_at).toLocaleString()}
+                        />
                       </div>
                     </div>
                   )

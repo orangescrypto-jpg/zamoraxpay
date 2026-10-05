@@ -93,6 +93,48 @@ async function getActiveTiers(nativeDB?: any): Promise<StreakTier[]> {
   }))
 }
 
+// These two values are global configuration, not user data. The dashboard can
+// serve many users from the same warm Worker/Vercel runtime, so keep a very
+// short-lived cache instead of rereading D1 for every dashboard visit. A 30s
+// TTL keeps admin changes responsive while removing repeated hot-path reads.
+let streakDisplayConfigCache: { expiresAt: number; graceDaysPerWeek: number; tiers: StreakTier[] } | null = null
+let streakDisplayConfigPromise: Promise<{ graceDaysPerWeek: number; tiers: StreakTier[] }> | null = null
+
+async function getCachedStreakDisplayConfig(nativeDB?: any) {
+  if (nativeDB) {
+    const [graceDaysPerWeek, tiers] = await Promise.all([
+      getSettingNumber("daily_streak_grace_days_per_week", 1, nativeDB),
+      getActiveTiers(nativeDB),
+    ])
+    return { graceDaysPerWeek, tiers }
+  }
+
+  const now = Date.now()
+  if (streakDisplayConfigCache && streakDisplayConfigCache.expiresAt > now) {
+    return {
+      graceDaysPerWeek: streakDisplayConfigCache.graceDaysPerWeek,
+      tiers: streakDisplayConfigCache.tiers,
+    }
+  }
+
+  if (!streakDisplayConfigPromise) {
+    streakDisplayConfigPromise = Promise.all([
+      getSettingNumber("daily_streak_grace_days_per_week", 1),
+      getActiveTiers(),
+    ])
+      .then(([graceDaysPerWeek, tiers]) => ({ graceDaysPerWeek, tiers }))
+      .catch((error) => {
+        streakDisplayConfigPromise = null
+        throw error
+      })
+  }
+
+  const config = await streakDisplayConfigPromise
+  streakDisplayConfigPromise = null
+  streakDisplayConfigCache = { ...config, expiresAt: Date.now() + 30_000 }
+  return config
+}
+
 /**
  * Computes the reward for a given streak day against the admin's
  * configured tiers. Reward = base + (position within tier - 1) * step.
@@ -119,7 +161,11 @@ export function computeRewardForDay(streakDay: number, tiers: StreakTier[]): num
 
 /** Returns a user's current streak status, for display before they check in. */
 export async function getStreakStatus(userId: string, nativeDB?: any): Promise<StreakStatus> {
-  const result = await d1Query("SELECT * FROM daily_streaks WHERE user_id = ?", [userId], nativeDB)
+  const result = await d1Query(
+    "SELECT current_streak, last_checkin_date, grace_used_on_date FROM daily_streaks WHERE user_id = ?",
+    [userId],
+    nativeDB,
+  )
   const row = result.results?.[0]
   const today = todayKey()
 
@@ -128,9 +174,8 @@ export async function getStreakStatus(userId: string, nativeDB?: any): Promise<S
   const graceUsedOnDate = row?.grace_used_on_date ?? null
 
   const alreadyCheckedInToday = lastCheckinDate === today
-  const [graceDaysPerWeek, tiers, protectionTokens] = await Promise.all([
-    getSettingNumber("daily_streak_grace_days_per_week", 1, nativeDB),
-    getActiveTiers(nativeDB),
+  const [{ graceDaysPerWeek, tiers }, protectionTokens] = await Promise.all([
+    getCachedStreakDisplayConfig(nativeDB),
     getProtectionTokens(userId, nativeDB),
   ])
   const graceAvailable = graceDaysPerWeek > 0 && (!graceUsedOnDate || daysBetween(graceUsedOnDate, today) >= 7)

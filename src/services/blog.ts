@@ -91,9 +91,22 @@ export async function listPublishedPostsPaginated(
   const totalCount = Number(countResult.results?.[0]?.count ?? 0)
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
 
+  // Public blog cards never need the full article body. Keep the BlogPost
+  // shape for existing callers, but deliberately omit content_markdown and
+  // the admin/push-only fields from the D1 read.
   const sql = category
-    ? "SELECT * FROM blog_posts WHERE status = 'published' AND category = ? ORDER BY published_at DESC LIMIT ? OFFSET ?"
-    : "SELECT * FROM blog_posts WHERE status = 'published' ORDER BY published_at DESC LIMIT ? OFFSET ?"
+    ? `SELECT id, slug, title, excerpt, cover_image_url, category, status,
+              author_name, author_id, meta_description, published_at,
+              0 AS send_push, NULL AS push_sent_at, '' AS content_markdown
+         FROM blog_posts
+        WHERE status = 'published' AND category = ?
+        ORDER BY published_at DESC LIMIT ? OFFSET ?`
+    : `SELECT id, slug, title, excerpt, cover_image_url, category, status,
+              author_name, author_id, meta_description, published_at,
+              0 AS send_push, NULL AS push_sent_at, '' AS content_markdown
+         FROM blog_posts
+        WHERE status = 'published'
+        ORDER BY published_at DESC LIMIT ? OFFSET ?`
   const params = category ? [category, pageSize, offset] : [pageSize, offset]
   const result = await d1Query(sql, params, nativeDB)
 
@@ -113,28 +126,61 @@ export async function listPublishedPostsPaginated(
  * category. Categories with zero published posts are simply absent
  * from the returned map (caller decides whether to render the row).
  */
+export interface BlogCardPost {
+  id: string
+  slug: string
+  title: string
+  excerpt: string | null
+  coverImageUrl: string | null
+  category: string | null
+  publishedAt: string | null
+}
+
+/**
+ * Homepage-only blog cards. This intentionally does NOT return full article
+ * content, and it uses one window-function query for all requested categories.
+ * The homepage still renders the same category sections and number of posts,
+ * but avoids one D1 query per category and avoids reading content_markdown,
+ * metadata, push fields, and other article-only columns.
+ */
 export async function listLatestPostsByCategories(
   categorySlugs: string[],
   limitPerCategory: number,
   nativeDB?: any,
-): Promise<Record<string, BlogPost[]>> {
-  if (categorySlugs.length === 0) return {}
+): Promise<Record<string, BlogCardPost[]>> {
+  if (categorySlugs.length === 0 || limitPerCategory <= 0) return {}
 
-  const results = await Promise.all(
-    categorySlugs.map((slug) =>
-      d1Query(
-        "SELECT * FROM blog_posts WHERE status = 'published' AND category = ? ORDER BY published_at DESC LIMIT ?",
-        [slug, limitPerCategory],
-        nativeDB,
-      ),
-    ),
+  const placeholders = categorySlugs.map(() => "?").join(",")
+  const result = await d1Query(
+    `SELECT id, slug, title, excerpt, cover_image_url, category, published_at
+       FROM (
+         SELECT id, slug, title, excerpt, cover_image_url, category, published_at,
+                ROW_NUMBER() OVER (PARTITION BY category ORDER BY published_at DESC) AS category_rank
+           FROM blog_posts
+          WHERE status = 'published'
+            AND category IN (${placeholders})
+       )
+      WHERE category_rank <= ?
+      ORDER BY category, published_at DESC`,
+    [...categorySlugs, limitPerCategory],
+    nativeDB,
   )
 
-  const byCategory: Record<string, BlogPost[]> = {}
-  categorySlugs.forEach((slug, i) => {
-    const posts = (results[i].results ?? []).map(mapRow)
-    if (posts.length > 0) byCategory[slug] = posts
-  })
+  const byCategory: Record<string, BlogCardPost[]> = {}
+  for (const row of result.results ?? []) {
+    const slug = row.category as string | null
+    if (!slug) continue
+    ;(byCategory[slug] ??= []).push({
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      excerpt: row.excerpt ?? null,
+      coverImageUrl: row.cover_image_url ?? null,
+      category: slug,
+      publishedAt: row.published_at ?? null,
+    })
+  }
+
   return byCategory
 }
 

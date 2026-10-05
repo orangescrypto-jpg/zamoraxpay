@@ -5,15 +5,15 @@
 // place (the admin setting) rather than duplicated in every caller.
 
 import { NextResponse } from "next/server"
-import { listPublishedPosts } from "@/src/services/blog"
+import { listPublishedPostsPaginated } from "@/src/services/blog"
 import { getSettingNumber } from "@/src/services/siteSettings"
 
 // Renders per request: reads D1 at runtime, not at build time.
 export async function GET() {
   const count = await getSettingNumber("homepage_post_count", 6)
-  const posts = await listPublishedPosts()
+  const { posts } = await listPublishedPostsPaginated(undefined, 1, Math.max(1, Math.min(count, 50)))
   return NextResponse.json(
-    { posts: posts.slice(0, count) },
+    { posts },
     { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } },
   )
 }

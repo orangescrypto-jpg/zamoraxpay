@@ -1,19 +1,34 @@
 // app/page.tsx
 import Link from "next/link"
+import {
+  ArrowRight,
+  Banknote,
+  CheckCircle2,
+  GraduationCap,
+  Globe2,
+  ShieldCheck,
+  Smartphone,
+  Ticket,
+  Tv,
+  Users,
+  Wifi,
+  Zap,
+  type LucideIcon,
+} from "lucide-react"
 import { listLatestPostsByCategories } from "@/src/services/blog"
 import { formatDate } from "@/lib/utils"
 
-const SERVICES = [
-  { href: "/services/airtime", label: "Airtime", desc: "All networks, instant delivery" },
-  { href: "/services/data", label: "Data", desc: "Cheap bundles, all networks" },
-  { href: "/services/cable", label: "Cable TV", desc: "DSTV, GOtv, StarTimes" },
-  { href: "/services/electricity", label: "Electricity", desc: "Prepaid & postpaid tokens" },
-  { href: "/services/exam-pin", label: "Exam PINs", desc: "WAEC, NECO, JAMB" },
-  { href: "/services/airtime-to-cash", label: "Airtime to Cash", desc: "Convert airtime to wallet funds" },
-  { href: "/services/epin", label: "Buy ePIN", desc: "Instant PINs for redemption" },
-  { href: "/services/bulk-airtime", label: "Bulk Airtime", desc: "Send airtime to many numbers at once" },
-  { href: "/services/bulk-data", label: "Bulk Data", desc: "Send data to many numbers at once" },
-  { href: "/services/international-topup", label: "International Airtime & Data", desc: "Top up a phone number in another country" },
+const SERVICES: { href: string; label: string; desc: string; icon: LucideIcon; iconClass: string }[] = [
+  { href: "/services/airtime", label: "Airtime", desc: "All networks, instant delivery", icon: Smartphone, iconClass: "bg-blue-50 text-blue-600" },
+  { href: "/services/data", label: "Data", desc: "Cheap bundles, all networks", icon: Wifi, iconClass: "bg-violet-50 text-violet-600" },
+  { href: "/services/cable", label: "Cable TV", desc: "DSTV, GOtv, StarTimes", icon: Tv, iconClass: "bg-orange-50 text-orange-600" },
+  { href: "/services/electricity", label: "Electricity", desc: "Prepaid & postpaid tokens", icon: Zap, iconClass: "bg-amber-50 text-amber-600" },
+  { href: "/services/exam-pin", label: "Exam PINs", desc: "WAEC, NECO, JAMB", icon: GraduationCap, iconClass: "bg-emerald-50 text-emerald-600" },
+  { href: "/services/airtime-to-cash", label: "Airtime to Cash", desc: "Convert airtime to wallet funds", icon: Banknote, iconClass: "bg-lime-50 text-lime-600" },
+  { href: "/services/epin", label: "Buy ePIN", desc: "Instant PINs for redemption", icon: Ticket, iconClass: "bg-fuchsia-50 text-fuchsia-600" },
+  { href: "/services/bulk-airtime", label: "Bulk Airtime", desc: "Send airtime to many numbers at once", icon: Users, iconClass: "bg-sky-50 text-sky-600" },
+  { href: "/services/bulk-data", label: "Bulk Data", desc: "Send data to many numbers at once", icon: Users, iconClass: "bg-indigo-50 text-indigo-600" },
+  { href: "/services/international-topup", label: "International Airtime & Data", desc: "Top up a phone number in another country", icon: Globe2, iconClass: "bg-cyan-50 text-cyan-600" },
 ]
 
 const REWARDS = [
@@ -65,12 +80,18 @@ export default async function HomePage() {
     <div>
       {/* ── Hero ─────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b border-border bg-secondary">
+        <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/20 blur-3xl" aria-hidden="true" />
+        <div className="absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-accent/10 blur-3xl" aria-hidden="true" />
         <div className="absolute inset-0 opacity-[0.07]" style={{
           backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)",
           backgroundSize: "24px 24px",
         }} />
         <div className="container relative py-20 text-center sm:py-28">
-          <h1 className="mx-auto max-w-3xl text-4xl font-heading font-bold text-white sm:text-5xl lg:text-6xl">
+          <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3.5 py-1.5 text-xs font-semibold text-white/80 backdrop-blur">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />
+            One wallet. Everyday payments.
+          </div>
+          <h1 className="mx-auto max-w-3xl text-4xl font-heading font-bold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
             Airtime, data, and bills, all from one fast, reliable wallet
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-white/70">
@@ -91,26 +112,42 @@ export default async function HomePage() {
               Log in
             </Link>
           </div>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-medium text-white/55">
+            <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-accent" /> Fast delivery</span>
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-accent" /> Secure wallet</span>
+            <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-accent" /> Multiple providers</span>
+          </div>
         </div>
       </section>
 
       {/* ── Services grid ────────────────────────────────────── */}
-      <section className="container py-16">
-        <div className="mb-8 text-center">
-          <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">Everything in one place</h2>
-          <p className="mt-2 text-muted-foreground">All your services, one wallet, one login.</p>
+      <section className="container py-16 sm:py-20">
+        <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Pay in seconds</p>
+            <h2 className="mt-1 text-2xl font-heading font-bold tracking-tight text-secondary sm:text-3xl">Everything in one place</h2>
+            <p className="mt-2 text-muted-foreground">All your services, one wallet, one login.</p>
+          </div>
+          <span className="hidden text-xs font-medium text-muted-foreground sm:block">Choose a service to get started</span>
         </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {SERVICES.map((s) => (
-            <Link
-              key={s.href}
-              href={s.href}
-              className="rounded-lg border border-border bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
-            >
-              <h3 className="font-heading font-semibold text-secondary">{s.label}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{s.desc}</p>
-            </Link>
-          ))}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {SERVICES.map((s) => {
+            const Icon = s.icon
+            return (
+              <Link
+                key={s.href}
+                href={s.href}
+                className="group relative overflow-hidden rounded-2xl border border-border bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_14px_30px_-18px_rgba(15,30,77,0.35)] sm:p-5"
+              >
+                <span className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${s.iconClass}`}>
+                  <Icon className="h-5 w-5" />
+                </span>
+                <h3 className="font-heading text-sm font-semibold text-secondary sm:text-base">{s.label}</h3>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground sm:text-sm">{s.desc}</p>
+                <ArrowRight className="absolute bottom-4 right-4 h-4 w-4 translate-x-1 text-primary opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+              </Link>
+            )
+          })}
         </div>
       </section>
 
@@ -123,8 +160,8 @@ export default async function HomePage() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step) => (
-              <div key={step.n} className="rounded-lg border border-border bg-white p-5">
-                <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+              <div key={step.n} className="relative rounded-2xl border border-border bg-white p-5 shadow-sm">
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm">
                   {step.n}
                 </div>
                 <h3 className="font-heading font-semibold text-secondary">{step.title}</h3>
@@ -145,10 +182,13 @@ export default async function HomePage() {
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {TRUST.map((t) => (
-              <div key={t.title} className="rounded-lg border border-border bg-white p-5">
+            {TRUST.map((t, i) => (
+              <div key={t.title} className="group rounded-2xl border border-border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-primary">
+                  {i === 0 ? <Zap className="h-5 w-5" /> : i === 1 ? <ShieldCheck className="h-5 w-5" /> : i === 2 ? <CheckCircle2 className="h-5 w-5" /> : <Users className="h-5 w-5" />}
+                </div>
                 <h3 className="font-heading font-semibold text-secondary">{t.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{t.desc}</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{t.desc}</p>
               </div>
             ))}
           </div>

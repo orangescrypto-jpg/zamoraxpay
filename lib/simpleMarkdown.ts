@@ -27,16 +27,64 @@ export function stripHtmlMarker(content: string): string {
   return isRawHtml(content) ? content.slice(HTML_MARKER.length).replace(/^\n/, "") : content
 }
 
+// Turns a heading's text into a URL-safe, de-duplicated #anchor id.
+// Exported so the table-of-contents extractor below can produce the
+// exact same ids the rendered HTML will carry.
+export function slugifyHeading(text: string, seen: Map<string, number>): string {
+  const base =
+    text
+      .toLowerCase()
+      .replace(/<[^>]+>/g, "") // strip any inline tags (e.g. <strong>) first
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-") || "section"
+
+  const count = seen.get(base) ?? 0
+  seen.set(base, count + 1)
+  return count === 0 ? base : `${base}-${count + 1}`
+}
+
+export type TocHeading = { id: string; text: string; level: 2 | 3 }
+
+// Scans the raw markdown for ## / ### lines and returns them with the
+// same ids renderMarkdown() will assign, so a table of contents built
+// from this always matches the in-page anchors. Returns [] for
+// raw-HTML posts, which have no markdown headings to extract.
+export function extractHeadings(markdown: string): TocHeading[] {
+  if (isRawHtml(markdown)) return []
+
+  const seen = new Map<string, number>()
+  const headings: TocHeading[] = []
+
+  for (const line of markdown.split("\n")) {
+    const match = /^(#{2,3}) (.+)$/.exec(line)
+    if (!match) continue
+    const level = match[1].length === 3 ? 3 : 2
+    const text = match[2].trim()
+    headings.push({ id: slugifyHeading(text, seen), text, level })
+  }
+
+  return headings
+}
+
 export function renderMarkdown(markdown: string): string {
   if (isRawHtml(markdown)) {
     return stripHtmlMarker(markdown)
   }
 
   let html = markdown
+  const headingIds = new Map<string, number>()
 
-  // Headings (order matters — ### before ## before #)
-  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>")
-  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>")
+  // Headings. ## and ### get slug ids so a table of contents can link
+  // straight to them. Both lines are matched in a single top-to-bottom
+  // pass (not two separate ### then ## passes) so ids are assigned in
+  // document order — the same order extractHeadings() walks in, which
+  // is what keeps the two in agreement.
+  html = html.replace(/^(#{2,3}) (.+)$/gm, (_m, hashes: string, text: string) => {
+    const level = hashes.length === 3 ? 3 : 2
+    const id = slugifyHeading(text, headingIds)
+    return `<h${level} id="${id}">${text}</h${level}>`
+  })
   html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>")
 
   // Bold and italic

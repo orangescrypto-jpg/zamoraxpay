@@ -46,45 +46,74 @@ export function slugifyHeading(text: string, seen: Map<string, number>): string 
 
 export type TocHeading = { id: string; text: string; level: 2 | 3 }
 
-// Scans the raw markdown for ## / ### lines and returns them with the
-// same ids renderMarkdown() will assign, so a table of contents built
-// from this always matches the in-page anchors. Returns [] for
-// raw-HTML posts, which have no markdown headings to extract.
-export function extractHeadings(markdown: string): TocHeading[] {
-  if (isRawHtml(markdown)) return []
+// Strips tags/entities from a heading's inner HTML down to plain text,
+// for both the TOC label and the slug source.
+function headingPlainText(innerHtml: string): string {
+  return innerHtml
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .trim()
+}
 
+// Walks the FINAL rendered HTML (markdown-converted or raw-HTML, either
+// way) and assigns ids to any <h2>/<h3> tags that don't already have
+// one — then returns that same list for the table of contents. Doing
+// this as one pass over the rendered output, rather than over the raw
+// markdown source, means the TOC works for raw-HTML posts too (where
+// there's no markdown "##" syntax to scan for) and the ids it returns
+// are always exactly the ids actually sitting in the page's HTML.
+export function injectHeadingIds(html: string): { html: string; headings: TocHeading[] } {
   const seen = new Map<string, number>()
   const headings: TocHeading[] = []
 
-  for (const line of markdown.split("\n")) {
-    const match = /^(#{2,3}) (.+)$/.exec(line)
-    if (!match) continue
-    const level = match[1].length === 3 ? 3 : 2
-    const text = match[2].trim()
-    headings.push({ id: slugifyHeading(text, seen), text, level })
-  }
+  const withIds = html.replace(
+    /<h([23])([^>]*)>([\s\S]*?)<\/h[23]>/g,
+    (full, levelStr: string, attrs: string, inner: string) => {
+      const level = Number(levelStr) as 2 | 3
+      const text = headingPlainText(inner)
+      if (!text) return full // skip empty headings rather than listing a blank TOC entry
 
-  return headings
+      const existingId = /\bid=["']([^"']+)["']/.exec(attrs)?.[1]
+      const id = existingId || slugifyHeading(text, seen)
+      headings.push({ id, text, level })
+
+      if (existingId) return full
+      return `<h${level}${attrs} id="${id}">${inner}</h${level}>`
+    }
+  )
+
+  return { html: withIds, headings }
+}
+
+// Convenience wrapper for callers that only need the heading list (the
+// blog post page uses this to build the TOC without re-deriving HTML).
+export function extractHeadings(markdown: string): TocHeading[] {
+  return injectHeadingIds(renderMarkdownRaw(markdown)).headings
 }
 
 export function renderMarkdown(markdown: string): string {
+  return injectHeadingIds(renderMarkdownRaw(markdown)).html
+}
+
+// The original conversion pass (markdown → HTML, or pass-through for
+// raw-HTML posts) with no heading ids added yet — injectHeadingIds()
+// adds those afterward in one shared pass so both renderMarkdown() and
+// extractHeadings() stay in agreement by construction, not by convention.
+function renderMarkdownRaw(markdown: string): string {
   if (isRawHtml(markdown)) {
     return stripHtmlMarker(markdown)
   }
 
   let html = markdown
-  const headingIds = new Map<string, number>()
 
-  // Headings. ## and ### get slug ids so a table of contents can link
-  // straight to them. Both lines are matched in a single top-to-bottom
-  // pass (not two separate ### then ## passes) so ids are assigned in
-  // document order — the same order extractHeadings() walks in, which
-  // is what keeps the two in agreement.
-  html = html.replace(/^(#{2,3}) (.+)$/gm, (_m, hashes: string, text: string) => {
-    const level = hashes.length === 3 ? 3 : 2
-    const id = slugifyHeading(text, headingIds)
-    return `<h${level} id="${id}">${text}</h${level}>`
-  })
+  // Headings (order matters — ### before ## before #)
+  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>")
+  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>")
   html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>")
 
   // Bold and italic

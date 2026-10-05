@@ -4,7 +4,9 @@ import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import { getPostBySlug, getRelatedPosts } from "@/src/services/blog"
 import { getSettingNumber } from "@/src/services/siteSettings"
+import { extractHeadings } from "@/lib/simpleMarkdown"
 import { MarkdownContent } from "@/components/shared/MarkdownContent"
+import { TableOfContents } from "@/components/shared/TableOfContents"
 import { ShareButton } from "@/components/shared/ShareButton"
 import { AdSenseSlot } from "@/components/shared/AdSenseSlot"
 import { AuthorBox } from "@/components/shared/AuthorBox"
@@ -58,6 +60,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
   const relatedCount = await getSettingNumber("related_post_count", 4)
   const relatedPosts = await getRelatedPosts(post, relatedCount)
+  const headings = extractHeadings(post.contentMarkdown)
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -106,6 +109,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             <img src={post.coverImageUrl} alt={post.title} className="h-full w-full object-cover" />
           </div>
         )}
+
+        <TableOfContents headings={headings} />
 
         <MarkdownContent markdown={post.contentMarkdown} />
 

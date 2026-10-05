@@ -87,10 +87,6 @@ export default async function HomePage() {
           backgroundSize: "24px 24px",
         }} />
         <div className="container relative py-20 text-center sm:py-28">
-          <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3.5 py-1.5 text-xs font-semibold text-white/80 backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />
-            One wallet. Everyday payments.
-          </div>
           <h1 className="mx-auto max-w-3xl text-4xl font-heading font-bold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
             Airtime, data, and bills, all from one fast, reliable wallet
           </h1>

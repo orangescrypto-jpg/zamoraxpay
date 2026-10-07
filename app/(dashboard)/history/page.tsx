@@ -79,11 +79,10 @@ export default function HistoryPage() {
   }, [])
 
   const filtered = useMemo(() => items.filter((item) => {
-    const data = item.data
-    const status = data.status
+    const status = item.data.status
     const text = item.kind === "order"
-      ? `${data.service_type} ${data.network_or_biller} ${data.recipient} ${data.id}`
-      : `${WALLET_TYPE_LABELS[data.type] ?? data.type} ${data.id}`
+      ? `${item.data.service_type} ${item.data.network_or_biller} ${item.data.recipient} ${item.data.id}`
+      : `${WALLET_TYPE_LABELS[item.data.type] ?? item.data.type} ${item.data.id}`
     const matchesQuery = !query.trim() || text.toLowerCase().includes(query.trim().toLowerCase())
     const matchesFilter = filter === "all" || (filter === "pending" ? !["success", "completed", "failed", "reversed"].includes(status) : status === filter || (filter === "success" && status === "completed"))
     return matchesQuery && matchesFilter

@@ -1,6 +1,8 @@
 "use client"
 
-import { Download, Share2 } from "lucide-react"
+import { useState } from "react"
+import { Check, Copy, Download, Share2 } from "lucide-react"
+import { useToast } from "@/components/shared/ToastProvider"
 
 interface ReceiptButtonProps {
   service: string
@@ -28,6 +30,18 @@ function receiptText(props: ReceiptButtonProps) {
 }
 
 export function ReceiptButton(props: ReceiptButtonProps) {
+  const [copied, setCopied] = useState(false)
+  const toast = useToast()
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard?.writeText(receiptText(props))
+      setCopied(true)
+      toast("Receipt copied to clipboard", "success")
+      window.setTimeout(() => setCopied(false), 1400)
+    } catch {}
+  }
+
   const download = () => {
     const blob = new Blob([receiptText(props)], { type: "text/plain;charset=utf-8" })
     const url = URL.createObjectURL(blob)
@@ -38,6 +52,7 @@ export function ReceiptButton(props: ReceiptButtonProps) {
     anchor.click()
     anchor.remove()
     URL.revokeObjectURL(url)
+    toast("Receipt downloaded", "success")
   }
 
   const share = async () => {
@@ -55,6 +70,15 @@ export function ReceiptButton(props: ReceiptButtonProps) {
 
   return (
     <div className="mt-1.5 flex items-center justify-end gap-1">
+      <button
+        type="button"
+        onClick={copy}
+        className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-muted-foreground transition hover:bg-muted hover:text-primary"
+        aria-label={`Copy receipt for ${props.reference}`}
+      >
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? "Copied" : "Copy"}
+      </button>
       <button
         type="button"
         onClick={download}

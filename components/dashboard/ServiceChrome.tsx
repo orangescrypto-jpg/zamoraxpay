@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 import {
   ArrowRight,
   BadgePercent,
@@ -14,10 +15,9 @@ import {
   Globe2,
   Lightbulb,
   Phone,
-  Radio,
+  Star,
   Smartphone,
   Users,
-  Zap,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { ServiceFinder } from "@/components/dashboard/ServiceFinder"
@@ -135,15 +135,42 @@ const QUICK_LINKS = [
   { href: "/dashboard/services/data", label: "Data", icon: Smartphone },
   { href: "/dashboard/services/electricity", label: "Electricity", icon: Lightbulb },
   { href: "/dashboard/services/cable", label: "Cable", icon: Cable },
+  { href: "/dashboard/services/exam-pin", label: "Exam PIN", icon: BadgePercent },
+  { href: "/dashboard/services/epin", label: "ePIN", icon: CreditCard },
+  { href: "/dashboard/services/betting", label: "Betting", icon: Banknote },
+  { href: "/dashboard/services/bulk-data", label: "Bulk Data", icon: Users },
+  { href: "/dashboard/services/bulk-airtime", label: "Bulk Airtime", icon: Users },
+  { href: "/dashboard/services/international-topup", label: "International Top-up", icon: Globe2 },
+  { href: "/dashboard/services/airtime-to-cash", label: "Airtime to Cash", icon: CircleDollarSign },
 ]
 
 function getService(pathname: string): ServiceMeta | null {
   return SERVICES.find((service) => pathname.includes(service.match)) ?? null
 }
 
+const FAVORITES_KEY = "zamoraxpay:favorite-services"
+
 export function ServiceChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const service = pathname ? getService(pathname) : null
+  const [favorites, setFavorites] = useState<string[]>([])
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(FAVORITES_KEY) || "[]")
+      if (Array.isArray(saved)) setFavorites(saved.filter((item): item is string => typeof item === "string").slice(0, 8))
+    } catch {
+      setFavorites([])
+    }
+  }, [])
+
+  const toggleFavorite = (href: string) => {
+    setFavorites((current) => {
+      const next = current.includes(href) ? current.filter((item) => item !== href) : [href, ...current].slice(0, 8)
+      try { window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
 
   if (!service) return <>{children}</>
 
@@ -193,7 +220,28 @@ export function ServiceChrome({ children }: { children: React.ReactNode }) {
           <p className="hidden text-xs text-muted-foreground sm:block">Fast navigation — no extra account data is loaded.</p>
         </div>
 
-        <div className="mb-5 flex items-center gap-2 overflow-x-auto pb-1">
+        {favorites.length > 0 && (
+          <div className="mb-4 rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Your favorites</p>
+              <span className="text-[10px] text-muted-foreground">Saved on this device</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-0.5">
+              {favorites.map((href) => {
+                const item = QUICK_LINKS.find((entry) => entry.href === href)
+                if (!item) return null
+                const FavoriteIcon = item.icon
+                return (
+                  <Link key={href} href={href} className="group inline-flex shrink-0 items-center gap-2 rounded-xl border border-primary/15 bg-primary/[0.04] px-3 py-2 text-xs font-semibold text-secondary hover:border-primary/30 hover:text-primary">
+                    <FavoriteIcon className="h-3.5 w-3.5 text-primary" />{item.label}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="mb-5 mt-4 flex items-center gap-2 overflow-x-auto pb-1">
           <span className="shrink-0 text-xs font-medium text-muted-foreground">Quick services</span>
           {QUICK_LINKS.map(({ href, label, icon: QuickIcon }) => {
             const active = pathname === href
@@ -209,6 +257,14 @@ export function ServiceChrome({ children }: { children: React.ReactNode }) {
               >
                 <QuickIcon className="h-3.5 w-3.5" aria-hidden="true" />
                 {label}
+                <button
+                  type="button"
+                  onClick={(event) => { event.preventDefault(); event.stopPropagation(); toggleFavorite(href) }}
+                  className={`ml-0.5 rounded-full p-0.5 ${favorites.includes(href) ? "text-primary" : "text-muted-foreground/50 hover:text-primary"}`}
+                  aria-label={favorites.includes(href) ? `Remove ${label} from favorites` : `Add ${label} to favorites`}
+                >
+                  <Star className="h-3 w-3" fill={favorites.includes(href) ? "currentColor" : "none"} />
+                </button>
               </Link>
             )
           })}

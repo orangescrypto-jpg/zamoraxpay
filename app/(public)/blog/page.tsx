@@ -91,12 +91,35 @@ export default async function BlogListPage({
       (activeLabel ? `Articles and guides about ${activeLabel.toLowerCase()} from the ZamoraxPay team.` : null)
     : "Guides, announcements, and updates from the ZamoraxPay team."
 
-  return (
-    <div className="container py-12">
-      <h1 className="mb-2 text-3xl font-heading font-bold text-secondary">{activeLabel ?? "Blog"}</h1>
-      <p className="mb-6 max-w-2xl text-muted-foreground">{intro}</p>
+  const featured = posts[0]
 
-      <div className="mb-10 flex flex-wrap gap-2">
+  return (
+    <div className="bg-gradient-to-b from-primary/[0.035] via-background to-background">
+      <div className="container py-10 sm:py-14">
+        <div className="mb-8 overflow-hidden rounded-3xl border border-border bg-secondary p-6 text-white shadow-sm sm:p-8">
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">ZamoraxPay Journal</p>
+            <h1 className="mt-2 text-3xl font-heading font-bold tracking-tight sm:text-4xl">{activeLabel ?? "Guides, updates & useful reads"}</h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">{intro}</p>
+          </div>
+        </div>
+
+      {featured && !category && (
+        <section className="mb-10 grid overflow-hidden rounded-2xl border border-border bg-white shadow-sm md:grid-cols-[1.15fr_0.85fr]">
+          <Link href={`/blog/${featured.slug}`} className="group relative min-h-[240px] overflow-hidden bg-secondary md:min-h-[300px]">
+            <img src={featured.coverImageUrl || "/blog-fallback-cover.svg"} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+            <span className="absolute left-4 top-4 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">Featured</span>
+          </Link>
+          <div className="flex flex-col justify-center p-6 sm:p-8">
+            {featured.category && <p className="text-xs font-semibold uppercase tracking-wider text-primary">{featured.category.replace(/-/g, " ")}</p>}
+            <h2 className="mt-2 text-2xl font-heading font-bold tracking-tight text-secondary">{featured.title}</h2>
+            {featured.excerpt && <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted-foreground">{featured.excerpt}</p>}
+            <Link href={`/blog/${featured.slug}`} className="mt-5 inline-flex w-fit rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white hover:opacity-90">Read article →</Link>
+          </div>
+        </section>
+      )}
+
+      <div className="mb-10 flex flex-wrap gap-2 rounded-2xl border border-border bg-white p-3 shadow-sm">
         <Link
           href="/blog"
           className={cn(
@@ -139,10 +162,15 @@ export default async function BlogListPage({
         </nav>
       )}
 
-      <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mb-5 flex items-end justify-between gap-3">
+        <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Latest reads</p><h2 className="mt-1 text-xl font-heading font-bold text-secondary">{activeLabel ?? "Latest from ZamoraxPay"}</h2></div>
+        <span className="text-xs text-muted-foreground">{posts.length} article{posts.length === 1 ? "" : "s"} shown</span>
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {posts.map((post) => (
-          <Link key={post.id} href={`/blog/${post.slug}`} className="group block">
-            <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
+          <Link key={post.id} href={`/blog/${post.slug}`} className="group block overflow-hidden rounded-2xl border border-border bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md">
+            <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-xl bg-secondary">
               <img
                 src={post.coverImageUrl || "/blog-fallback-cover.svg"}
                 alt={post.title}
@@ -154,12 +182,12 @@ export default async function BlogListPage({
                 {post.category.replace(/-/g, " ")}
               </span>
             )}
-            <h2 className="mb-1 text-lg font-heading font-semibold text-secondary group-hover:text-primary">
+            <h2 className="mb-1 px-1 text-lg font-heading font-semibold text-secondary group-hover:text-primary">
               {post.title}
             </h2>
-            {post.excerpt && <p className="mb-2 text-sm text-muted-foreground">{post.excerpt}</p>}
+            {post.excerpt && <p className="mb-2 px-1 text-sm leading-5 text-muted-foreground line-clamp-2">{post.excerpt}</p>}
             {post.publishedAt && (
-              <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
+              <p className="px-1 text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
             )}
           </Link>
         ))}
@@ -206,6 +234,7 @@ export default async function BlogListPage({
           )}
         </nav>
       )}
+      </div>
     </div>
   )
 }

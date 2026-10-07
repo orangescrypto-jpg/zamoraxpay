@@ -116,6 +116,23 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* ── Trust strip ──────────────────────────────────────── */}
+      <section className="border-b border-border bg-white">
+        <div className="container grid grid-cols-2 divide-x divide-border py-5 sm:grid-cols-4">
+          {[
+            ["10+", "Services"],
+            ["24/7", "Self-service access"],
+            ["1 wallet", "For your payments"],
+            ["Secure", "Payment flow"],
+          ].map(([value, label]) => (
+            <div key={label} className="px-3 text-center first:pl-0 last:pr-0 sm:px-5">
+              <p className="text-lg font-heading font-bold text-secondary sm:text-xl">{value}</p>
+              <p className="mt-0.5 text-[11px] font-medium text-muted-foreground sm:text-xs">{label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ── Services grid ────────────────────────────────────── */}
       <section className="container py-16 sm:py-20">
         <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -322,12 +339,10 @@ export default async function HomePage() {
           <p className="mx-auto mt-2 max-w-md text-muted-foreground">
             Sign up in under a minute and fund your wallet to make your first purchase.
           </p>
-          <Link
-            href="/signup"
-            className="mt-6 inline-block rounded-md bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
-          >
-            Create free account
-          </Link>
+          <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link href="/signup" className="inline-flex rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90">Create free account</Link>
+            <Link href="/blog" className="inline-flex rounded-xl border border-border bg-white px-8 py-3 text-sm font-semibold text-secondary hover:border-primary/30 hover:text-primary">Explore our guides</Link>
+          </div>
         </div>
       </section>
     </div>

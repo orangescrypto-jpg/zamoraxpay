@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { listLatestPostsByCategories } from "@/src/services/blog"
 import { formatDate } from "@/lib/utils"
+import { ServiceQuickSearch } from "@/components/shared/ServiceQuickSearch"
 
 const SERVICES: { href: string; label: string; desc: string; icon: LucideIcon; iconClass: string }[] = [
   { href: "/services/airtime", label: "Airtime", desc: "All networks, instant delivery", icon: Smartphone, iconClass: "bg-blue-50 text-blue-600" },
@@ -143,6 +144,7 @@ export default async function HomePage() {
           </div>
           <span className="hidden text-xs font-medium text-muted-foreground sm:block">Choose a service to get started</span>
         </div>
+        <ServiceQuickSearch services={SERVICES.map(({ href, label, desc }) => ({ href, label, desc }))} />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {SERVICES.map((s) => {
             const Icon = s.icon

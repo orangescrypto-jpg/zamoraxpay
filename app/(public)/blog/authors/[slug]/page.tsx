@@ -4,7 +4,7 @@ import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import { getAuthorBySlug } from "@/src/services/blogAuthors"
 import { listPublishedPostsByAuthor } from "@/src/services/blogAuthorPosts"
-import { formatDate } from "@/lib/utils"
+import { BlogPostSearch } from "@/components/shared/BlogPostSearch"
 
 export const revalidate = 3600
 
@@ -56,25 +56,7 @@ export default async function AuthorProfilePage({ params }: { params: Promise<{ 
       {posts.length === 0 ? (
         <p className="text-sm text-muted-foreground">No published posts yet.</p>
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2">
-          {posts.map((post) => (
-            <Link key={post.slug} href={`/blog/${post.slug}`} className="group block">
-              <div className="mb-2 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
-                <img
-                  src={post.coverImageUrl || "/blog-fallback-cover.svg"}
-                  alt={post.title}
-                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                />
-              </div>
-              <h3 className="font-heading font-medium text-secondary group-hover:text-primary">{post.title}</h3>
-              {post.publishedAt && (
-                <time className="text-xs text-muted-foreground" dateTime={post.publishedAt}>
-                  {formatDate(post.publishedAt)}
-                </time>
-              )}
-            </Link>
-          ))}
-        </div>
+        <BlogPostSearch posts={posts.map((post) => ({ id: post.slug, slug: post.slug, title: post.title, excerpt: post.excerpt, publishedAt: post.publishedAt, coverImageUrl: post.coverImageUrl }))} />
       )}
     </div>
   )

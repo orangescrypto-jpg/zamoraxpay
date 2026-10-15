@@ -78,6 +78,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
     <div>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <article className="container max-w-3xl py-12">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><Link href="/blog" className="font-medium text-primary hover:underline">← All articles</Link><span>Reading progress is shown at the top of the page</span></div>
         {post.category && (
           <Link
             href={`/blog?category=${post.category}`}

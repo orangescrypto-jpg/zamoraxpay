@@ -70,3 +70,23 @@
     animation: slide-out-left 0.6s ease-out;
   }
 }
+
+/* Small, opt-in browser-side experience tools. No server calls or stored account data. */
+:root { --local-text-scale: 1; }
+html { font-size: calc(100% * var(--local-text-scale, 1)); }
+html.zpx-high-contrast body { filter: contrast(1.12); }
+html.zpx-high-contrast a:focus-visible,
+html.zpx-high-contrast button:focus-visible,
+html.zpx-high-contrast input:focus-visible,
+html.zpx-high-contrast select:focus-visible,
+html.zpx-high-contrast textarea:focus-visible { outline: 3px solid #0057ff; outline-offset: 3px; }
+html.zpx-reduce-motion *, html.zpx-reduce-motion *::before, html.zpx-reduce-motion *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+.zpx-reading-progress { position: fixed; inset: 0 auto auto 0; z-index: 180; height: 3px; background: hsl(var(--primary)); transition: width 100ms linear; }
+.zpx-local-tools { position: fixed; right: 1rem; bottom: 1rem; z-index: 160; display: flex; flex-direction: column; align-items: flex-end; gap: .5rem; }
+.zpx-tools-trigger { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 44px; border: 1px solid hsl(var(--border)); border-radius: 999px; background: hsl(var(--card)); color: hsl(var(--card-foreground)); padding: .65rem .9rem; box-shadow: 0 8px 24px rgb(15 23 42 / .14); font-size: .8rem; font-weight: 600; }
+.zpx-tools-trigger:hover { border-color: hsl(var(--primary)); color: hsl(var(--primary)); }
+.zpx-tools-panel { width: min(21rem, calc(100vw - 2rem)); border: 1px solid hsl(var(--border)); border-radius: 1rem; background: hsl(var(--card)); color: hsl(var(--card-foreground)); padding: 1rem; box-shadow: 0 18px 50px rgb(15 23 42 / .2); }
+.zpx-tools-panel input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: hsl(var(--primary)); }
+.zpx-back-to-top { position: fixed; right: 1.15rem; bottom: 4.75rem; z-index: 150; display: grid; width: 2.6rem; height: 2.6rem; place-items: center; border: 1px solid hsl(var(--border)); border-radius: 999px; background: hsl(var(--card)); color: hsl(var(--card-foreground)); box-shadow: 0 6px 20px rgb(15 23 42 / .12); }
+.zpx-back-to-top:hover { border-color: hsl(var(--primary)); color: hsl(var(--primary)); }
+@media (max-width: 640px) { .zpx-local-tools { right: .65rem; bottom: .75rem; } .zpx-back-to-top { right: .8rem; bottom: 4.2rem; } }

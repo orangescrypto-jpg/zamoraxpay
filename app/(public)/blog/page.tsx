@@ -3,7 +3,8 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { listPublishedPostsPaginated } from "@/src/services/blog"
 import { d1Query } from "@/lib/db"
-import { formatDate, cn } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+import { BlogPostSearch } from "@/components/shared/BlogPostSearch"
 
 const POSTS_PER_PAGE = 30
 const CATEGORY_POSTS_PER_PAGE = 20
@@ -167,33 +168,7 @@ export default async function BlogListPage({
         <span className="text-xs text-muted-foreground">{posts.length} article{posts.length === 1 ? "" : "s"} shown</span>
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {posts.map((post) => (
-          <Link key={post.id} href={`/blog/${post.slug}`} className="group block overflow-hidden rounded-2xl border border-border bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md">
-            <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-xl bg-secondary">
-              <img
-                src={post.coverImageUrl || "/blog-fallback-cover.svg"}
-                alt={post.title}
-                className="h-full w-full object-cover transition-transform group-hover:scale-105"
-              />
-            </div>
-            {post.category && (
-              <span className="mb-1 inline-block text-xs font-medium uppercase tracking-wide text-primary">
-                {post.category.replace(/-/g, " ")}
-              </span>
-            )}
-            <h2 className="mb-1 px-1 text-lg font-heading font-semibold text-secondary group-hover:text-primary">
-              {post.title}
-            </h2>
-            {post.excerpt && <p className="mb-2 px-1 text-sm leading-5 text-muted-foreground line-clamp-2">{post.excerpt}</p>}
-            {post.publishedAt && (
-              <p className="px-1 text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
-            )}
-          </Link>
-        ))}
-
-        {posts.length === 0 && <p className="text-muted-foreground">No posts in this category yet.</p>}
-      </div>
+      <BlogPostSearch posts={posts.map((post: any) => ({ id: post.id, slug: post.slug, title: post.title, excerpt: post.excerpt, category: post.category, publishedAt: post.publishedAt, coverImageUrl: post.coverImageUrl }))} />
 
       {totalPages > 1 && (
         <nav aria-label="Blog pagination" className="mt-10 flex flex-wrap items-center justify-center gap-2">

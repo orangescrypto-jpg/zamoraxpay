@@ -111,85 +111,104 @@ export function Footer() {
   const showAd = !isPrivatePath(pathname)
 
   return (
-    <footer className="border-t border-border bg-secondary text-white">
-      <div className="container py-10">
+    <footer className="relative overflow-hidden border-t border-white/10 bg-secondary text-white">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-24 -top-32 h-72 w-72 rounded-full bg-primary/10 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -left-24 bottom-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl"
+      />
+
+      <div className="container relative py-12 sm:py-14">
         <FooterBanner />
 
         {/* About + contact block: real, crawlable business information on every public page */}
-        <div className="mb-10 grid gap-8 border-b border-white/10 pb-10 md:grid-cols-3">
+        <div className="mb-10 grid gap-10 border-b border-white/10 pb-10 md:grid-cols-3">
           <div className="md:col-span-2">
-            <h3 className="mb-3 text-sm font-semibold text-white">About ZamoraxPay</h3>
-            <p className="text-sm leading-relaxed text-white/70">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-white">
+              <span className="h-4 w-1 rounded-full bg-primary" aria-hidden />
+              About ZamoraxPay
+            </h3>
+            <p className="text-sm leading-relaxed text-white/65">
               ZamoraxPay is a Nigerian payments platform that lets you buy airtime, data, cable TV
               subscriptions, electricity tokens and exam PINs from one wallet. Every order is routed through
               several independent service providers, so if one is slow or down, your purchase moves to the
               next automatically. If it still fails, the money goes straight back to your wallet.
             </p>
-            <p className="mt-3 text-sm leading-relaxed text-white/70">
+            <p className="mt-3 text-sm leading-relaxed text-white/65">
               Fund your wallet securely with Korapay, track every transaction in your history, and earn
               cashback, referral bonuses and daily rewards as you go. We built ZamoraxPay so that paying for
               everyday things online feels simple, fair and dependable.
             </p>
           </div>
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-white">Contact Us</h3>
-            <address className="space-y-2 text-sm not-italic text-white/70">
-              <p>Zamorax Enterprises Limited</p>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-white">
+              <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
+              Contact Us
+            </h3>
+            <address className="space-y-2.5 text-sm not-italic text-white/65">
+              <p className="font-medium text-white/85">Zamorax Enterprises Limited</p>
               <p>Apete, Ibadan, Oyo State, Nigeria</p>
               <p>
-                <a href="mailto:zamoraxpay@gmail.com" className="hover:text-white">zamoraxpay@gmail.com</a>
+                <a href="mailto:zamoraxpay@gmail.com" className="transition-colors hover:text-primary">zamoraxpay@gmail.com</a>
               </p>
               <p>
-                <a href="tel:+2347076479357" className="hover:text-white">+234 707 647 9357</a>
+                <a href="tel:+2347076479357" className="transition-colors hover:text-primary">+234 707 647 9357</a>
               </p>
-              <p className="text-white/50">Mon to Sat, 8:00 AM to 8:00 PM</p>
+              <p className="pt-1 text-xs text-white/40">Mon to Sat, 8:00 AM to 8:00 PM</p>
             </address>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-4">
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-white">ZamoraxPay</h3>
-            <ul className="space-y-2 text-sm text-white/70">
-              <li><Link href="/about" className="hover:text-white">About</Link></li>
-              <li><Link href="/blog" className="hover:text-white">Blog</Link></li>
-              <li><Link href="/contact" className="hover:text-white">Contact</Link></li>
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/90">ZamoraxPay</h3>
+            <ul className="space-y-2.5 text-sm text-white/65">
+              <li><Link href="/about" className="transition-colors hover:text-primary">About</Link></li>
+              <li><Link href="/blog" className="transition-colors hover:text-primary">Blog</Link></li>
+              <li><Link href="/contact" className="transition-colors hover:text-primary">Contact</Link></li>
             </ul>
           </div>
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-white">Services</h3>
-            <ul className="space-y-2 text-sm text-white/70">
-              <li><Link href="/services/airtime" className="hover:text-white">Airtime</Link></li>
-              <li><Link href="/services/data" className="hover:text-white">Data</Link></li>
-              <li><Link href="/services/cable" className="hover:text-white">Cable TV</Link></li>
-              <li><Link href="/services/electricity" className="hover:text-white">Electricity</Link></li>
-              <li><Link href="/services/exam-pin" className="hover:text-white">Exam Pins</Link></li>
-              <li><Link href="/rewards" className="hover:text-white">Rewards</Link></li>
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/90">Services</h3>
+            <ul className="space-y-2.5 text-sm text-white/65">
+              <li><Link href="/services/airtime" className="transition-colors hover:text-primary">Airtime</Link></li>
+              <li><Link href="/services/data" className="transition-colors hover:text-primary">Data</Link></li>
+              <li><Link href="/services/cable" className="transition-colors hover:text-primary">Cable TV</Link></li>
+              <li><Link href="/services/electricity" className="transition-colors hover:text-primary">Electricity</Link></li>
+              <li><Link href="/services/exam-pin" className="transition-colors hover:text-primary">Exam Pins</Link></li>
+              <li><Link href="/rewards" className="transition-colors hover:text-primary">Rewards</Link></li>
             </ul>
           </div>
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-white">Legal</h3>
-            <ul className="space-y-2 text-sm text-white/70">
-              <li><Link href="/privacy-policy" className="hover:text-white">Privacy Policy</Link></li>
-              <li><Link href="/terms" className="hover:text-white">Terms &amp; Conditions</Link></li>
-              <li><Link href="/cookie-policy" className="hover:text-white">Cookie Policy</Link></li>
-              <li><Link href="/refund-policy" className="hover:text-white">Refund Policy</Link></li>
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/90">Legal</h3>
+            <ul className="space-y-2.5 text-sm text-white/65">
+              <li><Link href="/privacy-policy" className="transition-colors hover:text-primary">Privacy Policy</Link></li>
+              <li><Link href="/terms" className="transition-colors hover:text-primary">Terms &amp; Conditions</Link></li>
+              <li><Link href="/cookie-policy" className="transition-colors hover:text-primary">Cookie Policy</Link></li>
+              <li><Link href="/refund-policy" className="transition-colors hover:text-primary">Refund Policy</Link></li>
             </ul>
           </div>
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-white">Part of Zamorax</h3>
-            <p className="text-sm text-white/70">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/90">Part of Zamorax</h3>
+            <p className="text-sm leading-relaxed text-white/65">
               Looking for higher-value peer-to-peer deals?{" "}
-              <a href={marketplaceUrl} className="text-accent hover:underline">
+              <a href={marketplaceUrl} className="font-medium text-accent transition-colors hover:text-primary hover:underline">
                 Visit Zamorax Marketplace
               </a>
             </p>
           </div>
         </div>
 
-        {showAd && <AdSenseSlot slotKey="homepage_footer" className="mt-8" />}
+        {showAd && <AdSenseSlot slotKey="homepage_footer" className="mt-10" />}
 
-        <div className="mt-8 border-t border-white/10 pt-6 text-center text-xs text-white/50">
+        <div className="mt-10 border-t border-white/10 pt-6 text-center text-xs leading-relaxed text-white/40">
           <p>ZamoraxPay by Zamorax Enterprises Limited. RC9678731. Apete, Ibadan, Oyo State, Nigeria.</p>
           <p>© {new Date().getFullYear()} ZamoraxPay. All rights reserved.</p>
         </div>

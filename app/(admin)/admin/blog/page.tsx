@@ -6,6 +6,8 @@ import Link from "next/link"
 import { createClient } from "@/src/services/providers/supabase/client"
 import type { BlogPost } from "@/src/services/blog"
 
+const PAGE_SIZE = 50
+
 export default function AdminBlogListPage() {
   const [posts, setPosts] = useState<BlogPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -13,6 +15,7 @@ export default function AdminBlogListPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   const loadPosts = useCallback(async () => {
     setLoading(true)
@@ -49,6 +52,16 @@ export default function AdminBlogListPage() {
       return matchesQuery && matchesStatus
     })
   }, [posts, search, statusFilter])
+
+  // Reset how many rows are shown whenever the result set itself changes
+  // (new search term, status filter, or a fresh load) — otherwise "load
+  // more" state from a previous filter would leak into the next one.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [search, statusFilter, posts])
+
+  const visiblePosts = filteredPosts.slice(0, visibleCount)
+  const hasMore = filteredPosts.length > visiblePosts.length
 
   async function deletePost(id: string) {
     if (!confirm("Delete this post permanently? This action cannot be undone.")) return
@@ -112,7 +125,7 @@ export default function AdminBlogListPage() {
         <div className="flex flex-col gap-3 border-b border-border p-4 sm:p-5 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="font-heading text-lg font-semibold text-foreground">Content library</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Showing {filteredPosts.length} of {posts.length} posts</p>
+            <p className="mt-1 text-sm text-muted-foreground">Showing {visiblePosts.length} of {filteredPosts.length} posts{filteredPosts.length !== posts.length ? ` (${posts.length} total)` : ""}</p>
           </div>
           <div className="grid gap-2 sm:grid-cols-[minmax(200px,1fr)_170px]">
             <label className="sr-only" htmlFor="blog-search">Search blog posts</label>
@@ -138,7 +151,7 @@ export default function AdminBlogListPage() {
             <table className="w-full min-w-[650px] text-left text-sm">
               <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground"><tr><th scope="col" className="px-5 py-3 font-semibold">Article</th><th scope="col" className="px-4 py-3 font-semibold">Category</th><th scope="col" className="px-4 py-3 font-semibold">Status</th><th scope="col" className="px-5 py-3 text-right font-semibold">Actions</th></tr></thead>
               <tbody className="divide-y divide-border">
-                {filteredPosts.map((post) => <tr key={post.id} className="transition-colors hover:bg-muted/30">
+                {visiblePosts.map((post) => <tr key={post.id} className="transition-colors hover:bg-muted/30">
                   <td className="max-w-[360px] px-5 py-4"><p className="truncate font-semibold text-foreground" title={post.title}>{post.title}</p><p className="mt-1 truncate text-xs text-muted-foreground">/{post.slug}</p></td>
                   <td className="px-4 py-4 text-muted-foreground">{post.category || "Uncategorized"}</td>
                   <td className="px-4 py-4"><span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${post.status === "published" ? "bg-accent/10 text-accent" : "bg-muted text-muted-foreground"}`}><span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${post.status === "published" ? "bg-accent" : "bg-muted-foreground"}`} aria-hidden/>{post.status}</span></td>
@@ -146,6 +159,18 @@ export default function AdminBlogListPage() {
                 </tr>)}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && hasMore && (
+          <div className="flex justify-center border-t border-border p-4">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+              className="inline-flex min-h-10 items-center rounded-lg border border-border px-5 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              Load more ({filteredPosts.length - visiblePosts.length} remaining)
+            </button>
           </div>
         )}
       </section>

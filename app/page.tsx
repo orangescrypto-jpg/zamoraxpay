@@ -1,3 +1,4 @@
+
 // app/page.tsx
 import Link from "next/link"
 import {
@@ -68,13 +69,27 @@ const HOMEPAGE_BLOG_CATEGORIES = [
 
 const HOMEPAGE_POSTS_PER_CATEGORY = 10
 
+// Jobs and Scholarships are capped lower than the other homepage
+// categories — these two feed fast-expiring listings (retention.ts
+// deletes stale posts in them), so the homepage only needs a handful,
+// not the full 10 shown for evergreen categories like Guides.
+const HOMEPAGE_JOBS_SCHOLARSHIPS_POST_LIMIT = 6
+const HOMEPAGE_CAPPED_CATEGORY_SLUGS = new Set(["jobs", "scholarships"])
+
 export const revalidate = 900 // 15 minutes — homepage content doesn't need to be second-fresh
 
 export default async function HomePage() {
-  const postsByCategory = await listLatestPostsByCategories(
-    HOMEPAGE_BLOG_CATEGORIES.map((c) => c.slug),
-    HOMEPAGE_POSTS_PER_CATEGORY,
-  )
+  const [postsByCategory, cappedPostsByCategory] = await Promise.all([
+    listLatestPostsByCategories(
+      HOMEPAGE_BLOG_CATEGORIES.filter((c) => !HOMEPAGE_CAPPED_CATEGORY_SLUGS.has(c.slug)).map((c) => c.slug),
+      HOMEPAGE_POSTS_PER_CATEGORY,
+    ),
+    listLatestPostsByCategories(
+      HOMEPAGE_BLOG_CATEGORIES.filter((c) => HOMEPAGE_CAPPED_CATEGORY_SLUGS.has(c.slug)).map((c) => c.slug),
+      HOMEPAGE_JOBS_SCHOLARSHIPS_POST_LIMIT,
+    ),
+  ])
+  Object.assign(postsByCategory, cappedPostsByCategory)
 
   const categorySections = HOMEPAGE_BLOG_CATEGORIES.filter((c) => postsByCategory[c.slug]?.length)
 

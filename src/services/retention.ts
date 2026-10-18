@@ -19,7 +19,7 @@
 import { randomUUID } from "crypto"
 import { gzipSync } from "zlib"
 import { d1Query } from "@/lib/d1"
-import { r2Put } from "@/lib/r2/client"
+import { r2Put, r2Delete } from "@/lib/r2/client"
 import { getSettingBoolean, getSettingNumber } from "@/src/services/siteSettings"
 import { runInChunks } from "@/lib/concurrency"
 
@@ -45,6 +45,7 @@ export type RetentionJobKey =
   | "vtu_orders_archive"
   | "vtu_orders_failed"
   | "pin_attempts"
+  | "blog_jobs_scholarships"
 
 export interface RetentionJobDef {
   key: RetentionJobKey
@@ -80,6 +81,7 @@ export const RETENTION_JOBS: RetentionJobDef[] = [
   { key: "vtu_orders_archive", label: "VTU orders: successful (archive)", settingKey: "retention_vtu_success_days", defaultDays: 180, minDays: 90, action: "archive_move", keeps: "Moved to an archive table, not deleted. Receipts, PIN/token lookup, referral checks and dashboard totals still read them; they only leave the Transactions list." },
   { key: "vtu_orders_failed", label: "VTU orders: failed", settingKey: "retention_vtu_failed_days", defaultDays: 30, minDays: 30, action: "delete", keeps: "Deleted for good, no archive. Failed orders were never charged or were already refunded. Successful, refunded and pending orders are never touched." },
   { key: "pin_attempts", label: "Idle PIN-attempt rows", settingKey: "retention_pin_attempts_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Rows with failed attempts or an active lock are kept." },
+  { key: "blog_jobs_scholarships", label: "Blog posts: Jobs & Scholarships", settingKey: "retention_blog_jobs_scholarships_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Only posts in the 'jobs' or 'scholarships' categories are touched, published or draft. Every other blog category is never touched by this job. The post's cover image is deleted from R2 first, then the row." },
 ]
 
 export function getJobDef(key: string): RetentionJobDef | undefined {
@@ -396,6 +398,70 @@ async function jobPinAttempts(ctx: RunContext, days: number): Promise<JobResult>
 }
 
 /**
+ * BLOG POSTS — 'jobs' and 'scholarships' categories only.
+ *
+ * Admin-set age limit (X days from created_at). Any post — draft or
+ * published — in either category that is older than X days is deleted
+ * for good, cover image included. Every other blog category is left
+ * alone: the WHERE clause below is the only thing that scopes this job,
+ * so it must always filter on category IN ('jobs','scholarships').
+ *
+ * cover_image_url is a full public URL (R2_PUBLIC_URL + "/" + key), so
+ * the R2 key is recovered by stripping that prefix before calling
+ * r2Delete. A post with no cover image, or one whose URL doesn't match
+ * that prefix (e.g. an external image link pasted by the admin), simply
+ * skips the R2 step — the row delete still proceeds either way; a
+ * missing/foreign image must never block deleting the stale post.
+ */
+async function jobBlogJobsScholarships(ctx: RunContext, days: number): Promise<JobResult> {
+  const cutoff = cutoffSql(days, ctx.now)
+  let total = 0
+
+  let publicUrlPrefix: string | null = null
+  try {
+    const { R2_PUBLIC_URL } = await import("@/lib/r2/client")
+    publicUrlPrefix = `${R2_PUBLIC_URL()}/`
+  } catch {
+    // R2_PUBLIC_URL not configured — cover images simply won't be
+    // cleaned up from R2, but stale posts are still deleted below.
+  }
+
+  while (timeLeft(ctx)) {
+    const sel = await d1Query(
+      `SELECT id, cover_image_url FROM blog_posts
+        WHERE category IN ('jobs', 'scholarships') AND created_at < ?
+        LIMIT ?`,
+      [cutoff, ctx.batchSize],
+      ctx.nativeDB,
+    )
+    const rows: any[] = sel.results ?? []
+    if (rows.length === 0) return result("blog_jobs_scholarships", total, true, "Stale job/scholarship posts deleted")
+
+    for (const row of rows) {
+      const url: string | null = row.cover_image_url
+      if (url && publicUrlPrefix && url.startsWith(publicUrlPrefix)) {
+        const key = url.slice(publicUrlPrefix.length)
+        try {
+          await r2Delete(key, undefined)
+        } catch (err) {
+          // Don't let a missing/already-gone R2 object block the row delete.
+          console.error(`[retention] blog_jobs_scholarships: failed to delete R2 object "${key}" for post ${row.id}:`, err)
+        }
+      }
+    }
+
+    for (let i = 0; i < rows.length; i += 90) {
+      const chunk = rows.slice(i, i + 90)
+      const marks = chunk.map(() => "?").join(",")
+      await d1Query(`DELETE FROM blog_posts WHERE id IN (${marks})`, chunk.map((r) => r.id), ctx.nativeDB)
+      total += chunk.length
+    }
+    if (rows.length < ctx.batchSize) return result("blog_jobs_scholarships", total, true, "Stale job/scholarship posts deleted")
+  }
+  return result("blog_jobs_scholarships", total, false, "Stale job/scholarship posts deleted")
+}
+
+/**
  * AUDIT LOG: archive to R2, then delete exactly the archived ids.
  */
 async function jobAuditLog(ctx: RunContext, days: number): Promise<JobResult> {
@@ -529,6 +595,7 @@ async function dispatch(job: RetentionJobDef, ctx: RunContext, days: number): Pr
     case "vtu_orders_archive": return jobVtuOrdersArchive(ctx, days)
     case "vtu_orders_failed": return jobVtuOrdersFailed(ctx, days)
     case "pin_attempts": return jobPinAttempts(ctx, days)
+    case "blog_jobs_scholarships": return jobBlogJobsScholarships(ctx, days)
   }
 }
 
@@ -604,6 +671,7 @@ const PREVIEW_SQL: Record<RetentionJobKey, { sql: string; table: string }> = {
   vtu_orders_archive: { table: "vtu_orders", sql: "SELECT COUNT(*) AS n FROM vtu_orders WHERE status = 'success' AND created_at < ?" },
   vtu_orders_failed: { table: "vtu_orders", sql: "SELECT COUNT(*) AS n FROM vtu_orders WHERE status = 'failed' AND created_at < ?" },
   pin_attempts: { table: "pin_attempts", sql: "SELECT COUNT(*) AS n FROM pin_attempts WHERE failed_attempts = 0 AND (locked_until IS NULL OR locked_until <= datetime('now')) AND updated_at < ?" },
+  blog_jobs_scholarships: { table: "blog_posts", sql: "SELECT COUNT(*) AS n FROM blog_posts WHERE category IN ('jobs', 'scholarships') AND created_at < ?" },
 }
 
 export interface JobStatus {

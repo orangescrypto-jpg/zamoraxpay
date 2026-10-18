@@ -83,6 +83,10 @@ export default function CablePage() {
       try {
         const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          if (!cancelled) setPlansError("Not authenticated")
+          return
+        }
 
         const res = await fetch(
           `/api/pricing?serviceType=cable&networkOrBiller=${encodeURIComponent(biller)}&grouped=1`,

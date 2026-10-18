@@ -1,7 +1,7 @@
 // app/(dashboard)/wallet/page.tsx
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/src/services/providers/supabase/client"
@@ -26,24 +26,33 @@ function WalletPageInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
+  const [balanceError, setBalanceError] = useState<string | null>(null)
   const [amount, setAmount] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "checking" | "success" | "failed">("idle")
   const [confirmFund, setConfirmFund] = useState(false)
   const [balanceVisible, setBalanceVisible] = useState(true)
+  const fundingLock = useRef(false)
 
   async function getAuthHeader() {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
-    return { Authorization: `Bearer ${session?.access_token}` }
+    if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.")
+    return { Authorization: `Bearer ${session.access_token}` }
   }
 
   async function loadBalance() {
-    const headers = await getAuthHeader()
-    const res = await fetch("/api/wallet/balance", { headers })
-    const data = await res.json()
-    setBalanceKobo(data.balanceKobo ?? 0)
+    setBalanceError(null)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/wallet/balance", { headers })
+      if (!res.ok) throw new Error("We could not load your wallet balance.")
+      const data = await res.json()
+      setBalanceKobo(typeof data.balanceKobo === "number" ? data.balanceKobo : 0)
+    } catch (error) {
+      setBalanceError(error instanceof Error ? error.message : "We could not load your wallet balance.")
+    }
   }
 
   useEffect(() => {
@@ -61,29 +70,33 @@ function WalletPageInner() {
     if (funding !== "complete" || !reference) return
 
     let cancelled = false
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
     setVerifyStatus("checking")
 
     async function poll(attempt: number) {
-      const headers = await getAuthHeader()
-      const res = await fetch(`/api/wallet/fund/verify?reference=${encodeURIComponent(reference!)}`, { headers })
-      const data = await res.json()
-      if (cancelled) return
+      try {
+        const headers = await getAuthHeader()
+        const res = await fetch(`/api/wallet/fund/verify?reference=${encodeURIComponent(reference!)}`, { headers })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
 
-      if (data.status === "success") {
-        setVerifyStatus("success")
-        setBalanceKobo(data.newBalanceKobo)
-        router.replace("/wallet")
-        return
+        if (res.ok && data.status === "success") {
+          setVerifyStatus("success")
+          if (typeof data.newBalanceKobo === "number") setBalanceKobo(data.newBalanceKobo)
+          router.replace("/wallet")
+          return
+        }
+
+        if (data.status === "failed") {
+          setVerifyStatus("failed")
+          return
+        }
+      } catch {
+        if (cancelled) return
       }
 
-      if (data.status === "failed") {
-        setVerifyStatus("failed")
-        return
-      }
-
-      // still pending — retry a few times before giving up
       if (attempt < 5) {
-        setTimeout(() => poll(attempt + 1), 2000)
+        retryTimer = setTimeout(() => { void poll(attempt + 1) }, 2000)
       } else {
         setVerifyStatus("failed")
       }
@@ -92,6 +105,7 @@ function WalletPageInner() {
     poll(0)
     return () => {
       cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -104,22 +118,41 @@ function WalletPageInner() {
       return
     }
 
+    if (fundingLock.current) return
+    fundingLock.current = true
     setLoading(true)
-    const headers = await getAuthHeader()
-    const res = await fetch("/api/wallet/fund", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ amountKobo }),
-    })
-    const data = await res.json()
-    setLoading(false)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/wallet/fund", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ amountKobo }),
+      })
+      const data = await res.json().catch(() => ({}))
 
-    if (!res.ok) {
-      setError(data.error ?? "Failed to initialize payment")
-      return
+      if (!res.ok) {
+        setError(data.error ?? "Failed to initialize payment")
+        return
+      }
+      if (typeof data.authorizationUrl !== "string" || !data.authorizationUrl) {
+        setError("The payment provider did not return a checkout link. Please try again.")
+        return
+      }
+      window.location.href = data.authorizationUrl
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "We could not start wallet funding. Please try again.")
+    } finally {
+      fundingLock.current = false
+      setLoading(false)
     }
+  }
 
-    window.location.href = data.authorizationUrl
+  function toggleBalanceVisibility() {
+    setBalanceVisible((visible) => {
+      const next = !visible
+      try { window.localStorage.setItem("zamoraxpay:show-balance", next ? "1" : "0") } catch {}
+      return next
+    })
   }
 
   return (
@@ -138,12 +171,12 @@ function WalletPageInner() {
       )}
       {verifyStatus === "success" && (
         <p className="mb-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">
-          Payment confirmed — your wallet has been credited.
+          Payment confirmed - your wallet has been credited.
         </p>
       )}
       {verifyStatus === "failed" && (
         <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
-          We couldn't confirm this payment yet. If you were charged, it should reflect shortly —
+          We couldn't confirm this payment yet. If you were charged, it should reflect shortly -
           contact support if your balance doesn't update within a few minutes.
         </p>
       )}
@@ -151,15 +184,17 @@ function WalletPageInner() {
       <div className="mb-6 overflow-hidden rounded-2xl bg-secondary p-6 text-white shadow-lg">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-white/70">Current balance</p>
-          <button type="button" onClick={() => setBalanceVisible((value) => !value)} className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white" aria-label={balanceVisible ? "Hide wallet balance" : "Show wallet balance"}>
+          <button type="button" onClick={toggleBalanceVisibility} className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white" aria-label={balanceVisible ? "Hide wallet balance" : "Show wallet balance"}>
             {balanceVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
-        <p className="mt-2 text-3xl font-heading font-bold tracking-tight">
+        <p className="mt-2 text-3xl font-heading font-bold tracking-tight" aria-live="polite">
           {balanceKobo === null ? <span className="block h-9 w-44 animate-pulse rounded-lg bg-white/15" /> : balanceVisible ? formatNaira(balanceKobo) : "₦••••••"}
         </p>
         <div className="mt-4 flex items-center gap-1.5 text-xs text-white/55"><ShieldCheck className="h-3.5 w-3.5" /> Balance protected by your account security.</div>
       </div>
+
+      {balanceError && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><span>{balanceError}</span><button type="button" onClick={() => void loadBalance()} className="font-semibold underline underline-offset-2">Retry balance</button></div>}
 
       <h2 className="mb-3 font-heading font-semibold text-secondary">Fund your wallet</h2>
 
@@ -179,10 +214,14 @@ function WalletPageInner() {
 
       <input
         type="number"
+        min="100"
+        step="1"
+        inputMode="decimal"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        placeholder="Enter amount"
-        className="mb-4 w-full rounded-md border border-border px-3 py-2 text-sm"
+        placeholder="Enter amount (minimum ₦100)"
+        aria-label="Wallet funding amount in naira"
+        className="mb-4 w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
       />
 
       <button
@@ -201,7 +240,7 @@ function WalletPageInner() {
             <p className="mt-2 text-sm text-muted-foreground">You are about to fund your wallet with <strong className="text-secondary">{formatNaira(Math.round(parseFloat(amount || "0") * 100))}</strong>.</p>
             <div className="mt-5 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setConfirmFund(false)} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-secondary hover:bg-muted">Cancel</button>
-              <button type="button" onClick={() => { setConfirmFund(false); void handleFund() }} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90">Confirm</button>
+              <button type="button" onClick={() => { setConfirmFund(false); void handleFund() }} disabled={loading} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60">{loading ? "Starting..." : "Confirm"}</button>
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
 
 const NETWORKS = ["MTN", "Airtel", "Glo", "9mobile"]
 
@@ -33,6 +34,7 @@ export default function EpinPage() {
   const [quantity, setQuantity] = useState("1")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [deliveredData, setDeliveredData] = useState<DeliveredData | null>(null)
   const [plans, setPlans] = useState<Plan[]>([])
@@ -82,24 +84,37 @@ export default function EpinPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (loading) return
+    setReviewOpen(true)
+  }
+
+  async function confirmPurchaseReview() {
+    if (loading) return
+    setReviewOpen(false)
     setResult(null)
     setDeliveredData(null)
     setLoading(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error("Your session has expired. Sign in again to continue.")
 
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-
-    const res = await fetch("/api/vtu/epin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ network, denomination, quantity: parsedQuantity, transactionPin: pin }),
-    })
-    const data = await res.json()
-    setLoading(false)
-    setResult({ success: data.success, message: data.message ?? data.error })
-    if (data.success) {
-      setPin("")
-      if (data.deliveredData) setDeliveredData(data.deliveredData)
+      const res = await fetch("/api/vtu/epin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ network, denomination, quantity: parsedQuantity, transactionPin: pin }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.message ?? data.error ?? "ePIN purchase failed.")
+      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
+      if (data.success) {
+        setPin("")
+        if (data.deliveredData) setDeliveredData(data.deliveredData)
+      }
+    } catch (error) {
+      setResult({ success: false, message: error instanceof Error ? error.message : "ePIN purchase failed. Please try again." })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -207,6 +222,21 @@ export default function EpinPage() {
           {loading ? "Processing..." : "Buy ePIN"}
         </button>
       </form>
+      <PurchaseReviewDialog
+        open={reviewOpen}
+        title="Review ePIN purchase"
+        description="Check the network, denomination, quantity, and estimated total before continuing."
+        rows={[
+          { label: "Network", value: network },
+          { label: "Denomination", value: `₦${Number(denomination).toLocaleString()}` },
+          { label: "Quantity", value: String(parsedQuantity) },
+          { label: "Estimated total", value: totalPriceKobo != null ? formatNaira(totalPriceKobo) : "Price unavailable" },
+        ]}
+        confirmLabel="Confirm purchase"
+        loading={loading}
+        onConfirm={confirmPurchaseReview}
+        onCancel={() => setReviewOpen(false)}
+      />
     </div>
   )
 }

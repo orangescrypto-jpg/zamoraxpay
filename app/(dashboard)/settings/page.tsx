@@ -1,7 +1,7 @@
 // app/(dashboard)/settings/page.tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { AuthService } from "@/src/services/auth"
 
@@ -17,13 +17,23 @@ export default function SettingsPage() {
   const [savingPin, setSavingPin] = useState(false)
   const [pinMessage, setPinMessage] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (!user) return
+    setFullName(user.fullName ?? "")
+    setPhone(user.phone ?? "")
+  }, [user?.id, user?.fullName, user?.phone])
+
   async function handleSaveProfile() {
     if (!user) return
+    if (!fullName.trim()) {
+      setProfileMessage("Enter your full name before saving.")
+      return
+    }
     setSavingProfile(true)
     setProfileMessage(null)
     try {
-      await AuthService.updateProfile(user.id, { fullName, phone })
-      setProfileMessage("Profile updated")
+      await AuthService.updateProfile(user.id, { fullName: fullName.trim(), phone: phone.trim() })
+      setProfileMessage("Profile updated successfully.")
     } catch (err) {
       setProfileMessage(err instanceof Error ? err.message : "Update failed")
     } finally {
@@ -32,6 +42,10 @@ export default function SettingsPage() {
   }
 
   async function handleSetPin() {
+    if (!/^\d{4}$/.test(newPin) || (user?.hasTransactionPin && !/^\d{4}$/.test(currentPin))) {
+      setPinMessage("Enter a valid 4-digit PIN in each required field.")
+      return
+    }
     setSavingPin(true)
     setPinMessage(null)
     try {
@@ -47,13 +61,14 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="container max-w-md space-y-8 py-8">
+    <div className="container max-w-md space-y-6 py-6 sm:py-8">
       <div>
         <h1 className="mb-6 text-2xl font-heading font-bold text-secondary">Settings</h1>
       </div>
 
-      <div>
-        <h2 className="mb-3 font-heading font-semibold text-secondary">Profile</h2>
+      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
+        <h2 className="mb-1 font-heading font-semibold text-secondary">Profile</h2>
+        <p className="mb-4 text-sm text-muted-foreground">Keep your account details up to date.</p>
         {profileMessage && <p className="mb-3 text-sm text-accent">{profileMessage}</p>}
         <label className="mb-1 block text-sm font-medium text-secondary">Full name</label>
         <input
@@ -76,32 +91,36 @@ export default function SettingsPage() {
         >
           {savingProfile ? "Saving..." : "Save profile"}
         </button>
-      </div>
+      </section>
 
-      <div className="border-t border-border pt-6">
-        <h2 className="mb-3 font-heading font-semibold text-secondary">Transaction PIN</h2>
+      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
+        <h2 className="mb-1 font-heading font-semibold text-secondary">Transaction PIN</h2>
+        <p className="mb-4 text-sm text-muted-foreground">Protect purchases with your private transaction PIN.</p>
         <p className="mb-3 text-sm text-muted-foreground">
           {user?.hasTransactionPin
             ? "Enter your current PIN, then choose a new 4-digit PIN."
-            : "Set a 4-digit PIN — required before you can make any purchase."}
+            : "Set a 4-digit PIN. It is required before you can make a purchase."}
         </p>
         {pinMessage && <p className="mb-3 text-sm text-accent">{pinMessage}</p>}
         {user?.hasTransactionPin && (
           <input
             type="password"
             inputMode="numeric"
+            autoComplete="current-password"
             maxLength={4}
             value={currentPin}
-            onChange={(e) => setCurrentPin(e.target.value)}
+            onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
             placeholder="Current 4-digit PIN"
             className="mb-3 w-full rounded-md border border-border px-3 py-2 text-center tracking-widest"
           />
         )}
         <input
           type="password"
+          inputMode="numeric"
+          autoComplete="new-password"
           maxLength={4}
           value={newPin}
-          onChange={(e) => setNewPin(e.target.value)}
+          onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
           placeholder="New 4-digit PIN"
           className="mb-3 w-full rounded-md border border-border px-3 py-2 text-center tracking-widest"
         />
@@ -112,7 +131,7 @@ export default function SettingsPage() {
         >
           {savingPin ? "Saving..." : "Save PIN"}
         </button>
-      </div>
+      </section>
     </div>
   )
 }

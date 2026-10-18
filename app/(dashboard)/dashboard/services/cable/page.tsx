@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
 
 const BILLERS = ["DSTV", "GOtv", "StarTimes"]
 
@@ -27,7 +28,7 @@ interface PlanGroup {
 // label. A plan_code that matches neither shape is a genuine
 // low-confidence row (an unrecognized provider-internal code like
 // "dstv79", or a stale pre-normalization row pending the plan-code
-// migration) — title-cased instead of shown as a raw slug, same
+// migration) - title-cased instead of shown as a raw slug, same
 // fallback principle as the data page's labelFromPlanCode.
 function titleCaseFallback(code: string): string {
   return code
@@ -52,7 +53,7 @@ export default function CablePage() {
   const [biller, setBiller] = useState(BILLERS[0])
   const [smartcardNumber, setSmartcardNumber] = useState("")
   // Cable plan_codes have no category variants (see pricing.ts
-  // listPlanGroups — cable's canonical code has no category suffix),
+  // listPlanGroups - cable's canonical code has no category suffix),
   // so every group here has exactly one variant. Grouped API is still
   // used so cable gets the same price-confirmation and plan-
   // unavailable safety net as data, without needing separate logic.
@@ -62,6 +63,7 @@ export default function CablePage() {
   const [planCode, setPlanCode] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [confirmState, setConfirmState] = useState<{
     message: string
@@ -84,7 +86,7 @@ export default function CablePage() {
 
         const res = await fetch(
           `/api/pricing?serviceType=cable&networkOrBiller=${encodeURIComponent(biller)}&grouped=1`,
-          { headers: { Authorization: `Bearer ${session?.access_token}` } },
+          { headers: { Authorization: `Bearer ${session.access_token}` } },
         )
         const data = await res.json()
         if (cancelled) return
@@ -115,10 +117,11 @@ export default function CablePage() {
   async function submitPurchase(expectedPriceKobo: number | undefined, useplanCode: string) {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error("Your session has expired. Sign in again to continue.")
 
     const res = await fetch("/api/vtu/cable", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({
         biller,
         smartcardNumber,
@@ -127,50 +130,65 @@ export default function CablePage() {
         expectedPriceKobo,
       }),
     })
-    return res.json()
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok && !data.requiresPriceConfirmation && !data.planUnavailable) throw new Error(data.message ?? data.error ?? "Cable TV payment failed.")
+    return data
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (loading || !planCode || !selectedPlan) return
     setResult(null)
     setConfirmState(null)
+    setReviewOpen(true)
+  }
+
+  async function confirmPurchaseReview() {
+    if (loading || !planCode) return
+    setReviewOpen(false)
     setLoading(true)
-
-    const data = await submitPurchase(selectedPlan?.priceKobo, planCode)
-    setLoading(false)
-
-    if (data.requiresPriceConfirmation || data.planUnavailable) {
-      setConfirmState({
-        message: data.message,
-        planCode: data.suggestedPlanCode ?? planCode,
-        priceKobo: data.actualPriceKobo ?? data.suggestedPriceKobo,
-      })
-      return
+    try {
+      const data = await submitPurchase(selectedPlan?.priceKobo, planCode)
+      if (data.requiresPriceConfirmation || data.planUnavailable) {
+        setConfirmState({
+          message: data.message ?? "The selected package needs confirmation.",
+          planCode: data.suggestedPlanCode ?? planCode,
+          priceKobo: data.actualPriceKobo ?? data.suggestedPriceKobo,
+        })
+        return
+      }
+      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
+      if (data.success) { setSmartcardNumber(""); setPin("") }
+    } catch (err) {
+      setResult({ success: false, message: err instanceof Error ? err.message : "Cable TV payment failed. Please try again." })
+    } finally {
+      setLoading(false)
     }
-
-    setResult({ success: data.success, message: data.message ?? data.error })
-    if (data.success) { setSmartcardNumber(""); setPin("") }
   }
 
   async function handleConfirm() {
-    if (!confirmState) return
+    if (!confirmState || loading) return
+    const pendingConfirmation = confirmState
     setLoading(true)
     setResult(null)
-    const data = await submitPurchase(confirmState.priceKobo, confirmState.planCode)
-    setLoading(false)
-    setConfirmState(null)
-
-    if (data.requiresPriceConfirmation || data.planUnavailable) {
-      setConfirmState({
-        message: data.message,
-        planCode: data.suggestedPlanCode ?? confirmState.planCode,
-        priceKobo: data.actualPriceKobo ?? data.suggestedPriceKobo,
-      })
-      return
+    try {
+      const data = await submitPurchase(pendingConfirmation.priceKobo, pendingConfirmation.planCode)
+      setConfirmState(null)
+      if (data.requiresPriceConfirmation || data.planUnavailable) {
+        setConfirmState({
+          message: data.message ?? "The selected package needs confirmation.",
+          planCode: data.suggestedPlanCode ?? pendingConfirmation.planCode,
+          priceKobo: data.actualPriceKobo ?? data.suggestedPriceKobo,
+        })
+        return
+      }
+      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
+      if (data.success) { setSmartcardNumber(""); setPin("") }
+    } catch (err) {
+      setResult({ success: false, message: err instanceof Error ? err.message : "Cable TV payment failed. Please try again." })
+    } finally {
+      setLoading(false)
     }
-
-    setResult({ success: data.success, message: data.message ?? data.error })
-    if (data.success) { setSmartcardNumber(""); setPin("") }
   }
 
   return (
@@ -263,6 +281,21 @@ export default function CablePage() {
           {loading ? "Processing..." : "Pay subscription"}
         </button>
       </form>
+      <PurchaseReviewDialog
+        open={reviewOpen}
+        title="Review cable TV payment"
+        description="Check the provider, smartcard number, and selected package before continuing. Provider pricing is checked when you confirm."
+        rows={[
+          { label: "Provider", value: biller },
+          { label: "Smartcard number", value: smartcardNumber.trim() },
+          { label: "Package", value: planCode.replaceAll("_", " ") },
+          { label: "Displayed price", value: selectedPlan ? formatNaira(selectedPlan.priceKobo) : "Price unavailable" },
+        ]}
+        confirmLabel="Check price and continue"
+        loading={loading}
+        onConfirm={confirmPurchaseReview}
+        onCancel={() => setReviewOpen(false)}
+      />
     </div>
   )
 }

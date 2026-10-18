@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 import { detectNetwork, matchesSelectedNetwork, type NetworkName } from "@/lib/networkDetect"
+import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
 
 const NETWORKS: NetworkName[] = ["MTN", "Airtel", "Glo", "9mobile"]
 
@@ -23,12 +24,12 @@ interface PlanGroup {
 }
 
 // Plan codes are the canonical keys produced by canonicalPlanKey()
-// (see src/services/planNormalization.ts) — e.g. "5000mb-1d-awoof",
+// (see src/services/planNormalization.ts) - e.g. "5000mb-1d-awoof",
 // "500mb-7d", "1000mb-1d-social+binge". Category (gifting/awoof/cg/
 // sme) is an internal routing detail and is dropped from the group
-// label — it's shown separately as a sub-option instead (see
+// label - it's shown separately as a sub-option instead (see
 // CATEGORY_LABELS below), never silently hidden. Bundle tags
-// (social/binge/youtube/night) ARE shown in the label — they mean a
+// (social/binge/youtube/night) ARE shown in the label - they mean a
 // genuinely different, restricted product the customer should know
 // about before buying. Size converts MB -> GB above 1000MB.
 const BUNDLE_TAG_LABELS: Record<string, string> = {
@@ -55,7 +56,7 @@ function categoryLabel(category: string): string {
 // Pairgate's own Daily/Weekly/Monthly/Yearly split. Buckets are
 // derived purely from the validity already encoded in each group's
 // plan_code (via the leading "<size>mb-<days>d" shape canonicalPlanKey
-// produces) — no new data, no server change, just a client-side
+// produces) - no new data, no server change, just a client-side
 // re-bucketing of what listPlanGroups already returns. "Hot Data"
 // (Pairgate's default landing tab) isn't reproduced here since it's
 // a provider-curated/promoted subset, not a validity bucket; every
@@ -74,7 +75,7 @@ const BUCKET_ORDER: ValidityBucket[] = ["daily", "weekly", "monthly", "yearly"]
 // same "<size>mb-<days>d..." shape labelFromPlanCode already parses
 // (and the "<family>-<days>d..." shape for named plan families like
 // Collabo). Returns null when the code doesn't carry a parseable day
-// count at all — those groups fall back to "daily" (see bucketFor)
+// count at all - those groups fall back to "daily" (see bucketFor)
 // rather than being silently dropped from every tab.
 function validityDaysFromPlanCode(code: string): number | null {
   const match = code.match(/-(\d+)d(?:-[a-z0-9_+]+)*$/i) ?? code.match(/^(?:\d+mb|[a-z][a-z0-9]*)-(\d+)d/i)
@@ -98,7 +99,7 @@ function bucketFor(days: number | null): ValidityBucket {
 // canonical shape below (e.g. a stale pre-normalization row still
 // pending the plan-code migration, or a label the normalizer
 // genuinely couldn't parse confidently). Never shows the raw
-// hyphenated slug verbatim — title-cases it into something readable
+// hyphenated slug verbatim - title-cases it into something readable
 // instead, so "200-mb-14-days-sme" reads as "200 Mb 14 Days Sme"
 // rather than exposing internal formatting to the customer.
 function titleCaseFallback(code: string): string {
@@ -123,8 +124,8 @@ function labelFromPlanCode(code: string): string {
         : `${sizeMB}MB`
   const dayLabel = days === 1 ? "1 day" : `${days} days`
   // Suffix segments after size/validity are category (internal,
-  // dropped here — shown as a sub-option instead) and/or bundle tags
-  // (shown — a genuinely different, restricted product). A "+"-joined
+  // dropped here - shown as a sub-option instead) and/or bundle tags
+  // (shown - a genuinely different, restricted product). A "+"-joined
   // segment is always bundle tags.
   const CATEGORY_KEYS = new Set(["gifting", "awoof", "cg", "cg_lite", "sme", "corporate", "direct", "standard"])
   const segments = suffixPart ? suffixPart.split("-").filter(Boolean) : []
@@ -145,7 +146,7 @@ export default function DataPage() {
   const [network, setNetwork] = useState(NETWORKS[0])
   const [phone, setPhone] = useState("")
   // Pre-fill with the user's own registered number for the common case
-  // (buying for self) — still a plain editable input, so switching to
+  // (buying for self) - still a plain editable input, so switching to
   // someone else's number just means typing over it.
   useEffect(() => {
     if (user?.phone && phone === "") setPhone(user.phone)
@@ -158,14 +159,15 @@ export default function DataPage() {
   const [groupKey, setGroupKey] = useState("")
   const [planCode, setPlanCode] = useState("")
   // Type (category) is now its own top-level dropdown, selected before
-  // the plan itself — mirrors Inlomax's Type -> Plan two-step flow
+  // the plan itself - mirrors Inlomax's Type -> Plan two-step flow
   // instead of picking a plan first and category as an afterthought.
   const [category, setCategory] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   // Set when the backend reports the price changed or the picked plan
-  // just went unavailable — holds what the customer needs to see and
+  // just went unavailable - holds what the customer needs to see and
   // explicitly accept before anything is charged. Nothing is charged
   // while this is set; submitting again with confirmedPriceKobo set
   // sends expectedPriceKobo matching the new price/plan, which lets it
@@ -195,7 +197,7 @@ export default function DataPage() {
 
         const res = await fetch(
           `/api/pricing?serviceType=data&networkOrBiller=${encodeURIComponent(network)}&grouped=1`,
-          { headers: { Authorization: `Bearer ${session?.access_token}` } },
+          { headers: { Authorization: `Bearer ${session.access_token}` } },
         )
         const data = await res.json()
         if (cancelled) return
@@ -210,7 +212,7 @@ export default function DataPage() {
         setGroups(loadedGroups)
         if (loadedGroups.length) {
           // Land on whichever bucket actually has plans for this
-          // network, preferring Daily when it does (matches habit —
+          // network, preferring Daily when it does (matches habit -
           // daily plans are the most frequently bought) rather than
           // always defaulting to Daily and showing an empty tab.
           const firstNonEmpty =
@@ -246,7 +248,7 @@ export default function DataPage() {
   }, [network])
 
   // groupKey is shaped "<network>:<base-plan-code>" (see
-  // listPlanGroups/splitPlanCodeForGrouping in pricing.ts) — validity
+  // listPlanGroups/splitPlanCodeForGrouping in pricing.ts) - validity
   // lives in the part after the colon, so strip the network prefix
   // before parsing days out of it.
   function bucketOfGroup(g: PlanGroup): ValidityBucket {
@@ -269,7 +271,7 @@ export default function DataPage() {
   })
 
   // Groups within the current bucket that actually offer the selected
-  // category — this is what populates the Plan dropdown once a Type
+  // category - this is what populates the Plan dropdown once a Type
   // is chosen.
   const groupsForCategory = groupsInBucket.filter((g) => g.variants.some((v) => v.category === category))
 
@@ -325,10 +327,11 @@ export default function DataPage() {
   async function submitPurchase(expectedPriceKobo: number | undefined, useplanCode: string, confirmNetworkMismatch: boolean) {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error("Your session has expired. Sign in again to continue.")
 
     const res = await fetch("/api/vtu/data", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({
         network,
         phone,
@@ -338,7 +341,11 @@ export default function DataPage() {
         confirmNetworkMismatch,
       }),
     })
-    return res.json()
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok && !data.requiresNetworkConfirmation && !data.requiresPriceConfirmation && !data.planUnavailable) {
+      throw new Error(data.message ?? data.error ?? "Data purchase failed.")
+    }
+    return data
   }
 
   // Reads whatever confirmation gate the server just returned (price
@@ -371,35 +378,48 @@ export default function DataPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (loading || !planCode || !selectedVariant) return
     setResult(null)
     setConfirmState(null)
+    setReviewOpen(true)
+  }
 
+  async function confirmPurchaseReview() {
+    if (loading || !planCode) return
+    setReviewOpen(false)
     setLoading(true)
-    const data = await submitPurchase(selectedVariant?.priceKobo, planCode, false)
-    setLoading(false)
-
-    if (handleGateResponse(data, planCode)) return
-
-    setResult({ success: data.success, message: data.message ?? data.error })
-    if (data.success) { setPhone(""); setPin("") }
+    try {
+      const data = await submitPurchase(selectedVariant?.priceKobo, planCode, false)
+      if (handleGateResponse(data, planCode)) return
+      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
+      if (data.success) { setPhone(""); setPin("") }
+    } catch (err) {
+      setResult({ success: false, message: err instanceof Error ? err.message : "Data purchase failed. Please try again." })
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleConfirm() {
-    if (!confirmState) return
+    if (!confirmState || loading) return
+    const pendingConfirmation = confirmState
     setLoading(true)
     setResult(null)
-    const data = await submitPurchase(
-      confirmState.priceKobo,
-      confirmState.planCode,
-      confirmState.kind === "network",
-    )
-    setLoading(false)
-    setConfirmState(null)
-
-    if (handleGateResponse(data, confirmState.planCode)) return
-
-    setResult({ success: data.success, message: data.message ?? data.error })
-    if (data.success) { setPhone(""); setPin("") }
+    try {
+      const data = await submitPurchase(
+        pendingConfirmation.priceKobo,
+        pendingConfirmation.planCode,
+        pendingConfirmation.kind === "network",
+      )
+      if (handleGateResponse(data, pendingConfirmation.planCode)) return
+      setConfirmState(null)
+      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
+      if (data.success) { setPhone(""); setPin("") }
+    } catch (err) {
+      setResult({ success: false, message: err instanceof Error ? err.message : "Data purchase failed. Please try again." })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -530,7 +550,7 @@ export default function DataPage() {
             </div>
           ) : groupsInBucket.length === 0 ? (
             <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
-              No {BUCKET_LABELS[bucket].toLowerCase()} plans for {network} right now — try another tab.
+              No {BUCKET_LABELS[bucket].toLowerCase()} plans for {network} right now - try another tab.
             </div>
           ) : (
             <>
@@ -598,6 +618,22 @@ export default function DataPage() {
           {loading ? "Processing..." : "Buy data"}
         </button>
       </form>
+      <PurchaseReviewDialog
+        open={reviewOpen}
+        title="Review data purchase"
+        description="Check the selected plan, network, and recipient before continuing. Current provider pricing is checked when you confirm."
+        rows={[
+          { label: "Network", value: network },
+          { label: "Phone number", value: phone.trim() },
+          { label: "Data plan", value: planCode ? labelFromPlanCode(planCode) : "No plan selected" },
+          { label: "Plan type", value: category ? categoryLabel(category) : "Standard" },
+          { label: "Displayed price", value: selectedVariant ? formatNaira(selectedVariant.priceKobo) : "Price unavailable" },
+        ]}
+        confirmLabel="Check price and continue"
+        loading={loading}
+        onConfirm={confirmPurchaseReview}
+        onCancel={() => setReviewOpen(false)}
+      />
     </div>
   )
 }

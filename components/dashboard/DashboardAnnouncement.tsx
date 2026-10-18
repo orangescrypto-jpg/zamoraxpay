@@ -4,18 +4,18 @@
 // mechanics as the header BannerSlider. Images render at their
 // natural aspect ratio (no forced crop or letterbox) so any upload
 // size displays correctly; only the text-only fallback (no image)
-// uses a fixed 3:1 shape since it has no natural size of its own —
+// uses a fixed 3:1 shape since it has no natural size of its own -
 // backgroundColor (admin-set, optional) overrides the default navy
 // fill for that fallback. Admin can set text, an image, or both per
-// slide — the link is optional per slide, so this doubles as a plain
+// slide - the link is optional per slide, so this doubles as a plain
 // announcement when there's nothing to click through to.
 //
-// This only renders 'banner'-style items — popups are a separate
+// This only renders 'banner'-style items - popups are a separate
 // component (DashboardPopupAnnouncement) sourced from the same API
 // response's `popups` array.
 //
 // Has its own Dismiss button below the strip (session-only, via
-// sessionStorage) — reappears on next login, same as a popup with
+// sessionStorage) - reappears on next login, same as a popup with
 // show_once = 0.
 "use client"
 
@@ -40,7 +40,7 @@ export function DashboardAnnouncement() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const [loading, setLoading] = useState(true)
-  // Session-only dismissal for the whole banner strip (not per-slide) —
+  // Session-only dismissal for the whole banner strip (not per-slide) -
   // closing it hides it for the rest of this browser session and it
   // comes back on next login, same spirit as a popup's show_once = 0.
   const [dismissed, setDismissed] = useState(false)
@@ -86,7 +86,7 @@ export function DashboardAnnouncement() {
   // Auto-slide
   useEffect(() => {
     if (announcements.length <= 1) return
-    const timer = setInterval(() => goTo(activeIndex + 1), AUTO_SLIDE_INTERVAL_MS)
+    const timer = setInterval(() => { if (document.visibilityState === "visible") goTo(activeIndex + 1) }, AUTO_SLIDE_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [activeIndex, announcements.length, goTo])
 
@@ -95,7 +95,7 @@ export function DashboardAnnouncement() {
   const current = announcements[activeIndex]
   if (!current.text && !current.imageUrl) return null
 
-  // Wide banner strip — same aspect family as the header slider (just
+  // Wide banner strip - same aspect family as the header slider (just
   // shorter), so a 1200x400 upload renders full-bleed instead of
   // being cropped into a thumbnail. Text (if set) overlays the bottom
   // as a gradient caption, same treatment as the header BannerSlider,

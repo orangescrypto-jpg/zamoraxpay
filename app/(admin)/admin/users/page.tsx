@@ -21,6 +21,8 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUserRow[]>([])
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -30,12 +32,20 @@ export default function AdminUsersPage() {
 
   async function load(searchTerm = "") {
     setLoading(true)
-    const headers = await getAuthHeader()
-    const url = searchTerm ? `/api/admin/users?search=${encodeURIComponent(searchTerm)}` : "/api/admin/users"
-    const res = await fetch(url, { headers })
-    const data = await res.json()
-    setUsers(data.users ?? [])
-    setLoading(false)
+    setError(null)
+    try {
+      const headers = await getAuthHeader()
+      const url = searchTerm ? `/api/admin/users?search=${encodeURIComponent(searchTerm.trim())}` : "/api/admin/users"
+      const res = await fetch(url, { headers })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? data.message ?? "Could not load users.")
+      setUsers(Array.isArray(data.users) ? data.users : [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load users.")
+      setUsers([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -43,13 +53,24 @@ export default function AdminUsersPage() {
   }, [])
 
   async function changeStatus(userId: string, status: string) {
-    const headers = await getAuthHeader()
-    await fetch("/api/admin/users", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ userId, status }),
-    })
-    load(search)
+    if (updatingUserId) return
+    setUpdatingUserId(userId)
+    setError(null)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ userId, status }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? data.message ?? "Could not update this user's status.")
+      await load(search)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update this user's status.")
+    } finally {
+      setUpdatingUserId(null)
+    }
   }
 
   const StatusBadge = ({ status }: { status: string }) => (
@@ -64,18 +85,20 @@ export default function AdminUsersPage() {
 
   const ActionButton = ({ u }: { u: AdminUserRow }) =>
     u.status === "active" ? (
-      <button onClick={() => changeStatus(u.id, "suspended")} className="text-xs text-destructive hover:underline">
-        Suspend
+      <button onClick={() => changeStatus(u.id, "suspended")} disabled={updatingUserId !== null} className="text-xs text-destructive hover:underline disabled:opacity-50">
+        {updatingUserId === u.id ? "Updating..." : "Suspend"}
       </button>
     ) : (
-      <button onClick={() => changeStatus(u.id, "active")} className="text-xs text-accent hover:underline">
-        Reactivate
+      <button onClick={() => changeStatus(u.id, "active")} disabled={updatingUserId !== null} className="text-xs text-accent hover:underline disabled:opacity-50">
+        {updatingUserId === u.id ? "Updating..." : "Reactivate"}
       </button>
     )
 
   return (
     <div className="p-4 sm:p-6">
       <h1 className="mb-4 text-xl font-heading font-bold sm:mb-6 sm:text-2xl">Users</h1>
+
+      {error && <div role="alert" className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error} <button type="button" onClick={() => load(search)} className="ml-2 font-semibold underline">Try again</button></div>}
 
       <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         <input
@@ -115,7 +138,7 @@ export default function AdminUsersPage() {
                   <dt className="text-muted-foreground">Phone</dt>
                   <dd className="text-right">{u.phone}</dd>
                   <dt className="text-muted-foreground">Email</dt>
-                  <dd className="text-right break-all">{u.email ?? "—"}</dd>
+                  <dd className="text-right break-all">{u.email ?? "-"}</dd>
                   <dt className="text-muted-foreground">Tier</dt>
                   <dd className="text-right capitalize">{u.tier}</dd>
                   <dt className="text-muted-foreground">Balance</dt>
@@ -154,7 +177,7 @@ export default function AdminUsersPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3">{u.phone}</td>
-                    <td className="px-4 py-3">{u.email ?? "—"}</td>
+                    <td className="px-4 py-3">{u.email ?? "-"}</td>
                     <td className="px-4 py-3 capitalize">{u.tier}</td>
                     <td className="px-4 py-3">{formatNaira(u.balanceKobo)}</td>
                     <td className="px-4 py-3">

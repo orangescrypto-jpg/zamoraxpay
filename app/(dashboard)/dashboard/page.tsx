@@ -23,6 +23,10 @@ import {
   Banknote,
   Globe,
   PartyPopper,
+  Search,
+  Star,
+  ArrowUp,
+  ArrowDown,
   type LucideIcon,
 } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
@@ -109,6 +113,12 @@ export default function DashboardPage() {
   const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const [quickActionQuery, setQuickActionQuery] = useState("")
+  const [pinnedQuickLinks, setPinnedQuickLinks] = useState<string[]>([])
+  const [quickLinkOrder, setQuickLinkOrder] = useState<string[]>([])
+  const [manageQuickActions, setManageQuickActions] = useState(false)
   const [canCheckInToday, setCanCheckInToday] = useState(false)
   const [nextRewardKobo, setNextRewardKobo] = useState(0)
   const [streakLoaded, setStreakLoaded] = useState(false)
@@ -116,17 +126,76 @@ export default function DashboardPage() {
   const [announcementPopupState, setAnnouncementPopupState] = useState<AnnouncementPopupState>("checking")
 
   useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("zamoraxpay:pinned-quick-actions") || "[]")
+      if (Array.isArray(saved)) setPinnedQuickLinks(saved.filter((value): value is string => typeof value === "string" && QUICK_LINKS.some((link) => link.href === value)).slice(0, QUICK_LINKS.length))
+      const savedOrder = JSON.parse(window.localStorage.getItem("zamoraxpay:quick-action-order") || "[]")
+      if (Array.isArray(savedOrder)) setQuickLinkOrder(savedOrder.filter((value): value is string => typeof value === "string" && QUICK_LINKS.some((link) => link.href === value)))
+    } catch {
+      setPinnedQuickLinks([])
+      setQuickLinkOrder([])
+    }
+  }, [])
+
+  function toggleQuickLink(href: string) {
+    setPinnedQuickLinks((previous) => {
+      const next = previous.includes(href) ? previous.filter((value) => value !== href) : [href, ...previous]
+      try { window.localStorage.setItem("zamoraxpay:pinned-quick-actions", JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  function moveQuickLink(href: string, direction: -1 | 1) {
+    const current = QUICK_LINKS.map((link) => link.href)
+    const ordered = [...current].sort((a, b) => {
+      const ai = quickLinkOrder.indexOf(a)
+      const bi = quickLinkOrder.indexOf(b)
+      return (ai < 0 ? current.indexOf(a) + current.length : ai) - (bi < 0 ? current.indexOf(b) + current.length : bi)
+    })
+    const index = ordered.indexOf(href)
+    const target = index + direction
+    if (index < 0 || target < 0 || target >= ordered.length) return
+    ;[ordered[index], ordered[target]] = [ordered[target], ordered[index]]
+    setQuickLinkOrder(ordered)
+    try { window.localStorage.setItem("zamoraxpay:quick-action-order", JSON.stringify(ordered)) } catch { /* local preferences are optional */ }
+  }
+
+  const visibleQuickLinks = QUICK_LINKS
+    .filter((link) => `${link.label} ${link.href}`.toLowerCase().includes(quickActionQuery.trim().toLowerCase()))
+    .sort((a, b) => {
+      const pinDifference = Number(pinnedQuickLinks.includes(b.href)) - Number(pinnedQuickLinks.includes(a.href))
+      if (pinDifference) return pinDifference
+      const base = QUICK_LINKS.map((link) => link.href)
+      const aIndex = quickLinkOrder.indexOf(a.href)
+      const bIndex = quickLinkOrder.indexOf(b.href)
+      return (aIndex < 0 ? base.indexOf(a.href) + base.length : aIndex) - (bIndex < 0 ? base.indexOf(b.href) + base.length : bIndex)
+    })
+
+  const recentServices = activity
+    .filter((item): item is Extract<ActivityItem, { kind: "order" }> => item.kind === "order")
+    .map((item) => {
+      const service = item.data.service_type.toLowerCase().replace(/\s+/g, "_")
+      const path = ({ airtime: "/dashboard/services/airtime", data: "/dashboard/services/data", cable: "/dashboard/services/cable", electricity: "/dashboard/services/electricity", exam_pin: "/dashboard/services/exam-pin", epin: "/dashboard/services/epin", betting: "/dashboard/services/betting", bulk_data: "/dashboard/services/bulk-data", bulk_airtime: "/dashboard/services/bulk-airtime" } as Record<string, string>)[service]
+      return path ? QUICK_LINKS.find((link) => link.href === path) : undefined
+    })
+    .filter((link): link is (typeof QUICK_LINKS)[number] => Boolean(link))
+    .filter((link, index, list) => list.findIndex((candidate) => candidate.href === link.href) === index)
+    .slice(0, 3)
+
+  useEffect(() => {
     let cancelled = false
 
     async function load() {
       setLoading(true)
+      setLoadError(null)
       try {
         const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
-        const headers = { Authorization: `Bearer ${session?.access_token}` }
+        if (!session?.access_token) throw new Error("Your session could not be verified. Please sign in again.")
+        const headers = { Authorization: `Bearer ${session.access_token}` }
 
         const res = await fetch("/api/dashboard/summary", { headers })
-        if (!res.ok) throw new Error("Dashboard summary failed")
+        if (!res.ok) throw new Error("We could not load your wallet summary. Please try again.")
         const data = await res.json()
         if (cancelled) return
 
@@ -150,6 +219,10 @@ export default function DashboardPage() {
         ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
         setActivity(merged.slice(0, 5))
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(error instanceof Error ? error.message : "We could not load your dashboard. Please try again.")
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -159,7 +232,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [retryCount])
 
   const firstName = user?.fullName?.split(" ")[0]
   const hour = new Date().getHours()
@@ -194,7 +267,9 @@ export default function DashboardPage() {
         </div>
         <p className="relative mt-2 font-[600] text-[2.5rem] leading-none tracking-tight tabular-nums sm:text-[2.75rem]">
           {loading ? (
-            <span className="inline-block h-9 w-40 animate-pulse rounded-md bg-white/10 align-middle" />
+            <span className="inline-block h-9 w-40 animate-pulse rounded-md bg-white/10 align-middle" aria-label="Loading wallet balance" />
+          ) : loadError ? (
+            <span className="text-lg font-medium">Balance unavailable</span>
           ) : (
             formatNaira(balanceKobo ?? 0)
           )}
@@ -255,32 +330,54 @@ export default function DashboardPage() {
       <SpinPopup spin={spin} blocked={announcementPopupState !== "closed"} />
 
       <div className="mt-9">
-        <h2 className="text-[15px] font-semibold text-primary">Quick actions</h2>
-
-        <div className="mt-3.5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {QUICK_LINKS.map((link) => {
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-[15px] font-semibold text-primary">Quick actions</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Pin the services you use most. Your choices stay on this device.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {pinnedQuickLinks.length > 0 && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">{pinnedQuickLinks.length} pinned</span>}
+            <button type="button" onClick={() => setManageQuickActions((value) => !value)} aria-pressed={manageQuickActions} className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-secondary hover:border-primary hover:text-primary">{manageQuickActions ? "Done" : "Reorder"}</button>
+          </div>
+        </div>
+        <label className="relative mt-3 block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input value={quickActionQuery} onChange={(event) => setQuickActionQuery(event.target.value)} placeholder="Find a service or action" aria-label="Search quick actions" className="h-11 w-full rounded-xl border border-border bg-white pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10" />
+        </label>
+        {visibleQuickLinks.length > 0 ? <div className="mt-3.5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {visibleQuickLinks.map((link) => {
             const Icon = link.icon
             const showBadge = link.href === "/play" && (spin.status?.tickets.length ?? 0) > 0
+            const isPinned = pinnedQuickLinks.includes(link.href)
             return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="group relative flex min-h-[118px] flex-col items-center justify-center gap-2.5 rounded-2xl border border-border/70 bg-white px-3 py-4 text-center shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_8px_20px_-10px_rgba(15,30,77,0.22)]"
-              >
-                {showBadge && (
-                  <span className="absolute right-3 top-3 flex h-2.5 w-2.5 rounded-full bg-red-500" aria-hidden="true" />
-                )}
-                <span className={`flex h-11 w-11 items-center justify-center rounded-full transition group-hover:scale-105 ${link.iconClass}`}>
-                  <Icon className="h-5 w-5" />
-                </span>
-                <span className="text-sm font-medium leading-tight text-secondary group-hover:text-primary">
-                  {link.label}
-                </span>
-              </Link>
+              <div key={link.href} className="relative min-w-0">
+                <Link href={link.href} className="group flex min-h-[118px] h-full flex-col items-center justify-center gap-2.5 rounded-2xl border border-border/70 bg-white px-3 py-4 text-center shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_8px_20px_-10px_rgba(15,30,77,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+                  {showBadge && <span className="absolute right-3 top-3 flex h-2.5 w-2.5 rounded-full bg-red-500" aria-label="New activity" />}
+                  <span className={`flex h-11 w-11 items-center justify-center rounded-full transition group-hover:scale-105 ${link.iconClass}`}><Icon className="h-5 w-5" /></span>
+                  <span className="text-sm font-medium leading-tight text-secondary group-hover:text-primary">{link.label}</span>
+                </Link>
+                {manageQuickActions && <div className="absolute bottom-2 right-2 z-10 flex gap-1">
+                  <button type="button" onClick={() => moveQuickLink(link.href, -1)} disabled={visibleQuickLinks[0]?.href === link.href} aria-label={`Move ${link.label} earlier`} className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-white text-secondary shadow-sm disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
+                  <button type="button" onClick={() => moveQuickLink(link.href, 1)} disabled={visibleQuickLinks[visibleQuickLinks.length - 1]?.href === link.href} aria-label={`Move ${link.label} later`} className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-white text-secondary shadow-sm disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
+                </div>}
+                <button type="button" onClick={() => toggleQuickLink(link.href)} aria-label={`${isPinned ? "Unpin" : "Pin"} ${link.label}`} aria-pressed={isPinned} title={isPinned ? "Unpin shortcut" : "Pin shortcut"} className={`absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isPinned ? "border-amber-200 bg-amber-50 text-amber-700" : "border-border bg-white/95 text-muted-foreground hover:text-amber-600"}`}><Star className={`h-4 w-4 ${isPinned ? "fill-current" : ""}`} /></button>
+              </div>
             )
           })}
-        </div>
+        </div> : <div className="mt-3 rounded-2xl border border-dashed border-border bg-white px-5 py-8 text-center"><p className="text-sm font-medium text-secondary">No matching actions</p><p className="mt-1 text-xs text-muted-foreground">Try another service name.</p><button type="button" onClick={() => setQuickActionQuery("")} className="mt-3 text-xs font-semibold text-primary hover:underline">Clear search</button></div>}
       </div>
+
+      {recentServices.length > 0 && !loading && (
+        <section className="mt-5 rounded-2xl border border-border/70 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="recent-services-title">
+          <div className="flex items-center justify-between gap-3">
+            <div><h2 id="recent-services-title" className="text-sm font-semibold text-secondary">Recently used</h2><p className="mt-1 text-xs text-muted-foreground">Quickly return to a service from your recent activity.</p></div>
+            <Link href="/history" className="text-xs font-semibold text-primary hover:underline">View history</Link>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {recentServices.map((link) => { const Icon = link.icon; return <Link key={link.href} href={link.href} className="flex min-w-0 flex-col items-center gap-2 rounded-xl border border-border bg-card px-2 py-3 text-center transition hover:border-primary/40 hover:bg-primary/5"><span className={`flex h-9 w-9 items-center justify-center rounded-full ${link.iconClass}`}><Icon className="h-4 w-4" /></span><span className="text-xs font-medium leading-tight text-secondary">{link.label}</span></Link> })}
+          </div>
+        </section>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
@@ -311,6 +408,20 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {loadError && (
+        <div role="alert" className="mt-4 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 sm:flex-row sm:items-center sm:justify-between">
+          <p>{loadError}</p>
+          <button
+            type="button"
+            onClick={() => setRetryCount((count) => count + 1)}
+            disabled={loading}
+            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-red-700 px-3 py-2 font-semibold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Retrying..." : "Try again"}
+          </button>
+        </div>
+      )}
+
       <div className="mt-9">
         <div className="flex items-center justify-between">
           <h2 className="text-[15px] font-semibold text-primary">Recent transactions</h2>
@@ -336,6 +447,8 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+          ) : loadError ? (
+            <div className="px-5 py-8 text-center text-sm text-secondary">Your recent activity is temporarily unavailable.</div>
           ) : activity.length === 0 ? (
             <div className="flex flex-col items-center gap-2.5 px-6 py-12 text-center">
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-50">

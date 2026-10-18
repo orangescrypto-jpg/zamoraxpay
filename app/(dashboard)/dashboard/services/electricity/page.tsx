@@ -1,9 +1,10 @@
 // app/(dashboard)/services/electricity/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { createClient } from "@/src/services/providers/supabase/client"
+import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
 
 const BILLERS = ["IKEDC", "EKEDC", "AEDC", "PHEDC", "IBEDC", "KEDCO"]
 const FREQUENCIES = [
@@ -25,22 +26,24 @@ export default function ElectricityPage() {
   const [amount, setAmount] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [deliveredData, setDeliveredData] = useState<DeliveredData | null>(null)
 
-  // Recurring/scheduled payment options — lets a user set this bill up
+  // Recurring/scheduled payment options - lets a user set this bill up
   // to run automatically instead of paying manually every cycle, the
   // same way auto-reload already works for data plans.
   const [makeRecurring, setMakeRecurring] = useState(false)
   const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly">("monthly")
   const [scheduleNote, setScheduleNote] = useState<{ success: boolean; message: string } | null>(null)
 
-  // Live fee preview — recalculated as the customer types an amount,
+  // Live fee preview - recalculated as the customer types an amount,
   // so the total they'll actually be charged is visible before they
   // ever reach the PIN field, instead of them finding out only after
   // an "insufficient balance" failure or an unexplained debit.
   const [quote, setQuote] = useState<{ amountKobo: number; convenienceFeeKobo: number; totalKobo: number } | null>(null)
   const [quoteLoading, setQuoteLoading] = useState(false)
+  const submittingRef = useRef(false)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -49,13 +52,15 @@ export default function ElectricityPage() {
   }
 
   useEffect(() => {
+    let active = true
     const amountKobo = Math.round(parseFloat(amount) * 100)
+    setQuote(null)
     if (!amountKobo || amountKobo <= 0) {
-      setQuote(null)
-      return
+      setQuoteLoading(false)
+      return () => { active = false }
     }
     const handle = setTimeout(async () => {
-      setQuoteLoading(true)
+      if (active) setQuoteLoading(true)
       try {
         const headers = await getAuthHeader()
         const res = await fetch("/api/vtu/quote", {
@@ -63,16 +68,14 @@ export default function ElectricityPage() {
           headers: { "Content-Type": "application/json", ...headers },
           body: JSON.stringify({ serviceType: "electricity", networkOrBiller: biller, amountKobo }),
         })
-        if (res.ok) setQuote(await res.json())
+        if (active && res.ok) setQuote(await res.json())
       } catch {
-        // Silent — the live preview is a convenience, not a
-        // requirement; the actual charge is still validated
-        // server-side at submit regardless of whether this loaded.
+        // The preview is optional. The purchase endpoint validates the final charge.
       } finally {
-        setQuoteLoading(false)
+        if (active) setQuoteLoading(false)
       }
     }, 400)
-    return () => clearTimeout(handle)
+    return () => { active = false; clearTimeout(handle) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amount, biller])
 
@@ -124,38 +127,45 @@ export default function ElectricityPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submittingRef.current || loading) return
+    setReviewOpen(true)
+  }
+
+  async function confirmPurchaseReview() {
+    if (submittingRef.current || loading) return
+    setReviewOpen(false)
+    submittingRef.current = true
     setResult(null)
     setDeliveredData(null)
     setScheduleNote(null)
     setLoading(true)
 
-    const amountKobo = Math.round(parseFloat(amount) * 100)
-    const headers = await getAuthHeader()
+    try {
+      const amountKobo = Math.round(parseFloat(amount) * 100)
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/vtu/electricity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ biller, meterNumber, meterType, amountKobo, transactionPin: pin }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok && !data.message && !data.error) throw new Error("We could not process this payment. Please try again.")
+      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "We could not process this payment." })
 
-    const res = await fetch("/api/vtu/electricity", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({
-        biller,
-        meterNumber,
-        meterType,
-        amountKobo,
-        transactionPin: pin,
-      }),
-    })
-    const data = await res.json()
-    setLoading(false)
-    setResult({ success: data.success, message: data.message ?? data.error })
-
-    if (data.success) {
-      if (data.deliveredData) setDeliveredData(data.deliveredData)
-      if (makeRecurring) await scheduleRecurringPayment(amountKobo)
-      setMeterNumber("")
-      setAmount("")
-      setPin("")
+      if (data.success) {
+        if (data.deliveredData) setDeliveredData(data.deliveredData)
+        if (makeRecurring) await scheduleRecurringPayment(amountKobo)
+        setMeterNumber("")
+        setAmount("")
+        setPin("")
+      }
+    } catch (error) {
+      setResult({ success: false, message: error instanceof Error ? error.message : "A connection error occurred. Please try again." })
+    } finally {
+      submittingRef.current = false
+      setLoading(false)
     }
   }
-
   return (
     <div className="container max-w-md py-8">
       <div className="mb-6 flex items-center justify-between">
@@ -309,6 +319,23 @@ export default function ElectricityPage() {
           {loading ? "Processing..." : "Pay bill"}
         </button>
       </form>
+      <PurchaseReviewDialog
+        open={reviewOpen}
+        title="Review electricity payment"
+        description="Confirm the meter details and charge before paying."
+        rows={[
+          { label: "Distribution company", value: biller },
+          { label: "Meter number", value: meterNumber.trim() },
+          { label: "Meter type", value: meterType },
+          { label: "Amount", value: amount.trim() ? `₦${Number(amount).toLocaleString()}` : "Not provided" },
+          ...(quote && quote.amountKobo === Math.round(Number(amount) * 100) ? [{ label: "Estimated total", value: `₦${(quote.totalKobo / 100).toLocaleString()}` }] : []),
+          ...(makeRecurring ? [{ label: "Repeat schedule", value: frequency }] : []),
+        ]}
+        confirmLabel="Confirm payment"
+        loading={loading}
+        onConfirm={confirmPurchaseReview}
+        onCancel={() => setReviewOpen(false)}
+      />
     </div>
   )
 }

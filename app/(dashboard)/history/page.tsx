@@ -3,7 +3,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import { ArrowDownToLine, ArrowUpRight, CheckCircle2, ChevronDown, ChevronUp, Clock3, Copy, Download, ReceiptText, Search, XCircle } from "lucide-react"
+import { ArrowDownToLine, ArrowUpRight, CheckCircle2, ChevronDown, ChevronUp, Clock3, Copy, Download, ReceiptText, Search, XCircle, TrendingUp } from "lucide-react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira, formatDate } from "@/lib/utils"
 import { ReceiptButton } from "@/components/dashboard/ReceiptButton"
@@ -51,6 +51,10 @@ export default function HistoryPage() {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<"all" | "success" | "failed" | "pending">("all")
   const [copied, setCopied] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [serviceFilter, setServiceFilter] = useState("all")
 
   useEffect(() => {
     let cancelled = false
@@ -76,7 +80,9 @@ export default function HistoryPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [retryCount])
+
+  const serviceOptions = useMemo(() => Array.from(new Set(items.map((item) => item.kind === "order" ? item.data.service_type : "wallet"))).sort(), [items])
 
   const filtered = useMemo(() => items.filter((item) => {
     const status = item.data.status
@@ -84,9 +90,41 @@ export default function HistoryPage() {
       ? `${item.data.service_type} ${item.data.network_or_biller} ${item.data.recipient} ${item.data.id}`
       : `${WALLET_TYPE_LABELS[item.data.type] ?? item.data.type} ${item.data.id}`
     const matchesQuery = !query.trim() || text.toLowerCase().includes(query.trim().toLowerCase())
-    const matchesFilter = filter === "all" || (filter === "pending" ? !["success", "completed", "failed", "reversed"].includes(status) : status === filter || (filter === "success" && status === "completed"))
-    return matchesQuery && matchesFilter
-  }), [items, query, filter])
+    const normalizedStatus = status.toLowerCase()
+    const matchesFilter = filter === "all" || (filter === "pending" ? !["success", "completed", "failed", "reversed"].includes(normalizedStatus) : filter === "failed" ? ["failed", "reversed"].includes(normalizedStatus) : normalizedStatus === filter || (filter === "success" && normalizedStatus === "completed"))
+    const itemDate = item.created_at.slice(0, 10)
+    const matchesFrom = !dateFrom || itemDate >= dateFrom
+    const matchesTo = !dateTo || itemDate <= dateTo
+    const itemService = item.kind === "order" ? item.data.service_type : "wallet"
+    const matchesService = serviceFilter === "all" || itemService === serviceFilter
+    return matchesQuery && matchesFilter && matchesFrom && matchesTo && matchesService
+  }), [items, query, filter, dateFrom, dateTo, serviceFilter])
+
+  const spendingInsights = useMemo(() => {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+    const successfulOrders = items.filter((item): item is Extract<FeedItem, { kind: "order" }> => {
+      if (item.kind !== "order") return false
+      const status = item.data.status.toLowerCase()
+      return status === "success" || status === "completed"
+    })
+    const recentOrders = successfulOrders.filter((item) => {
+      const timestamp = new Date(item.data.created_at).getTime()
+      return Number.isFinite(timestamp) && timestamp >= cutoff
+    })
+    const totals = new Map<string, number>()
+    for (const item of recentOrders) {
+      const service = item.data.service_type.replaceAll("_", " ")
+      totals.set(service, (totals.get(service) ?? 0) + (item.data.display_amount_kobo ?? item.data.amount_kobo))
+    }
+    const topService = Array.from(totals.entries()).sort((a, b) => b[1] - a[1])[0]
+    return {
+      recentSpendKobo: recentOrders.reduce((sum, item) => sum + (item.data.display_amount_kobo ?? item.data.amount_kobo), 0),
+      recentCount: recentOrders.length,
+      successfulCount: successfulOrders.length,
+      topService: topService?.[0] ?? null,
+      topServiceSpendKobo: topService?.[1] ?? 0,
+    }
+  }, [items])
 
   const copy = async (value: string) => {
     try { await navigator.clipboard?.writeText(value); setCopied(value); setTimeout(() => setCopied(null), 1400) } catch {}
@@ -105,7 +143,7 @@ export default function HistoryPage() {
     })
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement("a"); a.href = url; a.download = "zamoraxpay-transactions.csv"; a.click(); URL.revokeObjectURL(url)
+    const a = document.createElement("a"); a.href = url; a.download = "zamoraxpay-transactions.csv"; document.body.appendChild(a); a.click(); a.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   if (loading) return <PageSkeleton rows={7} />
@@ -114,18 +152,50 @@ export default function HistoryPage() {
     <div className="container max-w-2xl py-8">
       <div className="mb-5 flex items-end justify-between gap-3">
         <div><p className="text-xs font-semibold uppercase tracking-wider text-primary">Activity</p><h1 className="mt-1 text-2xl font-heading font-bold text-secondary">Transaction History</h1></div>
-        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{items.length} total</span>
+        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{filtered.length} shown of {items.length}</span>
       </div>
 
       <div className="sticky top-[4.5rem] z-10 mb-4 rounded-2xl border border-border bg-background/95 p-2 shadow-sm backdrop-blur">
         <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search transactions or recipient" className="h-10 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10" />{query && <button onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><XCircle className="h-4 w-4" /></button>}</div>
         <div className="mt-2 flex items-center gap-1 overflow-x-auto">
-          {(["all", "success", "pending", "failed"] as const).map((value) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium capitalize transition ${filter === value ? "bg-primary text-white" : "bg-muted text-secondary hover:bg-primary/10 hover:text-primary"}`}>{value}</button>)}
+          {(["all", "success", "pending", "failed"] as const).map((value) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium capitalize transition ${filter === value ? "bg-primary text-white" : "bg-muted text-secondary hover:bg-primary/10 hover:text-primary"}`}>{value}</button>)}
           <button type="button" onClick={exportFiltered} className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-secondary hover:border-primary/30 hover:text-primary" title="Export visible transactions"><Download className="h-3.5 w-3.5" /> Export</button>
         </div>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <label className="text-xs font-medium text-muted-foreground">Service
+            <select value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-secondary outline-none focus:border-primary focus:ring-2 focus:ring-primary/10">
+              <option value="all">All services</option>
+              {serviceOptions.map((service) => <option key={service} value={service}>{service === "wallet" ? "Wallet activity" : service.replaceAll("_", " ")}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-medium text-muted-foreground">From date
+            <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-secondary outline-none focus:border-primary focus:ring-2 focus:ring-primary/10" />
+          </label>
+          <label className="text-xs font-medium text-muted-foreground">To date
+            <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-secondary outline-none focus:border-primary focus:ring-2 focus:ring-primary/10" />
+          </label>
+        </div>
+        {(query || filter !== "all" || serviceFilter !== "all" || dateFrom || dateTo) && <button type="button" onClick={() => { setQuery(""); setFilter("all"); setServiceFilter("all"); setDateFrom(""); setDateTo("") }} className="mt-2 rounded-lg px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/5">Clear all filters</button>}
       </div>
 
-      {error && <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><p>{error}</p><button onClick={() => window.location.reload()} className="mt-2 font-semibold underline">Try again</button></div>}
+      {items.length > 0 && (
+        <section className="mb-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5" aria-labelledby="spending-overview-title">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><TrendingUp className="h-5 w-5" /></span>
+            <div className="min-w-0 flex-1">
+              <h2 id="spending-overview-title" className="text-sm font-semibold text-secondary">Spending overview</h2>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Completed purchases from the transaction records currently loaded on this page. Wallet deposits and pending or failed purchases are excluded.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="rounded-xl bg-muted/60 p-3"><p className="text-[11px] font-medium text-muted-foreground">Successful purchases</p><p className="mt-1 text-xl font-semibold tabular-nums text-secondary">{spendingInsights.successfulCount}</p></div>
+            <div className="rounded-xl bg-muted/60 p-3"><p className="text-[11px] font-medium text-muted-foreground">Spend in last 30 days</p><p className="mt-1 break-words text-lg font-semibold tabular-nums text-secondary">{formatNaira(spendingInsights.recentSpendKobo)}</p><p className="mt-1 text-[10px] text-muted-foreground">{spendingInsights.recentCount} purchases in loaded records</p></div>
+            <div className="col-span-2 rounded-xl bg-muted/60 p-3 sm:col-span-1"><p className="text-[11px] font-medium text-muted-foreground">Top service by spend</p><p className="mt-1 truncate text-sm font-semibold capitalize text-secondary">{spendingInsights.topService ?? "No completed purchases"}</p>{spendingInsights.topService && <p className="mt-1 text-xs text-muted-foreground">{formatNaira(spendingInsights.topServiceSpendKobo)}</p>}</div>
+          </div>
+        </section>
+      )}
+
+      {error && <div role="alert" className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><p>{error}</p><button type="button" onClick={() => setRetryCount((count) => count + 1)} disabled={loading} className="mt-2 font-semibold underline disabled:opacity-60">Try again</button></div>}
 
       {items.length === 0 && !error ? (
         <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center"><ReceiptText className="mx-auto h-9 w-9 text-muted-foreground/40" /><h2 className="mt-3 font-semibold text-secondary">No transactions yet</h2><p className="mt-1 text-sm text-muted-foreground">Your airtime, data, bills and wallet activity will appear here.</p><Link href="/dashboard" className="mt-4 inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white">Go to dashboard</Link></div>

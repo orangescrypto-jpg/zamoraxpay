@@ -31,6 +31,8 @@ export default function ReferralsPage() {
   const [copied, setCopied] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [claimResult, setClaimResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
 
   async function getAuthHeader() {
     const supabase = createClient()
@@ -40,11 +42,18 @@ export default function ReferralsPage() {
 
   async function load() {
     setLoading(true)
-    const headers = await getAuthHeader()
-    const res = await fetch("/api/referrals", { headers })
-    const json = await res.json()
-    setData(json)
-    setLoading(false)
+    setLoadError(null)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/referrals", { headers })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? json.message ?? "Could not load referral details.")
+      setData(json)
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not load referral details.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -52,19 +61,24 @@ export default function ReferralsPage() {
   }, [])
 
   async function handleClaim() {
+    if (claiming) return
     setClaiming(true)
     setClaimResult(null)
-    const headers = await getAuthHeader()
-    const res = await fetch("/api/rewards/claim", {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ source: "referral" }),
-    })
-    const json = await res.json()
-    setClaimResult({ success: json.success, message: json.message })
-    setClaiming(false)
-    if (json.success) {
-      await load()
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/rewards/claim", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "referral" }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? json.message ?? "Could not claim the referral bonus.")
+      setClaimResult({ success: Boolean(json.success), message: json.message ?? (json.success ? "Bonus claimed successfully." : "The bonus could not be claimed.") })
+      if (json.success) await load()
+    } catch (err) {
+      setClaimResult({ success: false, message: err instanceof Error ? err.message : "Could not claim the referral bonus." })
+    } finally {
+      setClaiming(false)
     }
   }
 
@@ -75,17 +89,27 @@ export default function ReferralsPage() {
 
   async function handleCopy() {
     if (!referralLink) return
-    await navigator.clipboard.writeText(referralLink)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setShareError(null)
+    try {
+      await navigator.clipboard.writeText(referralLink)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setShareError("Could not copy automatically. Select and copy the referral link above.")
+    }
   }
 
   async function handleShare() {
     if (!referralLink) return
+    setShareError(null)
     if (navigator.share) {
-      await navigator.share({ title: "Join ZamoraxPay", url: referralLink })
+      try {
+        await navigator.share({ title: "Join ZamoraxPay", url: referralLink })
+      } catch (err) {
+        if (err instanceof Error && err.name !== "AbortError") setShareError("Sharing is unavailable right now. You can copy the link instead.")
+      }
     } else {
-      handleCopy()
+      await handleCopy()
     }
   }
 
@@ -96,6 +120,8 @@ export default function ReferralsPage() {
         Share your link. You earn a bonus when someone you refer completes their first
         purchase.
       </p>
+
+      {loadError && <div role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{loadError} <button type="button" onClick={load} className="ml-2 font-semibold underline">Try again</button></div>}
 
       <div className="mt-6 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-6 text-white shadow-lg shadow-emerald-900/10">
         <div className="flex items-center gap-2 text-sm font-medium text-emerald-100">
@@ -111,7 +137,7 @@ export default function ReferralsPage() {
 
         <div className="mt-5 rounded-xl bg-white/10 p-3">
           <p className="text-xs font-medium text-emerald-100">Your referral link</p>
-          <p className="mt-1 truncate text-sm font-medium">
+          <p className="mt-1 break-all text-sm font-medium">
             {loading ? "…" : referralLink || "Sign in to get your link"}
           </p>
         </div>
@@ -136,7 +162,9 @@ export default function ReferralsPage() {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3">
+      {shareError && <p role="status" className="mt-3 text-sm text-amber-700">{shareError}</p>}
+
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-border bg-white p-4">
           <div className="flex items-center gap-2 text-xs font-medium text-secondary">
             <Users className="h-4 w-4" />

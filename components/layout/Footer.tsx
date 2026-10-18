@@ -31,7 +31,7 @@ function FooterBanner() {
 
   useEffect(() => {
     if (banners.length <= 1) return
-    const timer = setInterval(() => goTo(activeIndex + 1), FOOTER_AUTO_SLIDE_INTERVAL_MS)
+    const timer = setInterval(() => { if (document.visibilityState === "visible") goTo(activeIndex + 1) }, FOOTER_AUTO_SLIDE_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [activeIndex, banners.length, goTo])
 
@@ -40,12 +40,12 @@ function FooterBanner() {
   const banner = banners[activeIndex]
 
   const content = (
-    <div className="relative overflow-hidden rounded-lg border border-white/10">
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-sm">
       <img
         key={banner.id}
         src={banner.imageUrl}
         alt={banner.title ?? "Promotion"}
-        className="block h-auto w-full"
+        className="block h-auto max-h-56 w-full object-cover sm:max-h-72" loading="lazy"
       />
       {banner.title && (
         <div className="absolute inset-0 flex items-center bg-black/30 px-4">
@@ -56,7 +56,7 @@ function FooterBanner() {
   )
 
   return (
-    <div className="relative mb-8">
+    <div className="relative mb-10" aria-label="Footer promotions">
       {banner.linkUrl ? <Link href={banner.linkUrl}>{content}</Link> : content}
 
       {banners.length > 1 && (
@@ -65,7 +65,7 @@ function FooterBanner() {
             type="button"
             aria-label="Previous promotion"
             onClick={() => goTo(activeIndex - 1)}
-            className="absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
+            className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-xl text-white shadow transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             ‹
           </button>
@@ -73,11 +73,11 @@ function FooterBanner() {
             type="button"
             aria-label="Next promotion"
             onClick={() => goTo(activeIndex + 1)}
-            className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
+            className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-xl text-white shadow transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             ›
           </button>
-          <div className="mt-2 flex justify-center gap-1.5">
+          <div className="mt-3 flex justify-center gap-2">
             {banners.map((b, i) => (
               <button
                 type="button"
@@ -86,8 +86,8 @@ function FooterBanner() {
                 onClick={() => goTo(i)}
                 className={
                   i === activeIndex
-                    ? "h-1.5 w-5 rounded-full bg-white transition-all"
-                    : "h-1.5 w-1.5 rounded-full bg-white/30 transition-all"
+                    ? "h-2.5 w-6 rounded-full bg-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    : "h-2.5 w-2.5 rounded-full bg-white/40 transition-all hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 }
               />
             ))}
@@ -99,13 +99,13 @@ function FooterBanner() {
 }
 
 // Same route list AdSenseLoader uses to decide "is this a logged-in
-// app screen" — the footer is rendered site-wide from the root layout,
+// app screen" - the footer is rendered site-wide from the root layout,
 // so it needs its own check to keep the ad out of the dashboard/admin
 // even though the Footer component itself doesn't know about auth.
 export function Footer() {
   const pathname = usePathname()
   const marketplaceUrl = "https://zamorax.com"
-  // isPrivatePath is the same list middleware.ts uses to gate auth —
+  // isPrivatePath is the same list middleware.ts uses to gate auth -
   // one source of truth, so a newly protected route can't slip
   // through and show ads next to real account data.
   const showAd = !isPrivatePath(pathname)
@@ -125,11 +125,11 @@ export function Footer() {
         className="pointer-events-none absolute -left-24 bottom-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl"
       />
 
-      <div className="container relative py-12 sm:py-14">
+      <div className="container relative py-10 sm:py-14 lg:py-16">
         <FooterBanner />
 
         {/* About + contact block: real, crawlable business information on every public page */}
-        <div className="mb-10 grid gap-10 border-b border-white/10 pb-10 md:grid-cols-3">
+        <div className="mb-10 grid gap-6 border-b border-white/10 pb-8 sm:gap-8 sm:pb-10 md:grid-cols-3">
           <div className="md:col-span-2">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-white">
               <span className="h-4 w-1 rounded-full bg-primary" aria-hidden />
@@ -156,50 +156,50 @@ export function Footer() {
               <p className="font-medium text-white/85">Zamorax Enterprises Limited</p>
               <p>Apete, Ibadan, Oyo State, Nigeria</p>
               <p>
-                <a href="mailto:zamoraxpay@gmail.com" className="transition-colors hover:text-primary">zamoraxpay@gmail.com</a>
+                <a href="mailto:zamoraxpay@gmail.com" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">zamoraxpay@gmail.com</a>
               </p>
               <p>
-                <a href="tel:+2347076479357" className="transition-colors hover:text-primary">+234 707 647 9357</a>
+                <a href="tel:+2347076479357" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">+234 707 647 9357</a>
               </p>
               <p className="pt-1 text-xs text-white/40">Mon to Sat, 8:00 AM to 8:00 PM</p>
             </address>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-x-8 gap-y-8 min-[420px]:grid-cols-2 sm:grid-cols-4 sm:gap-y-10">
           <div>
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/90">ZamoraxPay</h3>
-            <ul className="space-y-2.5 text-sm text-white/65">
-              <li><Link href="/about" className="transition-colors hover:text-primary">About</Link></li>
-              <li><Link href="/blog" className="transition-colors hover:text-primary">Blog</Link></li>
-              <li><Link href="/contact" className="transition-colors hover:text-primary">Contact</Link></li>
+            <ul className="space-y-3 text-sm text-white/65">
+              <li><Link href="/about" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">About</Link></li>
+              <li><Link href="/blog" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Blog</Link></li>
+              <li><Link href="/contact" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Contact</Link></li>
             </ul>
           </div>
           <div>
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/90">Services</h3>
-            <ul className="space-y-2.5 text-sm text-white/65">
-              <li><Link href="/services/airtime" className="transition-colors hover:text-primary">Airtime</Link></li>
-              <li><Link href="/services/data" className="transition-colors hover:text-primary">Data</Link></li>
-              <li><Link href="/services/cable" className="transition-colors hover:text-primary">Cable TV</Link></li>
-              <li><Link href="/services/electricity" className="transition-colors hover:text-primary">Electricity</Link></li>
-              <li><Link href="/services/exam-pin" className="transition-colors hover:text-primary">Exam Pins</Link></li>
-              <li><Link href="/rewards" className="transition-colors hover:text-primary">Rewards</Link></li>
+            <ul className="space-y-3 text-sm text-white/65">
+              <li><Link href="/services/airtime" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Airtime</Link></li>
+              <li><Link href="/services/data" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Data</Link></li>
+              <li><Link href="/services/cable" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Cable TV</Link></li>
+              <li><Link href="/services/electricity" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Electricity</Link></li>
+              <li><Link href="/services/exam-pin" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Exam Pins</Link></li>
+              <li><Link href="/rewards" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Rewards</Link></li>
             </ul>
           </div>
           <div>
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/90">Legal</h3>
-            <ul className="space-y-2.5 text-sm text-white/65">
-              <li><Link href="/privacy-policy" className="transition-colors hover:text-primary">Privacy Policy</Link></li>
-              <li><Link href="/terms" className="transition-colors hover:text-primary">Terms &amp; Conditions</Link></li>
-              <li><Link href="/cookie-policy" className="transition-colors hover:text-primary">Cookie Policy</Link></li>
-              <li><Link href="/refund-policy" className="transition-colors hover:text-primary">Refund Policy</Link></li>
+            <ul className="space-y-3 text-sm text-white/65">
+              <li><Link href="/privacy-policy" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Privacy Policy</Link></li>
+              <li><Link href="/terms" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Terms &amp; Conditions</Link></li>
+              <li><Link href="/cookie-policy" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Cookie Policy</Link></li>
+              <li><Link href="/refund-policy" className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">Refund Policy</Link></li>
             </ul>
           </div>
           <div>
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/90">Part of Zamorax</h3>
             <p className="text-sm leading-relaxed text-white/65">
               Looking for higher-value peer-to-peer deals?{" "}
-              <a href={marketplaceUrl} className="font-medium text-accent transition-colors hover:text-primary hover:underline">
+              <a href={marketplaceUrl} className="font-medium text-accent transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
                 Visit Zamorax Marketplace
               </a>
             </p>

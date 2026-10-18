@@ -12,10 +12,10 @@ import { CommandPalette } from "@/components/layout/CommandPalette"
 
 const AUTO_SLIDE_INTERVAL_MS = 5000
 
-// The 5 featured blog categories shown in the Blog nav dropdown, in
+// The featured blog categories shown in the Blog nav dropdown, in
 // display order. Kept in sync with the sort_order set in
 // migrations/2026-09-add-tech-news-category.sql. This is a small,
-// stable set curated for navigation — it intentionally doesn't
+// stable set curated for navigation - it intentionally doesn't
 // include every row in blog_categories (e.g. reseller-tips), and
 // doesn't need a DB round-trip just to render the header.
 const BLOG_NAV_CATEGORIES = [
@@ -24,6 +24,8 @@ const BLOG_NAV_CATEGORIES = [
   { slug: "network-news", label: "Network News" },
   { slug: "promotions", label: "Promotions" },
   { slug: "announcements", label: "Announcements" },
+  { slug: "jobs", label: "Jobs" },
+  { slug: "scholarships", label: "Scholarships" },
 ]
 
 function BannerSlider() {
@@ -47,7 +49,7 @@ function BannerSlider() {
   // Auto-slide
   useEffect(() => {
     if (banners.length <= 1) return
-    const timer = setInterval(() => goTo(activeIndex + 1), AUTO_SLIDE_INTERVAL_MS)
+    const timer = setInterval(() => { if (document.visibilityState === "visible") goTo(activeIndex + 1) }, AUTO_SLIDE_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [activeIndex, banners.length, goTo])
 
@@ -154,7 +156,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white">
       <div className="container flex h-16 items-center justify-between">
-        {/* Always link to "/" here — middleware already redirects logged-in
+        {/* Always link to "/" here - middleware already redirects logged-in
             visitors from "/" to "/dashboard" server-side, so this never
             depends on (potentially stale) client auth state. */}
         <Link href="/" className="flex items-center gap-2">

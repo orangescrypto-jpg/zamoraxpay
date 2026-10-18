@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const url = `${BASE}/blog/${post.slug}`
 
   return {
-    title: `${post.title} — ZamoraxPay Blog`,
+    title: `${post.title} - ZamoraxPay Blog`,
     description,
     alternates: { canonical: url },
     openGraph: {
@@ -77,18 +77,18 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   return (
     <div>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <article className="container max-w-3xl py-12">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><Link href="/blog" className="font-medium text-primary hover:underline">← All articles</Link><span>Reading progress is shown at the top of the page</span></div>
+      <article className="container max-w-4xl py-8 sm:py-12">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted-foreground"><Link href="/blog" className="font-medium text-primary hover:underline">← All articles</Link><span>Reading progress is shown at the top of the page</span></div>
         {post.category && (
           <Link
             href={`/blog?category=${post.category}`}
-            className="mb-2 inline-block text-xs font-medium uppercase tracking-wide text-primary hover:underline"
+            className="mb-3 inline-flex rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-primary hover:bg-primary/15"
           >
             {post.category.replace(/-/g, " ")}
           </Link>
         )}
-        <h1 className="mb-3 text-3xl font-heading font-bold text-secondary sm:text-4xl">{post.title}</h1>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="mb-4 text-3xl font-heading font-bold leading-tight tracking-tight text-foreground sm:text-4xl lg:text-5xl">{post.title}</h1>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-5">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>{post.authorName || "ZamoraxPay Team"}</span>
             {post.publishedAt && (
@@ -106,8 +106,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         </div>
 
         {post.coverImageUrl && (
-          <div className="mb-8 aspect-[1200/630] overflow-hidden rounded-lg">
-            <img src={post.coverImageUrl} alt={post.title} className="h-full w-full object-cover" />
+          <div className="mb-8 aspect-[1200/630] overflow-hidden rounded-2xl border border-border bg-muted shadow-sm">
+            <img src={post.coverImageUrl} alt={post.title} className="h-full w-full object-cover" fetchPriority="high" />
           </div>
         )}
 
@@ -115,7 +115,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
         <MarkdownContent markdown={post.contentMarkdown} />
 
-        <AdSenseSlot slotKey="blog_post" className="mt-10" />
+        <AdSenseSlot slotKey="blog_post" className="mt-12" />
 
         <div className="mt-10">
           <AuthorBox
@@ -130,20 +130,20 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
       </article>
 
       {relatedPosts.length > 0 && (
-        <section className="border-t border-border bg-bg py-12">
+        <section className="border-t border-border bg-muted/30 py-12">
           <div className="container max-w-3xl">
             <h2 className="mb-6 text-xl font-heading font-bold text-secondary">Related posts</h2>
             <div className="grid gap-6 sm:grid-cols-2">
               {relatedPosts.map((related) => (
-                <Link key={related.id} href={`/blog/${related.slug}`} className="group block">
-                  <div className="mb-2 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
+                <Link key={related.id} href={`/blog/${related.slug}`} className="group block overflow-hidden rounded-2xl border border-border bg-card p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
+                  <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-xl bg-secondary">
                     <img
                       src={related.coverImageUrl || "/blog-fallback-cover.svg"}
                       alt={related.title}
-                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy"
                     />
                   </div>
-                  <h3 className="font-heading font-medium text-secondary group-hover:text-primary">
+                  <h3 className="px-1 pb-1 font-heading font-semibold text-foreground group-hover:text-primary">
                     {related.title}
                   </h3>
                 </Link>

@@ -53,16 +53,17 @@ const TRUST = [
   { title: "Real support", desc: "Reach a real person by email or phone if something looks wrong. Details are on our contact page." },
 ]
 
-// The 5 featured homepage categories, in display order — mirrors the
-// nav dropdown (components/layout/Header.tsx) and the sort_order set
-// in migrations/2026-09-add-tech-news-category.sql. Each gets its own
-// magazine-style row on the homepage.
+// Featured homepage categories. Keep this curated list aligned with the
+// blog navigation. Job and scholarship links are also shown in the dedicated
+// opportunities section below, even before posts have been published.
 const HOMEPAGE_BLOG_CATEGORIES = [
   { slug: "tech-news", label: "Tech News" },
   { slug: "guides", label: "Guides" },
   { slug: "network-news", label: "Network News" },
   { slug: "promotions", label: "Promotions" },
   { slug: "announcements", label: "Announcements" },
+  { slug: "jobs", label: "Jobs" },
+  { slug: "scholarships", label: "Scholarships" },
 ]
 
 const HOMEPAGE_POSTS_PER_CATEGORY = 10
@@ -239,7 +240,58 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── From the blog — one magazine-style row per category ─ */}
+      {/* ── Jobs and scholarships: visible even before the first post ─ */}
+      <section className="border-t border-border bg-white py-14 sm:py-16">
+        <div className="container">
+          <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">New opportunities</p>
+              <h2 className="mt-1 text-2xl font-heading font-bold text-secondary sm:text-3xl">Jobs and scholarships</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Explore career openings and education funding opportunities. Always confirm details and deadlines with the official provider.
+              </p>
+            </div>
+            <Link href="/blog" className="text-sm font-semibold text-primary hover:underline">Explore the blog <ArrowRight className="ml-1 inline h-4 w-4" /></Link>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {[
+              { slug: "jobs", label: "Jobs and Career Opportunities", description: "Explore vacancies, graduate trainee programmes, internships, and entry-level roles.", icon: Users, tone: "bg-blue-50 text-blue-700" },
+              { slug: "scholarships", label: "Scholarships and Bursaries", description: "Find education funding opportunities and practical guides to preparing applications.", icon: GraduationCap, tone: "bg-emerald-50 text-emerald-700" },
+            ].map((item) => {
+              const Icon = item.icon
+              const posts = (postsByCategory[item.slug] ?? []).slice(0, 3)
+              return (
+                <article key={item.slug} className="flex h-full flex-col rounded-2xl border border-border bg-card p-5 shadow-sm transition hover:border-primary/30 hover:shadow-md sm:p-6">
+                  <div className="flex items-start gap-3">
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${item.tone}`}><Icon className="h-5 w-5" /></span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-heading text-lg font-bold text-secondary">{item.label}</h3>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.description}</p>
+                    </div>
+                  </div>
+                  {posts.length > 0 ? (
+                    <ul className="mt-4 space-y-3 border-t border-border pt-4">
+                      {posts.map((post) => (
+                        <li key={post.id}>
+                          <Link href={`/blog/${post.slug}`} className="text-sm font-medium text-secondary hover:text-primary hover:underline">{post.title}</Link>
+                          {post.publishedAt && <p className="mt-1 text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-4 rounded-xl bg-muted/50 px-3 py-3 text-sm text-muted-foreground">New opportunities will appear here as articles are published.</p>
+                  )}
+                  <Link href={`/blog?category=${item.slug}`} className="mt-5 inline-flex items-center text-sm font-semibold text-primary hover:underline">
+                    Browse {item.slug} <ArrowRight className="ml-1 h-4 w-4" />
+                  </Link>
+                </article>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── From the blog: magazine-style rows by category ─ */}
       {categorySections.length > 0 && (
         <section className="border-t border-border bg-bg py-16">
           <div className="container">

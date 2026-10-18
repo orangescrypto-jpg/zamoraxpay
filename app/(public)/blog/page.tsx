@@ -19,6 +19,8 @@ const CATEGORY_INTROS: Record<string, string> = {
   "network-news": "Airtime/data price changes, network outages, and provider updates.",
   promotions: "Discounts, cashback campaigns, and limited-time offers.",
   announcements: "Product updates, new features, and platform news.",
+  jobs: "Job vacancies, graduate programmes, internships, and career opportunities. Check eligibility and application deadlines before applying.",
+  scholarships: "Scholarships, bursaries, and education funding opportunities for students. Review eligibility, funding details, and official application instructions.",
 }
 
 export async function generateMetadata({
@@ -31,8 +33,8 @@ export async function generateMetadata({
 
   const label = category ? category.replace(/-/g, " ") : null
   const title = label
-    ? `${label.charAt(0).toUpperCase()}${label.slice(1)} — ZamoraxPay Blog${page > 1 ? ` (Page ${page})` : ""}`
-    : `Blog — ZamoraxPay${page > 1 ? ` (Page ${page})` : ""}`
+    ? `${label.charAt(0).toUpperCase()}${label.slice(1)} - ZamoraxPay Blog${page > 1 ? ` (Page ${page})` : ""}`
+    : `Blog - ZamoraxPay${page > 1 ? ` (Page ${page})` : ""}`
   const description = "Guides, announcements, and updates from the ZamoraxPay team."
 
   const params = new URLSearchParams()
@@ -97,7 +99,7 @@ export default async function BlogListPage({
   return (
     <div className="bg-gradient-to-b from-primary/[0.035] via-background to-background">
       <div className="container py-10 sm:py-14">
-        <div className="mb-8 overflow-hidden rounded-3xl border border-border bg-secondary p-6 text-white shadow-sm sm:p-8">
+        <div className="mb-8 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-secondary via-secondary to-primary/35 p-6 text-white shadow-sm sm:p-8 lg:p-10">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">ZamoraxPay Journal</p>
             <h1 className="mt-2 text-3xl font-heading font-bold tracking-tight sm:text-4xl">{activeLabel ?? "Guides, updates & useful reads"}</h1>
@@ -106,21 +108,21 @@ export default async function BlogListPage({
         </div>
 
       {featured && !category && (
-        <section className="mb-10 grid overflow-hidden rounded-2xl border border-border bg-white shadow-sm md:grid-cols-[1.15fr_0.85fr]">
-          <Link href={`/blog/${featured.slug}`} className="group relative min-h-[240px] overflow-hidden bg-secondary md:min-h-[300px]">
-            <img src={featured.coverImageUrl || "/blog-fallback-cover.svg"} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+        <section className="mb-10 grid overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md md:grid-cols-[1.15fr_0.85fr]">
+          <Link href={`/blog/${featured.slug}`} className="group relative min-h-[220px] overflow-hidden bg-secondary sm:min-h-[280px] md:min-h-[320px]">
+            <img src={featured.coverImageUrl || "/blog-fallback-cover.svg"} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
             <span className="absolute left-4 top-4 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">Featured</span>
           </Link>
-          <div className="flex flex-col justify-center p-6 sm:p-8">
+          <div className="flex flex-col justify-center p-5 sm:p-7 lg:p-8">
             {featured.category && <p className="text-xs font-semibold uppercase tracking-wider text-primary">{featured.category.replace(/-/g, " ")}</p>}
-            <h2 className="mt-2 text-2xl font-heading font-bold tracking-tight text-secondary">{featured.title}</h2>
+            <h2 className="mt-2 text-xl font-heading font-bold tracking-tight text-foreground sm:text-2xl">{featured.title}</h2>
             {featured.excerpt && <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted-foreground">{featured.excerpt}</p>}
             <Link href={`/blog/${featured.slug}`} className="mt-5 inline-flex w-fit rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white hover:opacity-90">Read article →</Link>
           </div>
         </section>
       )}
 
-      <div className="mb-10 flex flex-wrap gap-2 rounded-2xl border border-border bg-white p-3 shadow-sm">
+      <div className="mb-10 flex flex-wrap gap-2 rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4">
         <Link
           href="/blog"
           className={cn(
@@ -163,7 +165,7 @@ export default async function BlogListPage({
         </nav>
       )}
 
-      <div className="mb-5 flex items-end justify-between gap-3">
+      <div className="mb-5 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-end">
         <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Latest reads</p><h2 className="mt-1 text-xl font-heading font-bold text-secondary">{activeLabel ?? "Latest from ZamoraxPay"}</h2></div>
         <span className="text-xs text-muted-foreground">{posts.length} article{posts.length === 1 ? "" : "s"} shown</span>
       </div>
@@ -176,13 +178,13 @@ export default async function BlogListPage({
             <Link
               href={buildPageHref(page - 1)}
               rel="prev"
-              className="rounded-md border border-border bg-white px-3 py-1.5 text-sm font-medium text-secondary hover:border-primary"
+              className="inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               Previous
             </Link>
           )}
 
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => Math.max(1, Math.min(page - 2, totalPages - 4)) + i).map((p) => (
             <Link
               key={p}
               href={buildPageHref(p)}
@@ -191,7 +193,7 @@ export default async function BlogListPage({
                 "rounded-md border px-3 py-1.5 text-sm font-medium",
                 p === page
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-white text-secondary hover:border-primary",
+                  : "border-border bg-card text-foreground hover:border-primary hover:text-primary",
               )}
             >
               {p}
@@ -202,7 +204,7 @@ export default async function BlogListPage({
             <Link
               href={buildPageHref(page + 1)}
               rel="next"
-              className="rounded-md border border-border bg-white px-3 py-1.5 text-sm font-medium text-secondary hover:border-primary"
+              className="inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               Next
             </Link>

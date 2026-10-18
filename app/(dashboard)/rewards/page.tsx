@@ -24,8 +24,9 @@ export default function RewardsPage() {
   const [loading, setLoading] = useState(true)
   const [claiming, setClaiming] = useState<ClaimSource | null>(null)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  // Not logged in — send straight to login, no flash of a fake
+  // Not logged in - send straight to login, no flash of a fake
   // ₦0.00 rewards page first. redirect param brings them right back
   // here once they sign in, instead of dropping them on /dashboard.
   useEffect(() => {
@@ -42,11 +43,18 @@ export default function RewardsPage() {
 
   async function load() {
     setLoading(true)
-    const headers = await getAuthHeader()
-    const res = await fetch("/api/rewards/claim", { headers })
-    const json = await res.json()
-    setSummary(json)
-    setLoading(false)
+    setLoadError(null)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/rewards/claim", { headers })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? json.message ?? "Could not load rewards.")
+      setSummary(json)
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not load rewards.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -55,19 +63,24 @@ export default function RewardsPage() {
   }, [authLoading, isAuthenticated])
 
   async function handleClaim(source: ClaimSource) {
+    if (claiming) return
     setClaiming(source)
     setResult(null)
-    const headers = await getAuthHeader()
-    const res = await fetch("/api/rewards/claim", {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ source }),
-    })
-    const json = await res.json()
-    setResult({ success: json.success, message: json.message })
-    setClaiming(null)
-    if (json.success) {
-      await load()
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch("/api/rewards/claim", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ source }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? json.message ?? "Could not claim this reward.")
+      setResult({ success: Boolean(json.success), message: json.message ?? (json.success ? "Reward claimed successfully." : "This reward could not be claimed.") })
+      if (json.success) await load()
+    } catch (err) {
+      setResult({ success: false, message: err instanceof Error ? err.message : "Could not claim this reward." })
+    } finally {
+      setClaiming(null)
     }
   }
 
@@ -111,6 +124,8 @@ export default function RewardsPage() {
         is transferable and shows up in your transaction history.
       </p>
 
+      {loadError && <div role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{loadError} <button type="button" onClick={load} className="ml-2 font-semibold underline">Try again</button></div>}
+
       <div className="mt-6 rounded-xl border border-border bg-white p-4">
         <p className="text-xs font-medium text-secondary">Total unclaimed</p>
         <p className="mt-1 text-2xl font-bold text-primary">
@@ -122,7 +137,7 @@ export default function RewardsPage() {
         href="/spin"
         className="mt-4 flex items-center justify-between rounded-xl border border-border bg-white p-4 text-sm font-semibold text-primary hover:bg-muted"
       >
-        <span>🎡 Spin &amp; Win — your spins, prizes and history</span>
+        <span>🎡 Spin &amp; Win - your spins, prizes and history</span>
         <span className="text-xs text-secondary">View →</span>
       </Link>
 

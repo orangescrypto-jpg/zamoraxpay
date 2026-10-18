@@ -3,8 +3,10 @@
 
 import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
+import { formatNaira } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { detectNetwork, matchesSelectedNetwork, type NetworkName } from "@/lib/networkDetect"
+import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
 
 const NETWORKS: NetworkName[] = ["MTN", "Airtel", "Glo", "9mobile"]
 
@@ -13,7 +15,7 @@ export default function AirtimePage() {
   const [network, setNetwork] = useState(NETWORKS[0])
   const [phone, setPhone] = useState("")
   // Pre-fill with the user's own registered number for the common case
-  // (buying for self) — still a plain editable input, so switching to
+  // (buying for self) - still a plain editable input, so switching to
   // someone else's number just means typing over it.
   useEffect(() => {
     if (user?.phone && phone === "") setPhone(user.phone)
@@ -22,10 +24,11 @@ export default function AirtimePage() {
   const [amount, setAmount] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   // Set when the server rejects the purchase because the number and
   // selected network don't match. This is a hard gate, not a dismissible
-  // dialog — the user must explicitly tick a checkbox acknowledging the
+  // dialog - the user must explicitly tick a checkbox acknowledging the
   // mismatch and resubmit before the purchase is retried with
   // confirmNetworkMismatch: true. Cleared whenever network or phone
   // changes, so an old confirmation can't silently carry over to a
@@ -42,38 +45,47 @@ export default function AirtimePage() {
   }, [network, phone])
 
   async function submitPurchase(confirmNetworkMismatch: boolean) {
+    if (loading) return
     setLoading(true)
+    setResult(null)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error("Your session has expired. Sign in again to continue.")
 
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch("/api/vtu/airtime", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          network,
+          phone: phone.trim(),
+          amountKobo: Math.round(parseFloat(amount) * 100),
+          transactionPin: pin,
+          confirmNetworkMismatch,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok && !data.requiresNetworkConfirmation) {
+        throw new Error(data.message ?? data.error ?? "Airtime purchase could not be completed.")
+      }
 
-    const res = await fetch("/api/vtu/airtime", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({
-        network,
-        phone,
-        amountKobo: Math.round(parseFloat(amount) * 100),
-        transactionPin: pin,
-        confirmNetworkMismatch,
-      }),
-    })
-    const data = await res.json()
-    setLoading(false)
+      if (data.requiresNetworkConfirmation) {
+        setNetworkConfirmNeeded({ detected: data.detectedNetwork ?? null })
+        return
+      }
 
-    if (data.requiresNetworkConfirmation) {
-      setNetworkConfirmNeeded({ detected: data.detectedNetwork ?? null })
-      return
-    }
-
-    setResult({ success: data.success, message: data.message ?? data.error })
-
-    if (data.success) {
-      setPhone("")
-      setAmount("")
-      setPin("")
-      setNetworkConfirmNeeded(null)
-      setAckMismatch(false)
+      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
+      if (data.success) {
+        setPhone("")
+        setAmount("")
+        setPin("")
+        setNetworkConfirmNeeded(null)
+        setAckMismatch(false)
+      }
+    } catch (err) {
+      setResult({ success: false, message: err instanceof Error ? err.message : "Airtime purchase failed. Please try again." })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -87,14 +99,14 @@ export default function AirtimePage() {
     }
 
     // If we already went through the mismatch confirmation for this
-    // exact (network, phone), require the checkbox before resubmitting.
-    if (networkConfirmNeeded) {
-      if (!ackMismatch) return
-      await submitPurchase(true)
-      return
-    }
+    // exact (network, phone), require the checkbox before showing review.
+    if (networkConfirmNeeded && !ackMismatch) return
+    setReviewOpen(true)
+  }
 
-    await submitPurchase(false)
+  async function confirmPurchaseReview() {
+    setReviewOpen(false)
+    await submitPurchase(Boolean(networkConfirmNeeded))
   }
 
   return (
@@ -220,6 +232,20 @@ export default function AirtimePage() {
           {loading ? "Processing..." : networkConfirmNeeded ? "Confirm and buy anyway" : "Buy airtime"}
         </button>
       </form>
+      <PurchaseReviewDialog
+        open={reviewOpen}
+        title="Review airtime purchase"
+        description="Confirm the network, phone number, and amount before continuing."
+        rows={[
+          { label: "Network", value: network },
+          { label: "Phone number", value: phone.trim() },
+          { label: "Amount", value: amount.trim() ? formatNaira(Math.round(Number(amount) * 100)) : "Not provided" },
+        ]}
+        confirmLabel="Continue to purchase"
+        loading={loading}
+        onConfirm={confirmPurchaseReview}
+        onCancel={() => setReviewOpen(false)}
+      />
     </div>
   )
 }

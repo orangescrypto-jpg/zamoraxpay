@@ -709,7 +709,9 @@ INSERT OR IGNORE INTO blog_categories (slug, label, description, sort_order) VAL
   ('announcements', 'Announcements', 'Product updates, new features, and platform news',                             2),
   ('promotions',    'Promotions',    'Discounts, cashback campaigns, and limited-time offers',                       3),
   ('network-news',  'Network News',  'Airtime/data price changes, network outages, and provider updates',            4),
-  ('reseller-tips', 'Reseller Tips', 'Advice for wholesale resellers on margins, volume, and growing their business', 5);
+  ('reseller-tips', 'Reseller Tips', 'Advice for wholesale resellers on margins, volume, and growing their business', 5),
+  ('jobs', 'Jobs', 'Job vacancies, internships, graduate programmes, and career opportunities', 6),
+  ('scholarships', 'Scholarships', 'Scholarships, bursaries, and education funding opportunities', 7);
 
 
 -- =====================================================================

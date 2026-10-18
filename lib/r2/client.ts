@@ -111,6 +111,25 @@ export async function r2Put(
   )
 }
 
+export async function r2Delete(
+  key: string,
+  nativeBucket?: unknown,
+): Promise<void> {
+  const bucket = await resolveBucket(nativeBucket)
+
+  if (bucket) {
+    // Native R2Bucket binding — `delete` isn't on the trimmed R2Bucket
+    // interface above (only put/get/list are), so reach it as `any`.
+    await (bucket as any).delete(key)
+    return
+  }
+
+  const { DeleteObjectCommand } = await import("@aws-sdk/client-s3")
+  await (await r2Client()).send(
+    new DeleteObjectCommand({ Bucket: R2_BUCKET(), Key: key }),
+  )
+}
+
 export async function r2Get(
   key: string,
   nativeBucket?: unknown,

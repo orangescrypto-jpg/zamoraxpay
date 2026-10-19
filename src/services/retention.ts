@@ -81,7 +81,7 @@ export const RETENTION_JOBS: RetentionJobDef[] = [
   { key: "vtu_orders_archive", label: "VTU orders: successful (archive)", settingKey: "retention_vtu_success_days", defaultDays: 180, minDays: 90, action: "archive_move", keeps: "Moved to an archive table, not deleted. Receipts, PIN/token lookup, referral checks and dashboard totals still read them; they only leave the Transactions list." },
   { key: "vtu_orders_failed", label: "VTU orders: failed", settingKey: "retention_vtu_failed_days", defaultDays: 30, minDays: 30, action: "delete", keeps: "Deleted for good, no archive. Failed orders were never charged or were already refunded. Successful, refunded and pending orders are never touched." },
   { key: "pin_attempts", label: "Idle PIN-attempt rows", settingKey: "retention_pin_attempts_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Rows with failed attempts or an active lock are kept." },
-  { key: "blog_jobs_scholarships", label: "Blog posts: Jobs & Scholarships", settingKey: "retention_blog_jobs_scholarships_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Only posts in the 'jobs' or 'scholarships' categories are touched, published or draft. Every other blog category is never touched by this job. The post's cover image is deleted from R2 first, then the row." },
+  { key: "blog_jobs_scholarships", label: "Blog posts: Jobs, Scholarships, Grants & Internships", settingKey: "retention_blog_jobs_scholarships_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Only posts in the 'jobs', 'scholarships', 'grants' or 'internships' categories are touched, published or draft. Every other blog category is never touched by this job. The post's cover image is deleted from R2 first, then the row." },
 ]
 
 export function getJobDef(key: string): RetentionJobDef | undefined {
@@ -398,13 +398,14 @@ async function jobPinAttempts(ctx: RunContext, days: number): Promise<JobResult>
 }
 
 /**
- * BLOG POSTS — 'jobs' and 'scholarships' categories only.
+ * BLOG POSTS — 'jobs', 'scholarships', 'grants' and 'internships'
+ * categories only.
  *
  * Admin-set age limit (X days from created_at). Any post — draft or
- * published — in either category that is older than X days is deleted
- * for good, cover image included. Every other blog category is left
- * alone: the WHERE clause below is the only thing that scopes this job,
- * so it must always filter on category IN ('jobs','scholarships').
+ * published — in any of these categories that is older than X days is
+ * deleted for good, cover image included. Every other blog category is
+ * left alone: the WHERE clause below is the only thing that scopes this
+ * job, so it must always filter on category IN ('jobs','scholarships','grants','internships').
  *
  * cover_image_url is a full public URL (R2_PUBLIC_URL + "/" + key), so
  * the R2 key is recovered by stripping that prefix before calling
@@ -429,7 +430,7 @@ async function jobBlogJobsScholarships(ctx: RunContext, days: number): Promise<J
   while (timeLeft(ctx)) {
     const sel = await d1Query(
       `SELECT id, cover_image_url FROM blog_posts
-        WHERE category IN ('jobs', 'scholarships') AND created_at < ?
+        WHERE category IN ('jobs', 'scholarships', 'grants', 'internships') AND created_at < ?
         LIMIT ?`,
       [cutoff, ctx.batchSize],
       ctx.nativeDB,
@@ -671,7 +672,7 @@ const PREVIEW_SQL: Record<RetentionJobKey, { sql: string; table: string }> = {
   vtu_orders_archive: { table: "vtu_orders", sql: "SELECT COUNT(*) AS n FROM vtu_orders WHERE status = 'success' AND created_at < ?" },
   vtu_orders_failed: { table: "vtu_orders", sql: "SELECT COUNT(*) AS n FROM vtu_orders WHERE status = 'failed' AND created_at < ?" },
   pin_attempts: { table: "pin_attempts", sql: "SELECT COUNT(*) AS n FROM pin_attempts WHERE failed_attempts = 0 AND (locked_until IS NULL OR locked_until <= datetime('now')) AND updated_at < ?" },
-  blog_jobs_scholarships: { table: "blog_posts", sql: "SELECT COUNT(*) AS n FROM blog_posts WHERE category IN ('jobs', 'scholarships') AND created_at < ?" },
+  blog_jobs_scholarships: { table: "blog_posts", sql: "SELECT COUNT(*) AS n FROM blog_posts WHERE category IN ('jobs', 'scholarships', 'grants', 'internships') AND created_at < ?" },
 }
 
 export interface JobStatus {

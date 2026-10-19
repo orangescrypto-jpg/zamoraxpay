@@ -12,9 +12,24 @@ import { PROTECTED_PREFIXES, ADMIN_PREFIX, AUTH_PREFIXES } from "@/lib/privateRo
 export async function middleware(request: NextRequest) {
   const { supabase, supabaseResponse } = createMiddlewareClient(request)
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // FIX: this previously called supabase.auth.getUser() unconditionally on
+  // every matched request, including "/" — the public marketing homepage
+  // and the highest-traffic route on the site. Every anonymous visit paid
+  // a network round-trip to Supabase just to learn "no user" before
+  // continuing. A session cookie's absence means there is no session to
+  // refresh, so skip the network call entirely in that case — same
+  // pattern already used in the Zamorax marketplace's middleware.ts
+  // (hasSupabaseSessionCookie). Protected routes still redirect correctly
+  // below since `user` stays null.
+  const hasSupabaseSessionCookie = request.cookies.getAll().some(({ name }) =>
+    /^sb-.+-auth-token(?:\.\d+)?$/.test(name) || name === "sb-access-token"
+  )
+
+  let user: { id: string; user_metadata?: Record<string, unknown> } | null = null
+  if (hasSupabaseSessionCookie) {
+    const result = await supabase.auth.getUser()
+    user = result.data.user
+  }
 
   const pathname = request.nextUrl.pathname
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))

@@ -95,3 +95,14 @@ html.zpx-reduce-motion *, html.zpx-reduce-motion *::before, html.zpx-reduce-moti
 html:not(.zpx-reduce-motion) body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
+
+
+/* Hide floating action buttons while the mobile hamburger menu is open
+   so they never cover Settings / Sign out. */
+body[data-mobile-menu="open"] .zpx-local-tools,
+body[data-mobile-menu="open"] .zpx-back-to-top,
+body[data-mobile-menu="open"] [data-whatsapp-fab] {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}

@@ -148,7 +148,7 @@ export function Footer() {
             <p className="max-w-xl text-sm leading-relaxed text-white/65">
               ZamoraxPay is a Nigerian payments platform that lets you buy airtime, data, cable TV
               subscriptions, electricity tokens and exam PINs from one wallet. Every order is routed
-              through several independent providers — if one is slow or down, your purchase moves to
+              through several independent providers, if one is slow or down, your purchase moves to
               the next automatically. If it still fails, the money goes straight back to your wallet.
             </p>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/65">

@@ -47,9 +47,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <AdSenseLoader />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("zamoraxpay-theme");var d=window.matchMedia("(prefers-color-scheme: dark)").matches;var r=t==="dark"||(t!=="light"&&d)?"dark":"light";document.documentElement.classList.add(r);document.documentElement.setAttribute("data-theme",r)}catch(e){}})()`,
+          }}
+        />
       </head>
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-body`}>
         <SiteChrome>{children}</SiteChrome>

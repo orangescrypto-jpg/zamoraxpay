@@ -14,6 +14,7 @@ import { ServiceChrome } from "@/components/dashboard/ServiceChrome"
 import { ToastProvider } from "@/components/shared/ToastProvider"
 import { LocalExperienceTools } from "@/components/shared/LocalExperienceTools"
 import { DashboardWorkspace } from "@/components/dashboard/DashboardWorkspace"
+import { ThemeProvider } from "@/components/theme-provider"
 
 // The admin section has its own topbar/sidebar (see app/(admin)/layout.tsx).
 // Keep the public secondary chrome out of admin pages.
@@ -23,16 +24,17 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
 
   if (isAdmin) {
     return (
-      <>
+      <ThemeProvider>
         <Header />
         <main id="main-content" className="min-h-screen">
           {children}
         </main>
-      </>
+      </ThemeProvider>
     )
   }
 
   return (
+    <ThemeProvider>
     <ToastProvider>
       <PWAInstallBanner />
       <EnableNotificationsBanner />
@@ -49,5 +51,6 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
       <WhatsAppSupportButton />
       <LocalExperienceTools />
     </ToastProvider>
+    </ThemeProvider>
   )
 }

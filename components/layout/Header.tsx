@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import type { Banner } from "@/src/types"
 import { getPublicBanners } from "./bannerClient"
 import { CommandPalette } from "@/components/layout/CommandPalette"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 const AUTO_SLIDE_INTERVAL_MS = 5000
 
@@ -156,7 +157,7 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-white">
+    <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="container flex h-16 items-center justify-between">
         {/* Always link to "/" here - middleware already redirects logged-in
             visitors from "/" to "/dashboard" server-side, so this never
@@ -198,7 +199,7 @@ export function Header() {
             </Link>
 
             {blogMenuOpen && (
-              <div className="absolute left-0 top-full z-50 w-48 rounded-lg border border-border bg-white py-1 shadow-lg">
+              <div className="absolute left-0 top-full z-50 w-48 rounded-lg border border-border bg-card py-1 shadow-lg">
                 <Link
                   href="/blog"
                   className="block px-4 py-2 text-sm font-medium text-secondary hover:bg-muted hover:text-primary"
@@ -228,7 +229,8 @@ export function Header() {
           )}
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeToggle />
           <CommandPalette />
           {isAuthenticated ? (
             <>
@@ -281,7 +283,7 @@ export function Header() {
       </div>
 
       {menuOpen && (
-        <nav className="border-t border-border bg-white md:hidden">
+        <nav className="border-t border-border bg-card md:hidden">
           <div className="container flex flex-col gap-1 py-3">
             {isAuthenticated && (
               <Link

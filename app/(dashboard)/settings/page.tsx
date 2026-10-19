@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { AuthService } from "@/src/services/auth"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -63,8 +64,14 @@ export default function SettingsPage() {
   return (
     <div className="container max-w-md space-y-6 py-6 sm:py-8">
       <div>
-        <h1 className="mb-6 text-2xl font-heading font-bold text-secondary">Settings</h1>
+        <h1 className="mb-6 text-2xl font-heading font-bold text-secondary dark:text-foreground">Settings</h1>
       </div>
+
+      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
+        <h2 className="mb-1 font-heading font-semibold text-secondary dark:text-foreground">Appearance</h2>
+        <p className="mb-4 text-sm text-muted-foreground">Choose light, dark, or match your device.</p>
+        <ThemeToggle variant="full" />
+      </section>
 
       <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
         <h2 className="mb-1 font-heading font-semibold text-secondary">Profile</h2>

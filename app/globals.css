@@ -90,3 +90,8 @@ html.zpx-reduce-motion *, html.zpx-reduce-motion *::before, html.zpx-reduce-moti
 .zpx-back-to-top { position: fixed; right: 1.15rem; bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px)); z-index: 150; display: grid; width: 2.6rem; height: 2.6rem; place-items: center; border: 1px solid hsl(var(--border)); border-radius: 999px; background: hsl(var(--card)); color: hsl(var(--card-foreground)); box-shadow: 0 6px 20px rgb(15 23 42 / .12); }
 .zpx-back-to-top:hover { border-color: hsl(var(--primary)); color: hsl(var(--primary)); }
 @media (max-width: 640px) { .zpx-local-tools { right: .65rem; bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px)); } .zpx-back-to-top { right: .8rem; bottom: calc(8.7rem + env(safe-area-inset-bottom, 0px)); } }
+
+/* Theme transition (subtle, respect reduced motion) */
+html:not(.zpx-reduce-motion) body {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}

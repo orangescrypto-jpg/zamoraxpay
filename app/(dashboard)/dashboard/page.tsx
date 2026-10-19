@@ -41,6 +41,7 @@ import { SpinCard } from "@/components/dashboard/SpinCard"
 import { SpinPopup } from "@/components/dashboard/SpinPopup"
 import { useSpinStatus } from "@/components/dashboard/useSpinStatus"
 import { ReceiptButton } from "@/components/dashboard/ReceiptButton"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface Order {
   id: string
@@ -434,27 +435,28 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        <div className="mt-3.5 overflow-hidden rounded-2xl border border-border/70 bg-white">
+        <div className="mt-3.5 overflow-hidden rounded-2xl border border-border/70 bg-card">
           {loading ? (
-            <div className="divide-y divide-border/70">
+            <div className="divide-y divide-border/70" aria-busy="true" aria-label="Loading recent transactions">
               {[0, 1, 2].map((i) => (
                 <div key={i} className="flex items-center gap-3 p-4">
-                  <span className="h-9 w-9 shrink-0 animate-pulse rounded-full bg-gray-100" />
+                  <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
                   <div className="flex-1 space-y-2">
-                    <span className="block h-3 w-32 animate-pulse rounded bg-gray-100" />
-                    <span className="block h-2.5 w-20 animate-pulse rounded bg-gray-100" />
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-2.5 w-20" />
                   </div>
+                  <Skeleton className="h-4 w-14" />
                 </div>
               ))}
             </div>
           ) : loadError ? (
-            <div className="px-5 py-8 text-center text-sm text-secondary">Your recent activity is temporarily unavailable.</div>
+            <div className="px-5 py-8 text-center text-sm text-muted-foreground">Your recent activity is temporarily unavailable.</div>
           ) : activity.length === 0 ? (
             <div className="flex flex-col items-center gap-2.5 px-6 py-12 text-center">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-50">
-                <Clock className="h-5 w-5 text-gray-300" />
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                <Clock className="h-5 w-5 text-muted-foreground" />
               </span>
-              <p className="text-sm text-secondary">No transactions yet - fund your wallet to get started.</p>
+              <p className="text-sm text-muted-foreground">No transactions yet — fund your wallet to get started.</p>
             </div>
           ) : (
             <div className="divide-y divide-border/70">
@@ -463,7 +465,7 @@ export default function DashboardPage() {
                   const order = item.data
                   const { badge, icon: StatusIcon, iconClass } = statusStyle(order.status)
                   return (
-                    <div key={item.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-gray-50/70">
+                    <div key={item.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-muted/50">
                       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${iconClass}`}>
                         <StatusIcon className="h-4.5 w-4.5" />
                       </span>
@@ -500,7 +502,7 @@ export default function DashboardPage() {
                 const tx = item.data
                 const isCredit = tx.direction === "credit"
                 return (
-                  <div key={item.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-gray-50/70">
+                  <div key={item.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-muted/50">
                     <span
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
                         isCredit ? "text-emerald-600 bg-emerald-50" : "text-red-600 bg-red-50"

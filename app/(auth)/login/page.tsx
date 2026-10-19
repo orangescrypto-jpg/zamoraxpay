@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Eye, EyeOff } from "lucide-react"
 import { AuthService } from "@/src/services/auth"
+import { ResultBanner } from "@/components/ui/result-banner"
 
 function LoginForm() {
   const router = useRouter()
@@ -63,7 +64,9 @@ function LoginForm() {
       <h1 className="mb-1 text-2xl font-heading font-bold text-secondary">Welcome back</h1>
       <p className="mb-6 text-sm text-muted-foreground">Log in to your ZamoraxPay account.</p>
 
-      {error && <p className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+      {error && (
+        <ResultBanner className="mb-4" variant="error" title="Login failed" message={error} onDismiss={() => setError(null)} />
+      )}
 
       {unconfirmedEmail && (
         <div className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">

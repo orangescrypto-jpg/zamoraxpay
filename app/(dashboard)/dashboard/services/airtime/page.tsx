@@ -7,6 +7,7 @@ import { formatNaira } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { detectNetwork, matchesSelectedNetwork, type NetworkName } from "@/lib/networkDetect"
 import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
+import { ResultBanner } from "@/components/ui/result-banner"
 
 const NETWORKS: NetworkName[] = ["MTN", "Airtel", "Glo", "9mobile"]
 
@@ -114,13 +115,13 @@ export default function AirtimePage() {
       <h1 className="mb-6 text-2xl font-heading font-bold text-secondary">Buy Airtime</h1>
 
       {result && (
-        <p
-          className={`mb-4 rounded-md p-3 text-sm ${
-            result.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"
-          }`}
-        >
-          {result.message}
-        </p>
+        <ResultBanner
+          className="mb-4"
+          variant={result.success ? "success" : "error"}
+          title={result.success ? "Success" : "Purchase failed"}
+          message={result.message}
+          onDismiss={() => setResult(null)}
+        />
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">

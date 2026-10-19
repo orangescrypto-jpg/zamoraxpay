@@ -3,7 +3,9 @@
 import Link from "next/link"
 import {
   ArrowRight,
+  Award,
   Banknote,
+  Briefcase,
   CheckCircle2,
   GraduationCap,
   Globe2,
@@ -65,16 +67,19 @@ const HOMEPAGE_BLOG_CATEGORIES = [
   { slug: "announcements", label: "Announcements" },
   { slug: "jobs", label: "Jobs" },
   { slug: "scholarships", label: "Scholarships" },
+  { slug: "grants", label: "Grants" },
+  { slug: "internships", label: "Internships" },
 ]
 
 const HOMEPAGE_POSTS_PER_CATEGORY = 10
 
-// Jobs and Scholarships are capped lower than the other homepage
-// categories — these two feed fast-expiring listings (retention.ts
-// deletes stale posts in them), so the homepage only needs a handful,
-// not the full 10 shown for evergreen categories like Guides.
+// Jobs, Scholarships, Grants and Internships are capped lower than the
+// other homepage categories — these feed fast-expiring listings
+// (retention.ts deletes stale posts in jobs/scholarships), so the
+// homepage only needs a handful, not the full 10 shown for evergreen
+// categories like Guides.
 const HOMEPAGE_JOBS_SCHOLARSHIPS_POST_LIMIT = 6
-const HOMEPAGE_CAPPED_CATEGORY_SLUGS = new Set(["jobs", "scholarships"])
+const HOMEPAGE_CAPPED_CATEGORY_SLUGS = new Set(["jobs", "scholarships", "grants", "internships"])
 
 export const revalidate = 900 // 15 minutes — homepage content doesn't need to be second-fresh
 
@@ -261,17 +266,19 @@ export default async function HomePage() {
           <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">New opportunities</p>
-              <h2 className="mt-1 text-2xl font-heading font-bold text-secondary sm:text-3xl">Jobs and scholarships</h2>
+              <h2 className="mt-1 text-2xl font-heading font-bold text-secondary sm:text-3xl">Jobs, scholarships, grants and internships</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 Explore career openings and education funding opportunities. Always confirm details and deadlines with the official provider.
               </p>
             </div>
             <Link href="/blog" className="text-sm font-semibold text-primary hover:underline">Explore the blog <ArrowRight className="ml-1 inline h-4 w-4" /></Link>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[
-              { slug: "jobs", label: "Jobs and Career Opportunities", description: "Explore vacancies, graduate trainee programmes, internships, and entry-level roles.", icon: Users, tone: "bg-blue-50 text-blue-700" },
+              { slug: "jobs", label: "Jobs and Career Opportunities", description: "Explore vacancies, graduate trainee programmes, and entry-level roles.", icon: Users, tone: "bg-blue-50 text-blue-700" },
               { slug: "scholarships", label: "Scholarships and Bursaries", description: "Find education funding opportunities and practical guides to preparing applications.", icon: GraduationCap, tone: "bg-emerald-50 text-emerald-700" },
+              { slug: "grants", label: "Grants", description: "Grant opportunities and funding calls, with eligibility and application guidance.", icon: Award, tone: "bg-amber-50 text-amber-700" },
+              { slug: "internships", label: "Internships", description: "Internship openings and placement programmes to build real work experience.", icon: Briefcase, tone: "bg-fuchsia-50 text-fuchsia-700" },
             ].map((item) => {
               const Icon = item.icon
               const posts = (postsByCategory[item.slug] ?? []).slice(0, 3)

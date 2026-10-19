@@ -55,6 +55,13 @@ export default function HistoryPage() {
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [serviceFilter, setServiceFilter] = useState("all")
+  // FIX: the Service / From date / To date fields used to render open at all
+  // times inside the sticky filter bar. On small screens that made the
+  // sticky block tall enough to cover the whole transaction list with no
+  // way to scroll past it (it stays pinned via `sticky top-[4.5rem]`).
+  // Collapsed by default behind a toggle so the sticky bar stays short
+  // (search + status chips only) unless the user opens it.
+  const [showMoreFilters, setShowMoreFilters] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -155,13 +162,16 @@ export default function HistoryPage() {
         <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{filtered.length} shown of {items.length}</span>
       </div>
 
-      <div className="sticky top-[4.5rem] z-10 mb-4 rounded-2xl border border-border bg-background/95 p-2 shadow-sm backdrop-blur">
+      <div className="sticky top-[4.5rem] z-10 mb-4 max-h-[calc(100vh-6rem)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-background/95 p-2 shadow-sm backdrop-blur">
         <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search transactions or recipient" className="h-10 w-full rounded-xl border border-border bg-card pl-9 pr-9 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10" />{query && <button onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><XCircle className="h-4 w-4" /></button>}</div>
         <div className="mt-2 flex items-center gap-1 overflow-x-auto">
           {(["all", "success", "pending", "failed"] as const).map((value) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium capitalize transition ${filter === value ? "bg-primary text-white" : "bg-muted text-secondary hover:bg-primary/10 hover:text-primary"}`}>{value}</button>)}
+          <button type="button" onClick={() => setShowMoreFilters((v) => !v)} aria-expanded={showMoreFilters} className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${showMoreFilters || serviceFilter !== "all" || dateFrom || dateTo ? "border-primary/30 bg-primary/5 text-primary" : "border-border bg-card text-secondary hover:border-primary/30 hover:text-primary"}`}>
+            {showMoreFilters ? "Hide filters" : "More filters"} {showMoreFilters ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
           <button type="button" onClick={exportFiltered} className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-secondary hover:border-primary/30 hover:text-primary" title="Export visible transactions"><Download className="h-3.5 w-3.5" /> Export</button>
         </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {showMoreFilters && <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <label className="text-xs font-medium text-muted-foreground">Service
             <select value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-secondary outline-none focus:border-primary focus:ring-2 focus:ring-primary/10">
               <option value="all">All services</option>
@@ -174,7 +184,7 @@ export default function HistoryPage() {
           <label className="text-xs font-medium text-muted-foreground">To date
             <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-secondary outline-none focus:border-primary focus:ring-2 focus:ring-primary/10" />
           </label>
-        </div>
+        </div>}
         {(query || filter !== "all" || serviceFilter !== "all" || dateFrom || dateTo) && <button type="button" onClick={() => { setQuery(""); setFilter("all"); setServiceFilter("all"); setDateFrom(""); setDateTo("") }} className="mt-2 rounded-lg px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/5">Clear all filters</button>}
       </div>
 

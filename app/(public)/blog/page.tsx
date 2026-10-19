@@ -21,6 +21,8 @@ const CATEGORY_INTROS: Record<string, string> = {
   announcements: "Product updates, new features, and platform news.",
   jobs: "Job vacancies, graduate programmes, internships, and career opportunities. Check eligibility and application deadlines before applying.",
   scholarships: "Scholarships, bursaries, and education funding opportunities for students. Review eligibility, funding details, and official application instructions.",
+  grants: "Grant opportunities and funding calls. Check eligibility, deadlines, and official application instructions before applying.",
+  internships: "Internship openings and placement programmes. Check eligibility and application deadlines before applying.",
 }
 
 export async function generateMetadata({

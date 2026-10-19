@@ -26,6 +26,8 @@ const BLOG_NAV_CATEGORIES = [
   { slug: "announcements", label: "Announcements" },
   { slug: "jobs", label: "Jobs" },
   { slug: "scholarships", label: "Scholarships" },
+  { slug: "grants", label: "Grants" },
+  { slug: "internships", label: "Internships" },
 ]
 
 function BannerSlider() {

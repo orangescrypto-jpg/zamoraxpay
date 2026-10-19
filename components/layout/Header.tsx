@@ -156,8 +156,24 @@ export function Header() {
     window.location.href = "/"
   }
 
+  // Let floating buttons (WhatsApp, tools) know the mobile menu is open
+  // so they can hide and stop covering Settings / Sign out.
+  useEffect(() => {
+    if (menuOpen) {
+      document.body.dataset.mobileMenu = "open"
+      document.body.style.overflow = "hidden"
+    } else {
+      delete document.body.dataset.mobileMenu
+      document.body.style.overflow = ""
+    }
+    return () => {
+      delete document.body.dataset.mobileMenu
+      document.body.style.overflow = ""
+    }
+  }, [menuOpen])
+
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+    <header className="relative sticky top-0 z-[70] border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="container flex h-16 items-center justify-between">
         {/* Always link to "/" here - middleware already redirects logged-in
             visitors from "/" to "/dashboard" server-side, so this never
@@ -283,13 +299,16 @@ export function Header() {
       </div>
 
       {menuOpen && (
-        <nav className="border-t border-border bg-card md:hidden">
-          <div className="container flex flex-col gap-1 py-3">
+        <nav
+          aria-label="Mobile menu"
+          className="absolute inset-x-0 top-full z-50 flex max-h-[min(85dvh,calc(100dvh-4rem))] flex-col border-t border-border bg-card shadow-lg md:hidden"
+        >
+          <div className="container flex-1 overflow-y-auto overscroll-contain py-3 pb-4">
             {isAuthenticated && (
               <Link
                 href="/dashboard"
                 onClick={() => setMenuOpen(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+                className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
               >
                 Dashboard
               </Link>
@@ -297,28 +316,28 @@ export function Header() {
             <Link
               href="/wallet"
               onClick={() => setMenuOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Wallet
             </Link>
             <Link
               href="/rewards"
               onClick={() => setMenuOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Rewards
             </Link>
             <Link
               href="/refund"
               onClick={() => setMenuOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Refund
             </Link>
             <Link
               href="/blog"
               onClick={() => setMenuOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Blog
             </Link>
@@ -338,14 +357,14 @@ export function Header() {
               href="/reseller"
               prefetch={false}
               onClick={() => setMenuOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Become a Reseller
             </Link>
             <Link
               href="/settings"
               onClick={() => setMenuOpen(false)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Settings
             </Link>
@@ -353,42 +372,44 @@ export function Header() {
               <Link
                 href="/admin"
                 onClick={() => setMenuOpen(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
+                className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
               >
                 Admin
               </Link>
             )}
+          </div>
 
-            <div className="mt-2 border-t border-border pt-2">
-              {isAuthenticated ? (
-                <button
-                  onClick={() => {
-                    setMenuOpen(false)
-                    handleSignOut()
-                  }}
-                  className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-secondary hover:bg-muted"
+          {/* Sticky footer: Sign out / auth always visible above FABs & bottom nav */}
+          <div className="shrink-0 border-t border-border bg-card px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_-6px_rgba(15,23,42,0.12)]">
+            {isAuthenticated ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false)
+                  handleSignOut()
+                }}
+                className="w-full rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm font-semibold text-secondary transition hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 dark:text-foreground"
+              >
+                Sign out
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <Link
+                  href="/login"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex-1 rounded-xl border border-border px-4 py-3 text-center text-sm font-semibold text-secondary hover:bg-muted dark:text-foreground"
                 >
-                  Sign out
-                </button>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <Link
-                    href="/login"
-                    onClick={() => setMenuOpen(false)}
-                    className="rounded-md px-3 py-2 text-sm font-medium text-secondary hover:bg-muted"
-                  >
-                    Log in
-                  </Link>
-                  <Link
-                    href="/signup"
-                    onClick={() => setMenuOpen(false)}
-                    className="rounded-md bg-primary px-3 py-2 text-center text-sm font-medium text-primary-foreground hover:opacity-90"
-                  >
-                    Sign up
-                  </Link>
-                </div>
-              )}
-            </div>
+                  Log in
+                </Link>
+                <Link
+                  href="/signup"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex-1 rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
+                >
+                  Sign up
+                </Link>
+              </div>
+            )}
           </div>
         </nav>
       )}

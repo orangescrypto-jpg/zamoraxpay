@@ -413,6 +413,13 @@ async function jobPinAttempts(ctx: RunContext, days: number): Promise<JobResult>
  * that prefix (e.g. an external image link pasted by the admin), simply
  * skips the R2 step — the row delete still proceeds either way; a
  * missing/foreign image must never block deleting the stale post.
+ *
+ * Before deleting the R2 object, we check whether any OTHER post (any
+ * category, any status, in or out of this batch) still has the same
+ * cover_image_url. Covers can be reused across posts (e.g. a shared
+ * template graphic), so deleting post A's row must never delete an
+ * image that post B is still displaying. Only an orphaned image — one
+ * no remaining post references — is removed from R2.
  */
 async function jobBlogJobsScholarships(ctx: RunContext, days: number): Promise<JobResult> {
   const cutoff = cutoffSql(days, ctx.now)
@@ -443,6 +450,18 @@ async function jobBlogJobsScholarships(ctx: RunContext, days: number): Promise<J
       if (url && publicUrlPrefix && url.startsWith(publicUrlPrefix)) {
         const key = url.slice(publicUrlPrefix.length)
         try {
+          // Guard against deleting a cover image that another post —
+          // in any category or status, including other rows in this
+          // same batch — still references. Only delete from R2 when
+          // this post is the last one using it.
+          const stillUsed = await d1Query(
+            "SELECT 1 FROM blog_posts WHERE cover_image_url = ? AND id != ? LIMIT 1",
+            [url, row.id],
+            ctx.nativeDB,
+          )
+          if ((stillUsed.results ?? []).length > 0) {
+            continue
+          }
           await r2Delete(key, undefined)
         } catch (err) {
           // Don't let a missing/already-gone R2 object block the row delete.

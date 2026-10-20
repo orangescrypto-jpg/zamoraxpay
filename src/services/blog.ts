@@ -4,6 +4,7 @@
 import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import { broadcastPush } from "@/src/services/pushNotifications"
+import { r2Delete, R2_PUBLIC_URL } from "@/lib/r2/client"
 
 export interface BlogPost {
   id: string
@@ -404,6 +405,41 @@ async function broadcastPostPublished(
   }
 }
 
+/**
+ * Deletes a post. Its cover image is also removed from R2, but only if
+ * no OTHER post (any category, any status) still has the same
+ * cover_image_url — covers can be reused across posts (e.g. a shared
+ * template graphic), so deleting one post must never pull the image
+ * out from under another post still displaying it. A post with no
+ * cover image, a shared cover image, or a cover URL that isn't an R2
+ * object (e.g. an external link pasted by the admin) simply skips the
+ * R2 step — the row delete always proceeds regardless.
+ */
 export async function deletePost(id: string, nativeDB?: any): Promise<void> {
+  const row = await d1Query("SELECT cover_image_url FROM blog_posts WHERE id = ?", [id], nativeDB)
+  const url: string | null = row.results?.[0]?.cover_image_url ?? null
+
   await d1Query("DELETE FROM blog_posts WHERE id = ?", [id], nativeDB)
+
+  if (!url) return
+
+  try {
+    const publicUrlPrefix = `${R2_PUBLIC_URL()}/`
+    if (!url.startsWith(publicUrlPrefix)) return
+
+    const stillUsed = await d1Query(
+      "SELECT 1 FROM blog_posts WHERE cover_image_url = ? LIMIT 1",
+      [url],
+      nativeDB,
+    )
+    if ((stillUsed.results ?? []).length > 0) return
+
+    const key = url.slice(publicUrlPrefix.length)
+    await r2Delete(key, undefined)
+  } catch (err) {
+    // R2_PUBLIC_URL not configured, or the R2 delete itself failed —
+    // either way the post row is already gone; just log it rather
+    // than leaving an orphaned image blocking anything.
+    console.error(`deletePost: failed to clean up cover image for post ${id}:`, err)
+  }
 }

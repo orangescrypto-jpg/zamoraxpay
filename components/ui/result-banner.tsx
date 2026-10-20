@@ -1,6 +1,7 @@
 import { CheckCircle2, XCircle, AlertTriangle, Info } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
+import { SuccessBurst } from "@/components/ui/success-burst"
 
 type ResultVariant = "success" | "error" | "warning" | "info"
 
@@ -18,7 +19,8 @@ const VARIANT_MAP = { success: "success" as const, error: "destructive" as const
 export function ResultBanner({ variant, title, message, className, onDismiss }: ResultBannerProps) {
   const Icon = ICONS[variant]
   return (
-    <Alert variant={VARIANT_MAP[variant]} className={cn("relative", className)}>
+    <Alert variant={VARIANT_MAP[variant]} className={cn("relative overflow-hidden", className)}>
+      {variant === "success" && <SuccessBurst active />}
       <Icon className="h-4 w-4" />
       <div>
         {title && <AlertTitle>{title}</AlertTitle>}

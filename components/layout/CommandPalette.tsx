@@ -44,6 +44,13 @@ export function CommandPalette() {
         setSelected(0)
         return
       }
+      if (event.key === "?" && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault()
+        setOpen(true)
+        setQuery("?")
+        setSelected(0)
+        return
+      }
 
       if (!open) return
       if (event.key === "Escape") {

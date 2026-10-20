@@ -7,6 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 import { Eye, EyeOff, ShieldCheck } from "lucide-react"
+import { AmountChips } from "@/components/ui/amount-chips"
 
 const QUICK_AMOUNTS = [50000, 100000, 200000, 500000] // kobo
 
@@ -32,7 +33,10 @@ function WalletPageInner() {
   const [error, setError] = useState<string | null>(null)
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "checking" | "success" | "failed">("idle")
   const [confirmFund, setConfirmFund] = useState(false)
-  const [balanceVisible, setBalanceVisible] = useState(true)
+  const [balanceVisible, setBalanceVisible] = useState(() => {
+    if (typeof window === "undefined") return true
+    try { return localStorage.getItem("zamoraxpay:show-balance") !== "0" } catch { return true }
+  })
   const fundingLock = useRef(false)
 
   async function getAuthHeader() {
@@ -148,13 +152,12 @@ function WalletPageInner() {
   }
 
   function toggleBalanceVisibility() {
-    setBalanceVisible((visible) => {
-      const next = !visible
-      try { window.localStorage.setItem("zamoraxpay:show-balance", next ? "1" : "0") } catch {}
+    setBalanceVisible((v) => {
+      const next = !v
+      try { localStorage.setItem("zamoraxpay:show-balance", next ? "1" : "0") } catch {}
       return next
     })
   }
-
   return (
     <div className="container max-w-md py-8">
       <div className="mb-6 flex items-center justify-between">
@@ -184,12 +187,12 @@ function WalletPageInner() {
       <div className="mb-6 overflow-hidden rounded-2xl bg-secondary p-6 text-white shadow-lg">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-white/70">Current balance</p>
-          <button type="button" onClick={toggleBalanceVisibility} className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white" aria-label={balanceVisible ? "Hide wallet balance" : "Show wallet balance"}>
+          <button type="button" onClick={toggleBalanceVisibility} className="rounded-lg p-1.5 text-white/70 hover:bg-card/10 hover:text-white" aria-label={balanceVisible ? "Hide wallet balance" : "Show wallet balance"}>
             {balanceVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
         <p className="mt-2 text-3xl font-heading font-bold tracking-tight" aria-live="polite">
-          {balanceKobo === null ? <span className="block h-9 w-44 animate-pulse rounded-lg bg-white/15" /> : balanceVisible ? formatNaira(balanceKobo) : "₦••••••"}
+          {balanceKobo === null ? <span className="block h-9 w-44 animate-pulse rounded-lg bg-card/15" /> : balanceVisible ? formatNaira(balanceKobo) : "₦••••••"}
         </p>
         <div className="mt-4 flex items-center gap-1.5 text-xs text-white/55"><ShieldCheck className="h-3.5 w-3.5" /> Balance protected by your account security.</div>
       </div>

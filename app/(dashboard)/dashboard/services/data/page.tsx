@@ -6,6 +6,12 @@ import Link from "next/link"
 import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { ResultBanner } from "@/components/ui/result-banner"
+import { PinKeypad } from "@/components/ui/pin-keypad"
+import { normalizeNgPhone } from "@/lib/phoneNormalize"
+import { RecentPhoneChips } from "@/components/ui/recent-phone-chips"
+import { pushRecentPhone } from "@/lib/recentPhones"
+import { AmountChips } from "@/components/ui/amount-chips"
 import { detectNetwork, matchesSelectedNetwork, type NetworkName } from "@/lib/networkDetect"
 import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
 
@@ -396,7 +402,7 @@ export default function DataPage() {
       const data = await submitPurchase(selectedVariant?.priceKobo, planCode, false)
       if (handleGateResponse(data, planCode)) return
       setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
-      if (data.success) { setPhone(""); setPin("") }
+      if (data.success) { pushRecentPhone(phone.trim()); setPhone(""); setPin("") }
     } catch (err) {
       setResult({ success: false, message: err instanceof Error ? err.message : "Data purchase failed. Please try again." })
     } finally {
@@ -418,7 +424,7 @@ export default function DataPage() {
       if (handleGateResponse(data, pendingConfirmation.planCode)) return
       setConfirmState(null)
       setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
-      if (data.success) { setPhone(""); setPin("") }
+      if (data.success) { pushRecentPhone(phone.trim()); setPhone(""); setPin("") }
     } catch (err) {
       setResult({ success: false, message: err instanceof Error ? err.message : "Data purchase failed. Please try again." })
     } finally {
@@ -431,9 +437,13 @@ export default function DataPage() {
       <h1 className="mb-6 text-2xl font-heading font-bold text-secondary">Buy Data</h1>
 
       {result && (
-        <p className={`mb-4 rounded-md p-3 text-sm ${result.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"}`}>
-          {result.message}
-        </p>
+        <ResultBanner
+          className="mb-4"
+          variant={result.success ? "success" : "error"}
+          title={result.success ? "Success" : "Purchase failed"}
+          message={result.message}
+          onDismiss={() => setResult(null)}
+        />
       )}
 
       {confirmState && confirmState.kind === "network" && (
@@ -508,7 +518,7 @@ export default function DataPage() {
               </button>
             )}
           </div>
-          <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08012345678"
+          <input required type="tel" value={phone} onChange={(e) => setPhone(normalizeNgPhone(e.target.value))} placeholder="08012345678"
             className={`w-full rounded-md border px-3 py-2 text-sm ${networkMismatch ? "border-destructive" : "border-border"}`} />
           {user?.phone && phone === user.phone && (
             <p className="mt-1 text-xs text-muted-foreground">Buying for yourself. Edit the number above to buy for someone else.</p>
@@ -611,10 +621,9 @@ export default function DataPage() {
           </div>
         ) : (
           <div>
-            <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>
-            <input required type="password" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value)}
-              className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest" />
-          </div>
+          <label className="mb-2 block text-sm font-medium text-secondary dark:text-foreground">Transaction PIN</label>
+          <PinKeypad value={pin} onChange={setPin} disabled={loading} />
+        </div>
         )}
 
         <button type="submit" disabled={loading || !!confirmState || !planCode || !user?.hasTransactionPin}

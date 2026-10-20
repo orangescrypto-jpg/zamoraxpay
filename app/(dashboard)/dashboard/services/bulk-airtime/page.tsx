@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { ResultBanner } from "@/components/ui/result-banner"
 
 interface BatchSummary {
   id: string
@@ -98,12 +99,25 @@ function BulkAirtimeForm() {
       </p>
 
       {error && (
-        <p className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
+        <ResultBanner
+          className="mb-4"
+          variant="error"
+          title="Error"
+          message={error}
+          onDismiss={() => setError(null)}
+        />
       )}
 
       {result && (
-        <div className="mb-4 space-y-2 rounded-md border border-border p-4">
-          <p className="text-sm font-semibold text-secondary">
+        <div className="mb-4 space-y-2">
+          <ResultBanner
+            variant={result.failureCount === 0 ? "success" : result.successCount === 0 ? "error" : "warning"}
+            title={result.failureCount === 0 ? "All succeeded" : result.successCount === 0 ? "All failed" : "Partial success"}
+            message={`${result.successCount} succeeded, ${result.failureCount} failed. ${formatNaira(result.totalChargedKobo)} total charged`}
+            onDismiss={() => setResult(null)}
+          />
+          <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+          <p className="text-sm font-semibold text-secondary dark:text-foreground sr-only">
             {result.successCount} succeeded, {result.failureCount} failed. {formatNaira(result.totalChargedKobo)} total charged
           </p>
           <div className="max-h-64 space-y-1 overflow-y-auto text-xs">
@@ -115,6 +129,7 @@ function BulkAirtimeForm() {
                 </span>
               </div>
             ))}
+          </div>
           </div>
         </div>
       )}

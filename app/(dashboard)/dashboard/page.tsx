@@ -28,7 +28,10 @@ import {
   ArrowUp,
   ArrowDown,
   type LucideIcon,
+  Eye,
+  EyeOff,
 } from "lucide-react"
+// Eye icons for balance privacy
 import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
@@ -42,6 +45,8 @@ import { SpinPopup } from "@/components/dashboard/SpinPopup"
 import { useSpinStatus } from "@/components/dashboard/useSpinStatus"
 import { ReceiptButton } from "@/components/dashboard/ReceiptButton"
 import { Skeleton } from "@/components/ui/skeleton"
+import { RelativeTime } from "@/components/ui/relative-time"
+import { PullToRefresh } from "@/components/shared/PullToRefresh"
 
 interface Order {
   id: string
@@ -112,6 +117,11 @@ const WALLET_LABELS: Record<string, string> = {
 export default function DashboardPage() {
   const { user } = useAuth()
   const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
+  const [balanceVisible, setBalanceVisible] = useState(() => {
+    if (typeof window === "undefined") return true
+    try { return localStorage.getItem("zamoraxpay:show-balance") !== "0" } catch { return true }
+  })
+  const [balanceUpdatedAt, setBalanceUpdatedAt] = useState<number | null>(null)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -201,6 +211,7 @@ export default function DashboardPage() {
         if (cancelled) return
 
         setBalanceKobo(data.balanceKobo ?? 0)
+        setBalanceUpdatedAt(Date.now())
         setCanCheckInToday(Boolean(data.streak?.canCheckInToday))
         setNextRewardKobo(data.streak?.nextRewardKobo ?? 0)
         setStreakLoaded(true)
@@ -240,6 +251,7 @@ export default function DashboardPage() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
 
   return (
+    <PullToRefresh onRefresh={async () => { setRetryCount((c) => c + 1) }}>
     <div className="mx-auto max-w-3xl px-4 py-8 sm:py-10">
       <div className="flex items-baseline justify-between gap-3">
         <div>
@@ -266,15 +278,40 @@ export default function DashboardPage() {
           <Wallet className="h-3.5 w-3.5" />
           Wallet balance
         </div>
-        <p className="relative mt-2 font-[600] text-[2.5rem] leading-none tracking-tight tabular-nums sm:text-[2.75rem]">
-          {loading ? (
-            <span className="inline-block h-9 w-40 animate-pulse rounded-md bg-white/10 align-middle" aria-label="Loading wallet balance" />
-          ) : loadError ? (
-            <span className="text-lg font-medium">Balance unavailable</span>
-          ) : (
-            formatNaira(balanceKobo ?? 0)
+        <div className="relative mt-2 flex items-center gap-2">
+          <p className="font-[600] text-[2.5rem] leading-none tracking-tight tabular-nums sm:text-[2.75rem]">
+            {loading ? (
+              <span className="inline-block h-9 w-40 animate-pulse rounded-md bg-white/10 align-middle" aria-label="Loading wallet balance" />
+            ) : loadError ? (
+              <span className="text-lg font-medium">Balance unavailable</span>
+            ) : balanceVisible ? (
+              formatNaira(balanceKobo ?? 0)
+            ) : (
+              "₦••••••"
+            )}
+          </p>
+          {!loading && !loadError && (
+            <button
+              type="button"
+              onClick={() => {
+                setBalanceVisible((v) => {
+                  const next = !v
+                  try { localStorage.setItem("zamoraxpay:show-balance", next ? "1" : "0") } catch {}
+                  return next
+                })
+              }}
+              className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+              aria-label={balanceVisible ? "Hide balance" : "Show balance"}
+            >
+              {balanceVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
           )}
-        </p>
+        </div>
+        {balanceUpdatedAt && !loading && (
+          <p className="relative mt-1 text-[11px] text-white/50">
+            Updated {Math.max(0, Math.round((Date.now() - balanceUpdatedAt) / 1000))}s ago
+          </p>
+        )}
 
         <div className="relative mt-6 flex items-center gap-2.5">
           <Link
@@ -352,7 +389,7 @@ export default function DashboardPage() {
             const isPinned = pinnedQuickLinks.includes(link.href)
             return (
               <div key={link.href} className="relative min-w-0">
-                <Link href={link.href} className="group flex min-h-[118px] h-full flex-col items-center justify-center gap-2.5 rounded-2xl border border-border/70 bg-white px-3 py-4 text-center shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_8px_20px_-10px_rgba(15,30,77,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+                <Link href={link.href} className="group flex min-h-[118px] h-full flex-col items-center justify-center gap-2.5 rounded-2xl border border-border/70 bg-card px-3 py-4 text-center shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_8px_20px_-10px_rgba(15,30,77,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
                   {showBadge && <span className="absolute right-3 top-3 flex h-2.5 w-2.5 rounded-full bg-red-500" aria-label="New activity" />}
                   <span className={`flex h-11 w-11 items-center justify-center rounded-full transition group-hover:scale-105 ${link.iconClass}`}><Icon className="h-5 w-5" /></span>
                   <span className="text-sm font-medium leading-tight text-secondary group-hover:text-primary">{link.label}</span>
@@ -361,15 +398,15 @@ export default function DashboardPage() {
                   <button type="button" onClick={() => moveQuickLink(link.href, -1)} disabled={visibleQuickLinks[0]?.href === link.href} aria-label={`Move ${link.label} earlier`} className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-white text-secondary shadow-sm disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
                   <button type="button" onClick={() => moveQuickLink(link.href, 1)} disabled={visibleQuickLinks[visibleQuickLinks.length - 1]?.href === link.href} aria-label={`Move ${link.label} later`} className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-white text-secondary shadow-sm disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
                 </div>}
-                <button type="button" onClick={() => toggleQuickLink(link.href)} aria-label={`${isPinned ? "Unpin" : "Pin"} ${link.label}`} aria-pressed={isPinned} title={isPinned ? "Unpin shortcut" : "Pin shortcut"} className={`absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isPinned ? "border-amber-200 bg-amber-50 text-amber-700" : "border-border bg-white/95 text-muted-foreground hover:text-amber-600"}`}><Star className={`h-4 w-4 ${isPinned ? "fill-current" : ""}`} /></button>
+                <button type="button" onClick={() => toggleQuickLink(link.href)} aria-label={`${isPinned ? "Unpin" : "Pin"} ${link.label}`} aria-pressed={isPinned} title={isPinned ? "Unpin shortcut" : "Pin shortcut"} className={`absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isPinned ? "border-amber-200 bg-amber-50 text-amber-700" : "border-border bg-card/95 text-muted-foreground hover:text-amber-600"}`}><Star className={`h-4 w-4 ${isPinned ? "fill-current" : ""}`} /></button>
               </div>
             )
           })}
-        </div> : <div className="mt-3 rounded-2xl border border-dashed border-border bg-white px-5 py-8 text-center"><p className="text-sm font-medium text-secondary">No matching actions</p><p className="mt-1 text-xs text-muted-foreground">Try another service name.</p><button type="button" onClick={() => setQuickActionQuery("")} className="mt-3 text-xs font-semibold text-primary hover:underline">Clear search</button></div>}
+        </div> : <div className="mt-3 rounded-2xl border border-dashed border-border bg-card px-5 py-8 text-center"><p className="text-sm font-medium text-secondary">No matching actions</p><p className="mt-1 text-xs text-muted-foreground">Try another service name.</p><button type="button" onClick={() => setQuickActionQuery("")} className="mt-3 text-xs font-semibold text-primary hover:underline">Clear search</button></div>}
       </div>
 
       {recentServices.length > 0 && !loading && (
-        <section className="mt-5 rounded-2xl border border-border/70 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="recent-services-title">
+        <section className="mt-5 rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5" aria-labelledby="recent-services-title">
           <div className="flex items-center justify-between gap-3">
             <div><h2 id="recent-services-title" className="text-sm font-semibold text-secondary">Recently used</h2><p className="mt-1 text-xs text-muted-foreground">Quickly return to a service from your recent activity.</p></div>
             <Link href="/history" className="text-xs font-semibold text-primary hover:underline">View history</Link>
@@ -383,7 +420,7 @@ export default function DashboardPage() {
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
           href="/history"
-          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
         >
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
             <Clock className="h-5 w-5" />
@@ -396,7 +433,7 @@ export default function DashboardPage() {
         </Link>
         <Link
           href="/contact"
-          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
         >
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
             <CheckCircle2 className="h-5 w-5" />
@@ -532,5 +569,6 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+    </PullToRefresh>
   )
 }

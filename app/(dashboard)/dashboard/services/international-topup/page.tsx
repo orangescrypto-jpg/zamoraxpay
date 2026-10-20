@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { ResultBanner } from "@/components/ui/result-banner"
 
 interface Country {
   isoName: string
@@ -203,13 +204,13 @@ export default function InternationalTopupPage() {
       </p>
 
       {result && (
-        <p
-          className={`mb-4 rounded-md p-3 text-sm ${
-            result.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"
-          }`}
-        >
-          {result.message}
-        </p>
+        <ResultBanner
+          className="mb-4"
+          variant={result.success ? "success" : "error"}
+          title={result.success ? "Success" : "Purchase failed"}
+          message={result.message}
+          onDismiss={() => setResult(null)}
+        />
       )}
 
       <div className="space-y-4">

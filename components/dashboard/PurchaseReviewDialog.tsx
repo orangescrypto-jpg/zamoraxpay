@@ -1,6 +1,8 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { AlertCircle, CheckCircle2 } from "lucide-react"
+import { trapFocus } from "@/lib/focusTrap"
 
 export interface PurchaseReviewRow {
   label: string
@@ -28,11 +30,31 @@ export function PurchaseReviewDialog({
   onConfirm,
   onCancel,
 }: PurchaseReviewDialogProps) {
+  const panelRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const node = panelRef.current
+    if (!node) return
+    const prev = document.activeElement as HTMLElement | null
+    const focusable = node.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+    focusable[0]?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !loading) onCancel()
+      if (node) trapFocus(node, e)
+    }
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      prev?.focus?.()
+    }
+  }, [open, loading, onCancel])
+
   if (!open) return null
 
   return (
     <div className="fixed inset-0 z-[180] flex items-end justify-center bg-slate-950/55 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !loading) onCancel() }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="purchase-review-title" className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-border bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6">
+      <section ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="purchase-review-title" className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-border bg-card p-5 shadow-2xl sm:rounded-3xl sm:p-6">
         <div className="flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><CheckCircle2 className="h-5 w-5" /></span>
           <div className="min-w-0 flex-1"><h2 id="purchase-review-title" className="text-lg font-semibold text-secondary">{title}</h2><p className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</p></div>

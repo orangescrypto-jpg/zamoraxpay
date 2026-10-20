@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { DensityToggle } from "@/components/admin/DensityToggle"
 import { createClient } from "@/src/services/providers/supabase/client"
 
 // minRole is the lowest role that can see (and use) this link. The
@@ -95,7 +96,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <button
             onClick={() => setSidebarOpen(false)}
             aria-label="Close menu"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-white/70 hover:bg-white/10 lg:hidden"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-white/70 hover:bg-card/10 lg:hidden"
           >
             ✕
           </button>
@@ -107,7 +108,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               href={item.href}
               className={cn(
                 "block rounded-md px-3 py-2 text-sm font-medium",
-                pathname === item.href ? "bg-primary text-primary-foreground" : "text-white/70 hover:bg-white/10",
+                pathname === item.href ? "bg-primary text-primary-foreground" : "text-white/70 hover:bg-card/10",
               )}
             >
               {item.label}
@@ -117,7 +118,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       <div className="min-w-0 flex-1 bg-bg lg:ml-0">
-        <div className="sticky top-0 z-20 flex items-center border-b border-border bg-white p-3 lg:hidden">
+        <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-card p-3 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
@@ -130,6 +131,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </span>
           </button>
           <p className="ml-3 font-heading font-semibold text-secondary">ZamoraxPay Admin</p>
+        
+          <div className="ml-auto"><DensityToggle /></div>
         </div>
         {children}
       </div>

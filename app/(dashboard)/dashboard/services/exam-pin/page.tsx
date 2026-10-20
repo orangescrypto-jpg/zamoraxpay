@@ -4,6 +4,8 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { ResultBanner } from "@/components/ui/result-banner"
+import { PinKeypad } from "@/components/ui/pin-keypad"
 import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
 
 const EXAM_BODIES = ["WAEC", "NECO", "JAMB", "NABTEB"]
@@ -124,9 +126,13 @@ export default function ExamPinPage() {
       <h1 className="mb-6 text-2xl font-heading font-bold text-secondary">Buy Exam PIN</h1>
 
       {result && (
-        <p className={`mb-4 rounded-md p-3 text-sm ${result.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"}`}>
-          {result.message}
-        </p>
+        <ResultBanner
+          className="mb-4"
+          variant={result.success ? "success" : "error"}
+          title={result.success ? "Success" : "Purchase failed"}
+          message={result.message}
+          onDismiss={() => setResult(null)}
+        />
       )}
 
       {/* This is the actual thing the customer paid for - it must stay
@@ -217,9 +223,8 @@ export default function ExamPinPage() {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>
-          <input required type="password" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest" />
+          <label className="mb-2 block text-sm font-medium text-secondary dark:text-foreground">Transaction PIN</label>
+          <PinKeypad value={pin} onChange={setPin} disabled={loading} />
         </div>
 
         <button type="submit" disabled={loading || plansLoading || unitPriceKobo == null}

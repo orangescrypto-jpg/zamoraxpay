@@ -42,7 +42,7 @@ function FooterBanner() {
   const banner = banners[activeIndex]
 
   const content = (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-lg transition-transform duration-300 hover:scale-[1.01]">
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-card/5 shadow-lg transition-transform duration-300 hover:scale-[1.01]">
       <img
         key={banner.id}
         src={banner.imageUrl}
@@ -89,8 +89,8 @@ function FooterBanner() {
                 onClick={() => goTo(i)}
                 className={
                   i === activeIndex
-                    ? "h-2.5 w-7 rounded-full bg-white shadow transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    : "h-2.5 w-2.5 rounded-full bg-white/40 transition-all hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    ? "h-2.5 w-7 rounded-full bg-card shadow transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    : "h-2.5 w-2.5 rounded-full bg-card/40 transition-all hover:bg-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 }
               />
             ))}
@@ -157,7 +157,7 @@ export function Footer() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm md:col-span-2">
+          <div className="rounded-2xl border border-white/10 bg-card/[0.04] p-5 backdrop-blur-sm md:col-span-2">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-white">
               <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
               Contact Us

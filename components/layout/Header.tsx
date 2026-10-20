@@ -1,7 +1,7 @@
 // components/layout/Header.tsx
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
@@ -156,6 +156,8 @@ export function Header() {
     window.location.href = "/"
   }
 
+  const touchStartX = useRef<number | null>(null)
+
   // Let floating buttons (WhatsApp, tools) know the mobile menu is open
   // so they can hide and stop covering Settings / Sign out.
   useEffect(() => {
@@ -302,6 +304,14 @@ export function Header() {
         <nav
           aria-label="Mobile menu"
           className="absolute inset-x-0 top-full z-50 flex max-h-[min(85dvh,calc(100dvh-4rem))] flex-col border-t border-border bg-card shadow-lg md:hidden"
+          onTouchStart={(e) => { touchStartX.current = e.touches[0]?.clientX ?? null }}
+          onTouchEnd={(e) => {
+            const start = touchStartX.current
+            touchStartX.current = null
+            if (start == null) return
+            const end = e.changedTouches[0]?.clientX
+            if (end != null && start - end > 80) setMenuOpen(false) // swipe left to close
+          }}
         >
           <div className="container flex-1 overflow-y-auto overscroll-contain py-3 pb-4">
             {isAuthenticated && (

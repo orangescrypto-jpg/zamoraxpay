@@ -2,19 +2,47 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { detectNetwork, matchesSelectedNetwork, type NetworkName } from "@/lib/networkDetect"
 import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
 import { ResultBanner } from "@/components/ui/result-banner"
+import { AmountChips } from "@/components/ui/amount-chips"
+import { PinKeypad } from "@/components/ui/pin-keypad"
+import { normalizeNgPhone } from "@/lib/phoneNormalize"
+import { RecentPhoneChips } from "@/components/ui/recent-phone-chips"
+import { pushRecentPhone } from "@/lib/recentPhones"
 
 const NETWORKS: NetworkName[] = ["MTN", "Airtel", "Glo", "9mobile"]
 
 export default function AirtimePage() {
   const { user } = useAuth()
-  const [network, setNetwork] = useState(NETWORKS[0])
+  const searchParams = useSearchParams()
+  const [network, setNetwork] = useState<NetworkName>(() => {
+    if (typeof window === "undefined") return NETWORKS[0]
+    try {
+      const saved = localStorage.getItem("zamoraxpay:last-airtime-network")
+      if (saved && (NETWORKS as string[]).includes(saved)) return saved as NetworkName
+    } catch {}
+    return NETWORKS[0]
+  })
   const [phone, setPhone] = useState("")
+  // Remember last selected network (local only)
+  
+  function selectNetwork(n: NetworkName) {
+    setNetwork(n)
+    try { localStorage.setItem("zamoraxpay:last-airtime-network", n) } catch {}
+
+  useEffect(() => {
+    const n = searchParams.get("network")
+    if (n && (NETWORKS as string[]).includes(n)) selectNetwork(n as NetworkName)
+    const ph = searchParams.get("phone")
+    if (ph) setPhone(normalizeNgPhone(ph))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+  }
   // Pre-fill with the user's own registered number for the common case
   // (buying for self) - still a plain editable input, so switching to
   // someone else's number just means typing over it.
@@ -77,6 +105,7 @@ export default function AirtimePage() {
 
       setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
       if (data.success) {
+        pushRecentPhone(phone.trim())
         setPhone("")
         setAmount("")
         setPin("")
@@ -124,7 +153,7 @@ export default function AirtimePage() {
         />
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className={`space-y-4 ${result && !result.success ? "zpx-shake" : ""}`}>
         <div>
           <label className="mb-1 block text-sm font-medium text-secondary">Network</label>
           <div className="grid grid-cols-4 gap-2">
@@ -132,8 +161,8 @@ export default function AirtimePage() {
               <button
                 type="button"
                 key={n}
-                onClick={() => setNetwork(n)}
-                className={`rounded-md border py-2 text-sm font-medium ${
+                onClick={() => selectNetwork(n)}
+                className={`rounded-md border py-2 text-sm font-medium transition active:scale-95 ${
                   network === n ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"
                 }`}
               >
@@ -160,7 +189,12 @@ export default function AirtimePage() {
             required
             type="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => setPhone(normalizeNgPhone(e.target.value))}
+            onPaste={(e) => {
+              e.preventDefault()
+              const text = e.clipboardData.getData("text")
+              setPhone(normalizeNgPhone(text))
+            }}
             placeholder="08012345678"
             className={`w-full rounded-md border px-3 py-2 text-sm ${
               networkMismatch ? "border-destructive" : "border-border"
@@ -169,6 +203,7 @@ export default function AirtimePage() {
           {user?.phone && phone === user.phone && (
             <p className="mt-1 text-xs text-muted-foreground">Buying for yourself. Edit the number above to buy for someone else.</p>
           )}
+          <RecentPhoneChips onSelect={setPhone} />
           {networkMismatch ? (
             <p className="mt-1 text-xs text-destructive">
               This looks like a {detected} number, but you selected {network}. Double-check before you pay.
@@ -193,18 +228,12 @@ export default function AirtimePage() {
             className="w-full rounded-md border border-border px-3 py-2 text-sm"
           />
           <p className="mt-1 text-xs text-muted-foreground">Minimum airtime purchase is ₦50.</p>
+          <AmountChips className="mt-3" value={amount} onSelect={(n) => setAmount(String(n))} />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>
-          <input
-            required
-            type="password"
-            maxLength={4}
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest"
-          />
+          <label className="mb-2 block text-sm font-medium text-secondary">Transaction PIN</label>
+          <PinKeypad value={pin} onChange={setPin} disabled={loading} />
         </div>
 
         {networkConfirmNeeded && (
@@ -225,13 +254,18 @@ export default function AirtimePage() {
           </div>
         )}
 
+        <div className="zpx-sticky-pay pt-2">
+        <p className="mb-2 text-center text-xs text-muted-foreground">
+          You pay <span className="font-semibold text-secondary dark:text-foreground">{amount && parseFloat(amount) >= 50 ? `₦${parseFloat(amount).toLocaleString("en-NG")}` : "—"}</span>
+        </p>
         <button
           type="submit"
-          disabled={loading || (!!networkConfirmNeeded && !ackMismatch)}
+          disabled={loading || (!!networkConfirmNeeded && !ackMismatch) || phone.length < 11 || !amount || parseFloat(amount) < 50 || pin.length !== 4}
           className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
           {loading ? "Processing..." : networkConfirmNeeded ? "Confirm and buy anyway" : "Buy airtime"}
         </button>
+        </div>
       </form>
       <PurchaseReviewDialog
         open={reviewOpen}

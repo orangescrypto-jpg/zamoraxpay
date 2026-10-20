@@ -106,3 +106,35 @@ body[data-mobile-menu="open"] [data-whatsapp-fab] {
   pointer-events: none;
   visibility: hidden;
 }
+
+
+@keyframes zpx-confetti-fly {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.4); opacity: 0; }
+}
+.zpx-confetti-piece {
+  animation: zpx-confetti-fly 0.9s ease-out forwards;
+}
+html.zpx-reduce-motion .zpx-confetti-piece { animation: none; display: none; }
+
+/* Admin density */
+html.zpx-admin-compact table td,
+html.zpx-admin-compact table th { padding-top: 0.4rem; padding-bottom: 0.4rem; font-size: 0.8125rem; }
+
+
+@keyframes zpx-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+.zpx-shake { animation: zpx-shake 0.4s ease; }
+html.zpx-reduce-motion .zpx-shake { animation: none; }
+
+.zpx-sticky-pay {
+  position: sticky;
+  bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+}
+@media (min-width: 768px) {
+  .zpx-sticky-pay { bottom: 1rem; }
+}

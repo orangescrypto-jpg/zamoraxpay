@@ -1,30 +1,26 @@
-# ZamoraxPay UI Improvements
+# ZamoraxPay complete UI pack (no DB / API)
 
-UI/UX polish only — **no database, migrations, or API changes**.
-
-## Added
-
-### Design system (`components/ui/`)
-Button, Input, Label, Textarea, Card, Badge, Alert, Skeleton, Spinner, EmptyState, ResultBanner
-
-### Theme
-- `theme-provider.tsx` + `theme-toggle.tsx` (light / dark / system)
-- Anti-FOUC script in root layout
-- ThemeProvider in SiteChrome
-- Toggle in Header + Appearance section in Settings
-
-### Page updates
-- Dashboard activity: Skeleton loaders, theme-aware empty states
-- Airtime: ResultBanner for purchase results
-- Login: ResultBanner for errors
-- Settings: Appearance / theme control
-- Header & MobileBottomNav: theme-aware surfaces (`bg-card`)
-
-## Usage
-
-```tsx
-import { Button, Input, ResultBanner, Skeleton } from "@/components/ui"
-import { ThemeToggle } from "@/components/theme-toggle"
+```bash
+unzip -o zamoraxpay-ui-everything.zip
 ```
 
-Migrate remaining service pages to Button/Input/ResultBanner using the airtime pattern.
+## Previously present
+Balance hide (wallet), copy/share receipt, toasts, offline banner, PWA dismiss, empty history, bottom-nav active, reduce-motion
+
+## This pack adds
+- Design system + theme (light/dark/system)
+- Mobile menu: sticky sign-out, collapsible blog, backdrop, swipe close, hide FABs/bottom nav
+- More sheet (theme, legal, sign out, tips)
+- ResultBanner + success confetti on service pages
+- PIN keypad (airtime, data, cable, electricity, epin, exam-pin, betting)
+- Amount chips (airtime, wallet fund)
+- Phone normalize + recent phone chips
+- Last network memory + buy-again query params (airtime)
+- Sticky pay bar + "you pay ₦X" (airtime)
+- Form shake on error
+- Dashboard balance hide + last updated
+- Pull-to-refresh (dashboard)
+- History status legend + BuyAgainLink helper
+- Relative times, focus trap on review dialog
+- Admin density toggle + dark card surfaces
+- Command palette shortcuts hint

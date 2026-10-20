@@ -85,7 +85,7 @@ export default function CashbackPage() {
         <button
           onClick={handleClaim}
           disabled={loading || claiming || !data?.unclaimedKobo}
-          className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-card px-5 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Gift className="h-4 w-4" />
           {claiming ? "Claiming..." : "Claim to wallet"}
@@ -96,7 +96,7 @@ export default function CashbackPage() {
         )}
       </div>
 
-      <div className="mt-4 rounded-xl border border-border bg-white p-4">
+      <div className="mt-4 rounded-xl border border-border bg-card p-4">
         <p className="text-xs font-medium text-secondary">Lifetime cashback earned</p>
         <p className="mt-1 text-lg font-bold text-primary">
           {loading ? "…" : formatNaira(data?.lifetimeEarnedKobo ?? 0)}
@@ -105,7 +105,7 @@ export default function CashbackPage() {
 
       <div className="mt-8">
         <h2 className="text-lg font-semibold text-primary">Cashback history</h2>
-        <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-white shadow-sm">
+        <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-card shadow-sm">
           {loading ? (
             <p className="p-4 text-sm text-secondary">Loading…</p>
           ) : !data?.history.length ? (

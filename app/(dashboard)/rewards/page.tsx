@@ -126,7 +126,7 @@ export default function RewardsPage() {
 
       {loadError && <div role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{loadError} <button type="button" onClick={load} className="ml-2 font-semibold underline">Try again</button></div>}
 
-      <div className="mt-6 rounded-xl border border-border bg-white p-4">
+      <div className="mt-6 rounded-xl border border-border bg-card p-4">
         <p className="text-xs font-medium text-secondary">Total unclaimed</p>
         <p className="mt-1 text-2xl font-bold text-primary">
           {loading ? "…" : formatNaira(totalUnclaimedKobo)}
@@ -135,7 +135,7 @@ export default function RewardsPage() {
 
       <Link
         href="/spin"
-        className="mt-4 flex items-center justify-between rounded-xl border border-border bg-white p-4 text-sm font-semibold text-primary hover:bg-muted"
+        className="mt-4 flex items-center justify-between rounded-xl border border-border bg-card p-4 text-sm font-semibold text-primary hover:bg-muted"
       >
         <span>🎡 Spin &amp; Win - your spins, prizes and history</span>
         <span className="text-xs text-secondary">View →</span>
@@ -168,7 +168,7 @@ export default function RewardsPage() {
                 <button
                   onClick={() => handleClaim(card.source)}
                   disabled={loading || claiming === card.source || !card.amountKobo}
-                  className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full bg-card px-4 py-2 text-sm font-semibold text-primary hover:bg-card/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {claiming === card.source ? "Claiming..." : "Claim"}
                 </button>

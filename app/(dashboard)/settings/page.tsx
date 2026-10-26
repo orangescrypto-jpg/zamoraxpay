@@ -74,22 +74,22 @@ export default function SettingsPage() {
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
-        <h2 className="mb-1 font-heading font-semibold text-secondary">Profile</h2>
+        <h2 className="mb-1 font-heading font-semibold text-secondary dark:text-foreground">Profile</h2>
         <p className="mb-4 text-sm text-muted-foreground">Keep your account details up to date.</p>
         {profileMessage && <p className="mb-3 text-sm text-accent">{profileMessage}</p>}
-        <label className="mb-1 block text-sm font-medium text-secondary">Full name</label>
+        <label className="mb-1 block text-sm font-medium text-secondary dark:text-foreground">Full name</label>
         <input
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
-          className="mb-3 w-full rounded-md border border-border px-3 py-2 text-sm"
+          className="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
         />
-        <label className="mb-1 block text-sm font-medium text-secondary">Phone number</label>
+        <label className="mb-1 block text-sm font-medium text-secondary dark:text-foreground">Phone number</label>
         <input
           type="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="08012345678"
-          className="mb-3 w-full rounded-md border border-border px-3 py-2 text-sm"
+          className="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
         />
         <button
           onClick={handleSaveProfile}
@@ -101,7 +101,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
-        <h2 className="mb-1 font-heading font-semibold text-secondary">Transaction PIN</h2>
+        <h2 className="mb-1 font-heading font-semibold text-secondary dark:text-foreground">Transaction PIN</h2>
         <p className="mb-4 text-sm text-muted-foreground">Protect purchases with your private transaction PIN.</p>
         <p className="mb-3 text-sm text-muted-foreground">
           {user?.hasTransactionPin
@@ -118,7 +118,7 @@ export default function SettingsPage() {
             value={currentPin}
             onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
             placeholder="Current 4-digit PIN"
-            className="mb-3 w-full rounded-md border border-border px-3 py-2 text-center tracking-widest"
+            className="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-center text-foreground tracking-widest placeholder:text-muted-foreground"
           />
         )}
         <input
@@ -129,7 +129,7 @@ export default function SettingsPage() {
           value={newPin}
           onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
           placeholder="New 4-digit PIN"
-          className="mb-3 w-full rounded-md border border-border px-3 py-2 text-center tracking-widest"
+          className="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-center text-foreground tracking-widest placeholder:text-muted-foreground"
         />
         <button
           onClick={handleSetPin}

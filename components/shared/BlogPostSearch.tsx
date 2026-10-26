@@ -27,7 +27,7 @@ export function BlogPostSearch({ posts }: { posts: BlogPostCard[] }) {
         {query && <button type="button" aria-label="Clear search" onClick={() => setQuery("")} className="rounded p-1 text-muted-foreground hover:text-secondary"><X className="h-4 w-4" /></button>}
       </label>
       <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">Sort
-        <select value={sort} onChange={(event) => setSort(event.target.value)} className="rounded-lg border border-border bg-white px-3 py-2.5 text-sm text-secondary outline-none focus:border-primary"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">Title A to Z</option></select>
+        <select value={sort} onChange={(event) => setSort(event.target.value)} className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">Title A to Z</option></select>
       </label>
     </div>
     <p className="mb-3 text-xs text-muted-foreground" aria-live="polite">{results.length} of {posts.length} loaded article{posts.length === 1 ? "" : "s"}</p>

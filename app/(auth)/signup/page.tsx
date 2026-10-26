@@ -56,7 +56,7 @@ export default function SignupPage() {
     return (
       <div className="container flex min-h-[70vh] items-center justify-center py-12">
         <div className="w-full max-w-sm text-center">
-          <h1 className="mb-2 text-2xl font-heading font-bold text-secondary">Check your email</h1>
+          <h1 className="mb-2 text-2xl font-heading font-bold text-secondary dark:text-foreground">Check your email</h1>
           <p className="text-sm text-muted-foreground">
             We&apos;ve sent a confirmation link to <strong>{email}</strong>. Click it to activate your account, then
             come back and log in.
@@ -69,44 +69,44 @@ export default function SignupPage() {
   return (
     <div className="container flex min-h-[70vh] items-center justify-center py-12">
       <div className="w-full max-w-sm">
-        <h1 className="mb-1 text-2xl font-heading font-bold text-secondary">Create your account</h1>
+        <h1 className="mb-1 text-2xl font-heading font-bold text-secondary dark:text-foreground">Create your account</h1>
         <p className="mb-6 text-sm text-muted-foreground">Takes less than a minute.</p>
 
         {error && <p className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-secondary">Full name</label>
+            <label className="mb-1 block text-sm font-medium text-secondary dark:text-foreground">Full name</label>
             <input
               required
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full rounded-md border border-border px-3 py-2 text-sm"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-secondary">Email</label>
+            <label className="mb-1 block text-sm font-medium text-secondary dark:text-foreground">Email</label>
             <input
               required
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-border px-3 py-2 text-sm"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-secondary">Phone number</label>
+            <label className="mb-1 block text-sm font-medium text-secondary dark:text-foreground">Phone number</label>
             <input
               required
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="08012345678"
-              className="w-full rounded-md border border-border px-3 py-2 text-sm"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-secondary">Password</label>
+            <label className="mb-1 block text-sm font-medium text-secondary dark:text-foreground">Password</label>
             <div className="relative">
               <input
                 required
@@ -114,7 +114,7 @@ export default function SignupPage() {
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-md border border-border px-3 py-2 pr-10 text-sm"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground"
               />
               <button
                 type="button"
@@ -127,7 +127,7 @@ export default function SignupPage() {
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-secondary">Confirm password</label>
+            <label className="mb-1 block text-sm font-medium text-secondary dark:text-foreground">Confirm password</label>
             <div className="relative">
               <input
                 required
@@ -135,7 +135,7 @@ export default function SignupPage() {
                 minLength={8}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full rounded-md border border-border px-3 py-2 pr-10 text-sm"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground"
               />
               <button
                 type="button"

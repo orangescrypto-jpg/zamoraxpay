@@ -59,6 +59,37 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
   }
+
+  /* ── Dark-mode global resets ───────────────────────────────────────────
+     Inputs, selects, and textareas rendered without explicit bg/text
+     classes fall back to browser defaults (white bg, black text).
+     These rules force them onto the design-system tokens in dark mode
+     so every form element is readable without touching every file.     */
+  .dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  .dark select,
+  .dark textarea {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    border-color: hsl(var(--border));
+  }
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* bg-white cards/panels — map to bg-card in dark mode              */
+  .dark .bg-white {
+    background-color: hsl(var(--card));
+  }
+
+  /* text-secondary is near-black navy (#0B1220) — unreadable in dark.
+     In dark mode the secondary CSS variable is remapped to a lighter
+     slate, but class-based `text-secondary` still renders the original
+     value when Tailwind generates it statically. This rule ensures
+     text-secondary elements pick up the remapped token in dark mode.   */
+  .dark .text-secondary {
+    color: hsl(var(--foreground));
+  }
 }
 
 /* Banner slider transitions */

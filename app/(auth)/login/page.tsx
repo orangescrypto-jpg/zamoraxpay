@@ -61,7 +61,7 @@ function LoginForm() {
 
   return (
     <div className="w-full max-w-sm">
-      <h1 className="mb-1 text-2xl font-heading font-bold text-secondary">Welcome back</h1>
+      <h1 className="mb-1 text-2xl font-heading font-bold text-secondary dark:text-foreground">Welcome back</h1>
       <p className="mb-6 text-sm text-muted-foreground">Log in to your ZamoraxPay account.</p>
 
       {error && (
@@ -91,23 +91,23 @@ function LoginForm() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary">Phone or email</label>
+          <label className="mb-1 block text-sm font-medium text-secondary dark:text-foreground">Phone or email</label>
           <input
             required
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
-            className="w-full rounded-md border border-border px-3 py-2 text-sm"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-secondary">Password</label>
+          <label className="mb-1 block text-sm font-medium text-secondary dark:text-foreground">Password</label>
           <div className="relative">
             <input
               required
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-border px-3 py-2 pr-10 text-sm"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground"
             />
             <button
               type="button"

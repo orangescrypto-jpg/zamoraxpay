@@ -151,10 +151,10 @@ export function Field({ label, help, children }: { label: string; help?: string;
   )
 }
 
-export const inputCls = "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+export const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
 export const btnPrimary = "rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-export const btnGhost = "rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-muted disabled:opacity-50"
-export const btnDanger = "rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+export const btnGhost = "rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-primary hover:bg-muted disabled:opacity-50"
+export const btnDanger = "rounded-lg border border-red-200 bg-card px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
 
 export function Notice({ notice }: { notice: { ok: boolean; text: string } | null }) {
   if (!notice) return null

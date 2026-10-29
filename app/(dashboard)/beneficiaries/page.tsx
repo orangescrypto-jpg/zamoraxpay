@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
+import { getJSON, setJSON } from "@/lib/storage"
 
 interface Beneficiary {
   id: string
@@ -11,6 +12,11 @@ interface Beneficiary {
   recipient: string
   nickname: string | null
 }
+
+// Beneficiaries change rarely - cap the cache at 60s so the page renders
+// instantly on repeat visits but stays reasonably fresh.
+const CACHE_KEY = "zamoraxpay:beneficiaries:v1"
+const CACHE_TTL_MS = 60_000
 
 export default function BeneficiariesPage() {
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([])
@@ -25,6 +31,13 @@ export default function BeneficiariesPage() {
   }
 
   async function load() {
+    // Cache-first: render cached list instantly, then refetch fresh.
+    const cached = getJSON<Beneficiary[] | null>(CACHE_KEY, null)
+    if (cached && Array.isArray(cached)) {
+      setBeneficiaries(cached)
+      setLoading(false)
+    }
+
     setLoading(true)
     setError(null)
     try {
@@ -32,9 +45,14 @@ export default function BeneficiariesPage() {
       const res = await fetch("/api/beneficiaries", { headers })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? data.message ?? "Could not load saved beneficiaries.")
-      setBeneficiaries(Array.isArray(data.beneficiaries) ? data.beneficiaries : [])
+      const list = Array.isArray(data.beneficiaries) ? data.beneficiaries : []
+      setBeneficiaries(list)
+      try { setJSON(CACHE_KEY, list, CACHE_TTL_MS) } catch { /* storage may be unavailable */ }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load saved beneficiaries.")
+      // If we already have a cached list, suppress the error.
+      if (!cached || !Array.isArray(cached) || cached.length === 0) {
+        setError(err instanceof Error ? err.message : "Could not load saved beneficiaries.")
+      }
     } finally {
       setLoading(false)
     }
@@ -42,6 +60,7 @@ export default function BeneficiariesPage() {
 
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleDelete(id: string) {
@@ -53,7 +72,12 @@ export default function BeneficiariesPage() {
       const res = await fetch(`/api/beneficiaries?id=${encodeURIComponent(id)}`, { method: "DELETE", headers })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? data.message ?? "Could not remove this beneficiary.")
-      setBeneficiaries((current) => current.filter((item) => item.id !== id))
+      // Optimistic update + cache invalidation.
+      setBeneficiaries((current) => {
+        const next = current.filter((item) => item.id !== id)
+        try { setJSON(CACHE_KEY, next, CACHE_TTL_MS) } catch {}
+        return next
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not remove this beneficiary.")
     } finally {

@@ -66,7 +66,19 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
         // Non-JSON body means the server crashed or a proxy answered.
       }
       if (res.ok && data.url) onChange(data.url)
-      else alert(data.error ?? `Upload failed (HTTP ${res.status}). Allow: ${res.headers.get("allow") ?? "n/a"}. Redirected: ${res.redirected}. URL: ${res.url}. ${text.slice(0, 120)}`)
+      else {
+        // Sanitized error message. The previous version leaked HTTP
+        // internals (Allow header, redirected flag, raw response body
+        // first 120 chars) into the admin UI - which is fine for a
+        // developer but confusing for a non-technical operator and
+        // potentially leaks server internals.
+        const friendly = data.error
+          || (res.status === 413 ? "That image is too large. Use one under 5 MB."
+          : res.status === 415 ? "That file type isn't supported. Use JPG, PNG, WebP, or GIF."
+          : res.status >= 500 ? "Our server had a problem uploading that file. Please try again in a moment."
+          : `Upload failed (HTTP ${res.status}). Please try again.`)
+        alert(friendly)
+      }
     } catch (err) {
       alert(
         err instanceof DOMException && err.name === "AbortError"
@@ -119,7 +131,7 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <label className="cursor-pointer rounded-md border border-border px-3 py-1.5 text-sm font-medium text-secondary hover:bg-muted">
+        <label className="cursor-pointer rounded-md border border-border px-3 py-1.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground">
           {uploading ? "Uploading..." : "Upload new"}
           <input type="file" accept="image/*" onChange={handleFileUpload} disabled={uploading} className="hidden" />
         </label>
@@ -127,7 +139,7 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
         <button
           type="button"
           onClick={openPicker}
-          className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-secondary hover:bg-muted"
+          className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
         >
           Choose from previous uploads
         </button>
@@ -146,12 +158,12 @@ export function ImagePicker({ value, onChange, folder = "banners", label = "Imag
       {pickerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setPickerOpen(false)}>
           <div
-            className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-4"
+            className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-card p-4 text-card-foreground shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-secondary">Previous uploads</h3>
-              <button onClick={() => setPickerOpen(false)} className="text-sm text-muted-foreground hover:text-secondary">
+              <h3 className="text-sm font-semibold text-secondary dark:text-foreground">Previous uploads</h3>
+              <button onClick={() => setPickerOpen(false)} className="text-sm text-muted-foreground hover:text-secondary dark:hover:text-foreground">
                 Close
               </button>
             </div>

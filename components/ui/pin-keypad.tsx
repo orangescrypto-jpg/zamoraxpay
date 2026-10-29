@@ -20,6 +20,15 @@ export function PinKeypad({
 }) {
   function press(key: string) {
     if (disabled) return
+    // Tactile feedback on supported devices (mostly Android). Wrapped in
+    // try/catch + feature check so iOS Safari (which doesn't implement
+    // navigator.vibrate) and desktop browsers silently no-op.
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        if (key === "del") navigator.vibrate(8)
+        else navigator.vibrate(12)
+      }
+    } catch { /* vibration may be unavailable - non-fatal */ }
     if (key === "del") {
       onChange(value.slice(0, -1))
       return

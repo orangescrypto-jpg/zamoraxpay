@@ -118,11 +118,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       <div className="min-w-0 flex-1 bg-bg lg:ml-0">
-        <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-card p-3 lg:hidden">
+        {/* Mobile-only header: hamburger + density toggle.
+            Desktop operators also get the density toggle (previously this
+            was mobile-only, which is backwards - desktop operators benefit
+            more from compact mode than mobile ones do). Now shown on all
+            sizes via a top bar that adapts. */}
+        <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-card p-3">
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-secondary"
+            className="flex h-11 w-11 items-center justify-center rounded-md border border-border text-secondary lg:hidden"
           >
             <span className="flex flex-col gap-1">
               <span className="block h-0.5 w-5 bg-secondary" />
@@ -131,7 +136,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </span>
           </button>
           <p className="ml-3 font-heading font-semibold text-secondary">ZamoraxPay Admin</p>
-        
+
           <div className="ml-auto"><DensityToggle /></div>
         </div>
         {children}

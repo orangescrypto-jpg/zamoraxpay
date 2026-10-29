@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { Gift, Users, Flame, ArrowRight } from "lucide-react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { getJSON, setJSON } from "@/lib/storage"
 import { useAuth } from "@/hooks/useAuth"
 
 interface UnclaimedSummary {
@@ -16,6 +17,11 @@ interface UnclaimedSummary {
 }
 
 type ClaimSource = "cashback" | "referral" | "streak"
+
+// Rewards summary only changes when the user makes a purchase or claims.
+// Long TTL is fine.
+const CACHE_KEY = "zamoraxpay:rewards-summary:v1"
+const CACHE_TTL_MS = 5 * 60_000
 
 export default function RewardsPage() {
   const router = useRouter()
@@ -42,6 +48,10 @@ export default function RewardsPage() {
   }
 
   async function load() {
+    // Cache-first: render cached summary instantly.
+    const cached = getJSON<UnclaimedSummary | null>(CACHE_KEY, null)
+    if (cached) setSummary(cached)
+
     setLoading(true)
     setLoadError(null)
     try {
@@ -50,8 +60,12 @@ export default function RewardsPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? json.message ?? "Could not load rewards.")
       setSummary(json)
+      try { setJSON(CACHE_KEY, json, CACHE_TTL_MS) } catch { /* storage may be unavailable */ }
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load rewards.")
+      // If we have a cached value, suppress the error.
+      if (!cached) {
+        setLoadError(err instanceof Error ? err.message : "Could not load rewards.")
+      }
     } finally {
       setLoading(false)
     }
@@ -129,7 +143,7 @@ export default function RewardsPage() {
       <div className="mt-6 rounded-xl border border-border bg-card p-4">
         <p className="text-xs font-medium text-secondary">Total unclaimed</p>
         <p className="mt-1 text-2xl font-bold text-primary">
-          {loading ? "…" : formatNaira(totalUnclaimedKobo)}
+          {loading && !summary ? "..." : formatNaira(totalUnclaimedKobo)}
         </p>
       </div>
 
@@ -137,7 +151,7 @@ export default function RewardsPage() {
         href="/spin"
         className="mt-4 flex items-center justify-between rounded-xl border border-border bg-card p-4 text-sm font-semibold text-primary hover:bg-muted"
       >
-        <span>🎡 Spin &amp; Win - your spins, prizes and history</span>
+        <span>🎡 Spin &amp; Win, your spins, prizes and history</span>
         <span className="text-xs text-secondary">View →</span>
       </Link>
 
@@ -162,7 +176,7 @@ export default function RewardsPage() {
                     {card.label}
                   </div>
                   <p className="mt-1 text-2xl font-bold tracking-tight">
-                    {loading ? "…" : formatNaira(card.amountKobo)}
+                    {loading && !summary ? "..." : formatNaira(card.amountKobo)}
                   </p>
                 </div>
                 <button

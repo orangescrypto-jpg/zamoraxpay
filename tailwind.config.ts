@@ -24,20 +24,23 @@ const config = {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
-        // ZamoraxPay Brand Colors — distinct from Zamorax Marketplace
+        // ZamoraxPay Brand Colors - driven by HSL CSS vars so dark mode works
+        // without band-aid global overrides. Light values live in globals.css
+        // (:root), dark overrides live in .dark. Hex fallbacks stay commented
+        // for reference only.
         primary: {
-          DEFAULT: "#0057FF", // Electric Blue — speed / instant fulfillment
-          foreground: "#FFFFFF",
+          DEFAULT: "hsl(var(--primary))",            // light: #0057FF (Electric Blue)
+          foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
-          DEFAULT: "#0B1220", // Near-black navy
-          foreground: "#FFFFFF",
+          DEFAULT: "hsl(var(--secondary))",           // light: #0B1220 (near-black navy)
+          foreground: "hsl(var(--secondary-foreground))",
         },
         accent: {
-          DEFAULT: "#00D67A", // Green — success / cashback
-          foreground: "#FFFFFF",
+          DEFAULT: "hsl(var(--accent))",              // light: #00D67A (Green)
+          foreground: "hsl(var(--accent-foreground))",
         },
-        bg: "#F5F7FA",
+        bg: "hsl(var(--background))",
         white: "#FFFFFF",
         error: "#EF4444",
         warning: "#F59E0B",
@@ -59,6 +62,7 @@ const config = {
         },
       },
       borderRadius: {
+        xl: "calc(var(--radius) + 4px)",
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",

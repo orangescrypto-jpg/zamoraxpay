@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { migrateLegacyKeys } from "@/lib/storage"
 
 type Theme = "light" | "dark" | "system"
 
@@ -23,6 +24,12 @@ function applyTheme(resolved: "light" | "dark") {
   root.classList.remove("light", "dark")
   root.classList.add(resolved)
   root.setAttribute("data-theme", resolved)
+  // Sync the theme-color meta tag so mobile browser chrome matches the
+  // active theme. The light/dark media-query variants in metadata
+  // cover the initial paint; this keeps it in sync if the user toggles
+  // at runtime.
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.setAttribute("content", resolved === "dark" ? "#0B1220" : "#0057FF")
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -32,6 +39,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     setMounted(true)
+    // One-time legacy localStorage key migration. Safe to call on every
+    // mount - it no-ops once each legacy key is gone.
+    migrateLegacyKeys()
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as Theme | null
       if (stored === "light" || stored === "dark" || stored === "system") setThemeState(stored)

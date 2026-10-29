@@ -35,6 +35,7 @@ import {
 import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { getJSON, setJSON } from "@/lib/storage"
 import { DashboardAnnouncement } from "@/components/dashboard/DashboardAnnouncement"
 import {
   DashboardPopupAnnouncement,
@@ -47,6 +48,52 @@ import { ReceiptButton } from "@/components/dashboard/ReceiptButton"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RelativeTime } from "@/components/ui/relative-time"
 import { PullToRefresh } from "@/components/shared/PullToRefresh"
+import { GuidedTour, type TourDef } from "@/components/shared/GuidedTour"
+
+// First-time-user guided tour. Auto-shows on first dashboard visit,
+// never again after the user dismisses it. They can replay it from the
+// Page tools panel (LocalExperienceTools).
+const DASHBOARD_TOUR: TourDef = {
+  id: "dashboard-v1",
+  steps: [
+    {
+      selector: "a[href='/wallet']",
+      title: "Your wallet balance",
+      body: "This is your current balance. Tap the eye icon to hide it from people looking over your shoulder.",
+      position: "bottom",
+    },
+    {
+      selector: "a[href='/wallet']",
+      title: "Top up here",
+      body: "Tap Fund wallet to add money with your debit card or bank transfer. You'll only pay for what you use.",
+      position: "bottom",
+    },
+    {
+      selector: "h2:has(+ div [class*='grid'])",
+      title: "Quick actions",
+      body: "Pin the services you use most. Star them to keep them on top. Reorder them with the arrows.",
+      position: "bottom",
+    },
+    {
+      selector: "a[href='/daily-streak']",
+      title: "Check in daily",
+      body: "Earn free wallet credit by checking in every day. The longer your streak, the bigger the reward.",
+      position: "bottom",
+    },
+    {
+      selector: "a[href='/history']",
+      title: "Recent transactions",
+      body: "All your purchases and wallet activity land here. Tap any transaction to see its receipt and PINs.",
+      position: "top",
+    },
+  ],
+}
+
+// Cache-first storage key for dashboard summary. Short TTL - we want the
+// user to see their *current* balance most of the time, but render the
+// cached value instantly on mount and refresh in the background.
+const SUMMARY_CACHE_KEY = "zamoraxpay:dashboard-summary:v1"
+const SUMMARY_TTL_MS = 30_000  // 30 seconds
 
 interface Order {
   id: string
@@ -197,8 +244,31 @@ export default function DashboardPage() {
     let cancelled = false
 
     async function load() {
-      setLoading(true)
-      setLoadError(null)
+      // Cache-first: render the cached summary instantly (if present)
+      // before kicking off the network request. This makes back-button
+      // and re-mounts feel instant on 2G/3G networks - the user sees
+      // their balance, recent transactions, and quick actions without
+      // waiting for a fresh fetch.
+      const cached = getJSON<{ balanceKobo?: number; orders?: Order[]; walletTransactions?: WalletTx[]; streak?: { canCheckInToday?: boolean; nextRewardKobo?: number }; activity?: ActivityItem[] } | null>(SUMMARY_CACHE_KEY, null as unknown as { balanceKobo?: number; orders?: Order[]; walletTransactions?: WalletTx[]; streak?: { canCheckInToday?: boolean; nextRewardKobo?: number }; activity?: ActivityItem[] } | null)
+      if (cached && !cancelled) {
+        if (typeof cached.balanceKobo === "number") {
+          setBalanceKobo(cached.balanceKobo)
+          setBalanceUpdatedAt(Date.now())
+        }
+        if (cached.streak) {
+          setCanCheckInToday(Boolean(cached.streak.canCheckInToday))
+          setNextRewardKobo(cached.streak.nextRewardKobo ?? 0)
+          setStreakLoaded(true)
+        }
+        if (Array.isArray(cached.activity)) {
+          setActivity(cached.activity.slice(0, 5))
+        }
+        // We have a cached render - mark loading false even before the
+        // network call returns. The fresh fetch will silently update
+        // state when it lands.
+        setLoading(false)
+      }
+
       try {
         const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
@@ -230,10 +300,26 @@ export default function DashboardPage() {
             .map((w): ActivityItem => ({ kind: "wallet", id: w.id, created_at: w.created_at, data: w })),
         ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-        setActivity(merged.slice(0, 5))
+        const recentActivity = merged.slice(0, 5)
+        setActivity(recentActivity)
+
+        // Persist to localStorage for the next mount.
+        try {
+          setJSON(SUMMARY_CACHE_KEY, {
+            balanceKobo: data.balanceKobo ?? 0,
+            streak: data.streak,
+            activity: recentActivity,
+            cachedAt: Date.now(),
+          }, SUMMARY_TTL_MS)
+        } catch { /* storage may be unavailable - non-fatal */ }
       } catch (error) {
         if (!cancelled) {
-          setLoadError(error instanceof Error ? error.message : "We could not load your dashboard. Please try again.")
+          // Only show the error if we have no cached fallback to render.
+          if (!cached) {
+            setLoadError(error instanceof Error ? error.message : "We could not load your dashboard. Please try again.")
+            setLoading(false)
+          }
+          // Else: cache is rendering; the error will surface on next manual retry.
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -253,6 +339,7 @@ export default function DashboardPage() {
   return (
     <PullToRefresh onRefresh={async () => { setRetryCount((c) => c + 1) }}>
     <div className="mx-auto max-w-3xl px-4 py-8 sm:py-10">
+      <GuidedTour tour={DASHBOARD_TOUR} />
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-secondary">{greeting}{firstName ? `, ${firstName}` : ""}</p>
@@ -493,7 +580,7 @@ export default function DashboardPage() {
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
                 <Clock className="h-5 w-5 text-muted-foreground" />
               </span>
-              <p className="text-sm text-muted-foreground">No transactions yet — fund your wallet to get started.</p>
+              <p className="text-sm text-muted-foreground">No transactions yet, fund your wallet to get started.</p>
             </div>
           ) : (
             <div className="divide-y divide-border/70">

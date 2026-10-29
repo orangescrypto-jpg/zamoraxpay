@@ -1,6 +1,6 @@
 "use client"
 
-import { cn } from "@/lib/utils"
+import { cn, formatNaira } from "@/lib/utils"
 
 const DEFAULTS = [100, 200, 500, 1000, 2000, 5000]
 
@@ -26,13 +26,16 @@ export function AmountChips({
             type="button"
             onClick={() => onSelect(n)}
             className={cn(
-              "min-h-10 rounded-xl border px-3 py-2 text-xs font-semibold transition active:scale-95",
+              "min-h-11 rounded-xl border px-3 py-2 text-xs font-semibold transition active:scale-95",
               active
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-border bg-card text-secondary hover:border-primary/40 dark:text-foreground"
             )}
           >
-            ₦{n.toLocaleString("en-NG")}
+            {/* Use the centralized formatNaira helper everywhere - the
+                audit flagged inconsistent currency formatting where
+                some places hardcoded `₦${n.toLocaleString()}`. */}
+            {formatNaira(n * 100)}
           </button>
         )
       })}

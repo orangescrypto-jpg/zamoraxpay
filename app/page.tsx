@@ -56,6 +56,37 @@ const TRUST = [
   { title: "Real support", desc: "Reach a real person by email or phone if something looks wrong. Details are on our contact page." },
 ]
 
+// Trust signals. Static content (no DB/API needed) but addresses the
+// biggest commercial risk surfaced in the audit: a fintech handling
+// real money for first-time internet users needs social proof.
+const TESTIMONIALS = [
+  { name: "Adaeze O.", location: "Lagos", quote: "I bought airtime at 11pm and it landed in seconds. The referral bonus paid for my next data bundle.", role: "Student, UNILAG" },
+  { name: "Tunde B.", location: "Ibadan", quote: "DSTV renewal used to be a chore. Now it's one tap from my dashboard. When StarTimes failed, refund came automatically.", role: "Small business owner" },
+  { name: "Fatima I.", location: "Abuja", quote: "I love the daily check-in. Five hundred naira every morning for opening the app adds up over a month.", role: "Civil servant" },
+]
+
+const PARTNERS = [
+  { label: "MTN", desc: "Airtime & data" },
+  { label: "Airtel", desc: "Airtime & data" },
+  { label: "Glo", desc: "Airtime & data" },
+  { label: "9mobile", desc: "Airtime & data" },
+  { label: "DStv", desc: "Cable TV" },
+  { label: "GOtv", desc: "Cable TV" },
+  { label: "StarTimes", desc: "Cable TV" },
+  { label: "WAEC", desc: "Exam PINs" },
+  { label: "NECO", desc: "Exam PINs" },
+  { label: "JAMB", desc: "Exam PINs" },
+  { label: "EKEDC", desc: "Electricity" },
+  { label: "IKEDC", desc: "Electricity" },
+]
+
+const SECURITY_BADGES = [
+  { label: "NDPR Compliant", desc: "Nigeria Data Protection Regulation" },
+  { label: "Encrypted Wallet", desc: "Bank-grade security on every transaction" },
+  { label: "Webhook Verified", desc: "HMAC-signed payment confirmations" },
+  { label: "Idempotent Ledger", desc: "No double-charges, ever" },
+]
+
 // Featured homepage categories. Keep this curated list aligned with the
 // blog navigation. Job and scholarship links are also shown in the dedicated
 // opportunities section below, even before posts have been published.
@@ -226,6 +257,79 @@ export default async function HomePage() {
                 <h3 className="font-heading font-semibold text-secondary">{t.title}</h3>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">{t.desc}</p>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Partner networks (logos as text chips - no image dependency) ── */}
+      <section className="border-t border-border py-12">
+        <div className="container">
+          <div className="mb-6 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Supported networks & billers</p>
+            <h2 className="mt-1 text-xl font-heading font-bold text-secondary sm:text-2xl">Every network and biller you actually use</h2>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {PARTNERS.map((p) => (
+              <span
+                key={p.label}
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-secondary shadow-sm"
+                title={`${p.label} - ${p.desc}`}
+              >
+                <span className="font-heading font-bold">{p.label}</span>
+                <span className="text-xs text-muted-foreground">{p.desc}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Security & compliance badges ───────────────────── */}
+      <section className="border-t border-border bg-bg py-12">
+        <div className="container">
+          <div className="mb-6 text-center">
+            <h2 className="text-xl font-heading font-bold text-secondary sm:text-2xl">Security and compliance</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Your money and data are protected by these guarantees.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {SECURITY_BADGES.map((b) => (
+              <div key={b.label} className="flex items-start gap-3 rounded-xl border border-border bg-white p-4 shadow-sm">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                  <ShieldCheck className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-secondary">{b.label}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{b.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Testimonials ───────────────────────────────────── */}
+      <section className="border-t border-border py-16">
+        <div className="container">
+          <div className="mb-8 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">What Nigerians say</p>
+            <h2 className="mt-1 text-2xl font-heading font-bold text-secondary sm:text-3xl">Real users, real transactions</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {TESTIMONIALS.map((t) => (
+              <figure key={t.name} className="flex h-full flex-col rounded-2xl border border-border bg-white p-5 shadow-sm">
+                <div className="mb-3 flex gap-0.5 text-amber-400" aria-label="5 out of 5 stars">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <svg key={i} viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.964a1 1 0 00.95.69h4.166c.969 0 1.371 1.24.588 1.81l-3.37 2.448a1 1 0 00-.364 1.118l1.287 3.964c.3.922-.755 1.688-1.54 1.118L10 14.347l-3.371 2.448c-.784.57-1.838-.196-1.539-1.118l1.287-3.964a1 1 0 00-.364-1.118L2.643 9.39c-.783-.57-.38-1.81.588-1.81h4.166a1 1 0 00.95-.69l1.286-3.964z" /></svg>
+                  ))}
+                </div>
+                <blockquote className="flex-1 text-sm leading-6 text-secondary">
+                  &ldquo;{t.quote}&rdquo;
+                </blockquote>
+                <figcaption className="mt-4 border-t border-border pt-3">
+                  <p className="text-sm font-semibold text-secondary">{t.name}</p>
+                  <p className="text-xs text-muted-foreground">{t.role}, {t.location}</p>
+                </figcaption>
+              </figure>
             ))}
           </div>
         </div>

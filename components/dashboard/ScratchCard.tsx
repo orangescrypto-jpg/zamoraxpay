@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { SpinOutcome } from "@/components/dashboard/useSpinStatus"
 import type { WheelSpinResult } from "@/components/dashboard/SpinWheel"
+import { playSound } from "@/hooks/useSoundEffects"
 
 const SIZE = 280
 const SCRATCH_RADIUS = 26
@@ -296,9 +297,28 @@ export function ScratchCard({
     if (clearedRef.current >= REVEAL_THRESHOLD && outcome) {
       doneRef.current = true
       ctx.clearRect(0, 0, SIZE * DPR, SIZE * DPR)
-      if (outcome.prizeType !== "nothing") setCelebrate(true)
+      if (outcome.prizeType !== "nothing") {
+        setCelebrate(true)
+        // Haptic feedback on win - long ascending pattern. Plays on Android
+        // devices only; iOS Safari silently no-ops.
+        try {
+          if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+            navigator.vibrate([20, 60, 30, 60, 80])
+          }
+        } catch { /* non-fatal */ }
+        // Sound effect (respects the user's mute preference set in Page tools).
+        playSound("win")
+      } else {
+        // Loss - short single pulse so the user feels the reveal happened.
+        try {
+          if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+            navigator.vibrate(30)
+          }
+        } catch { /* non-fatal */ }
+        playSound("lose")
+      }
       // Dwell on the reveal long enough to actually read it before this
-      // component resets itself for the next ticket (see resetKey below) —
+      // component resets itself for the next ticket (see resetKey below) -
       // there's no longer a separate "Try again" screen holding it up.
       setTimeout(() => onDone(outcome), 1800)
     }

@@ -6,10 +6,19 @@ import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { getJSON, setJSON } from "@/lib/storage"
 import { Eye, EyeOff, ShieldCheck } from "lucide-react"
 import { AmountChips } from "@/components/ui/amount-chips"
+import { PullToRefresh } from "@/components/shared/PullToRefresh"
 
 const QUICK_AMOUNTS = [50000, 100000, 200000, 500000] // kobo
+
+// Cache-first: wallet balance is the most-visited screen and the most
+// critical for user trust. Render the last-known balance instantly on
+// mount, then refetch fresh in the background. Short TTL because users
+// want to know the current state after a fund/withdraw.
+const BALANCE_CACHE_KEY = "zamoraxpay:wallet-balance:v1"
+const BALANCE_TTL_MS = 10_000  // 10 seconds
 
 export default function WalletPage() {
   return (
@@ -28,6 +37,7 @@ function WalletPageInner() {
   const router = useRouter()
   const [balanceKobo, setBalanceKobo] = useState<number | null>(null)
   const [balanceError, setBalanceError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
   const [amount, setAmount] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,21 +58,34 @@ function WalletPageInner() {
 
   async function loadBalance() {
     setBalanceError(null)
+    // Cache-first: render the last-known balance from localStorage, then
+    // fetch fresh in the background. Eliminates the "blank pulse" on
+    // every wallet page mount.
+    const cached = getJSON<number | null>(BALANCE_CACHE_KEY, null)
+    if (cached != null) setBalanceKobo(cached)
+
     try {
       const headers = await getAuthHeader()
       const res = await fetch("/api/wallet/balance", { headers })
       if (!res.ok) throw new Error("We could not load your wallet balance.")
       const data = await res.json()
-      setBalanceKobo(typeof data.balanceKobo === "number" ? data.balanceKobo : 0)
+      const next = typeof data.balanceKobo === "number" ? data.balanceKobo : 0
+      setBalanceKobo(next)
+      try { setJSON(BALANCE_CACHE_KEY, next, BALANCE_TTL_MS) } catch { /* storage may be unavailable */ }
     } catch (error) {
-      setBalanceError(error instanceof Error ? error.message : "We could not load your wallet balance.")
+      // If we already have a cached balance showing, suppress the error
+      // state - the user can still see their (stale) balance.
+      if (cached == null) {
+        setBalanceError(error instanceof Error ? error.message : "We could not load your wallet balance.")
+      }
     }
   }
 
   useEffect(() => {
     loadBalance()
     try { setBalanceVisible(window.localStorage.getItem("zamoraxpay:show-balance") !== "0") } catch {}
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryCount])
 
   // Safety net: if the user is redirected back from Korapay before the
   // webhook has landed, actively confirm the payment ourselves instead
@@ -159,6 +182,7 @@ function WalletPageInner() {
     })
   }
   return (
+    <PullToRefresh onRefresh={async () => { setRetryCount((c) => c + 1) }}>
     <div className="container max-w-md py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-heading font-bold text-secondary">Wallet</h1>
@@ -169,22 +193,22 @@ function WalletPageInner() {
 
       {verifyStatus === "checking" && (
         <p className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-700">
-          Confirming your payment…
+          Confirming your payment...
         </p>
       )}
       {verifyStatus === "success" && (
         <p className="mb-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">
-          Payment confirmed - your wallet has been credited.
+          Payment confirmed, your wallet has been credited.
         </p>
       )}
       {verifyStatus === "failed" && (
         <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
-          We couldn't confirm this payment yet. If you were charged, it should reflect shortly -
-          contact support if your balance doesn't update within a few minutes.
+          We couldn&apos;t confirm this payment yet. If you were charged, it should reflect shortly,
+          contact support if your balance doesn&apos;t update within a few minutes.
         </p>
       )}
 
-      <div className="mb-6 overflow-hidden rounded-2xl bg-secondary p-6 text-white shadow-lg">
+      <div className="mb-6 overflow-hidden rounded-2xl bg-secondary p-6 text-white shadow-balance">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-white/70">Current balance</p>
           <button type="button" onClick={toggleBalanceVisibility} className="rounded-lg p-1.5 text-white/70 hover:bg-card/10 hover:text-white" aria-label={balanceVisible ? "Hide wallet balance" : "Show wallet balance"}>
@@ -249,5 +273,6 @@ function WalletPageInner() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   )
 }

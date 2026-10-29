@@ -7,6 +7,7 @@ import { ArrowDownToLine, ArrowUpRight, CheckCircle2, ChevronDown, ChevronUp, Cl
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira, formatDate } from "@/lib/utils"
 import { ReceiptButton } from "@/components/dashboard/ReceiptButton"
+import { PullToRefresh } from "@/components/shared/PullToRefresh"
 
 interface DeliveredPin { pin: string; serialNumber?: string }
 interface OrderDeliveredData { pins?: DeliveredPin[]; token?: string; units?: string; deliveryNote?: string }
@@ -124,12 +125,18 @@ export default function HistoryPage() {
       totals.set(service, (totals.get(service) ?? 0) + (item.data.display_amount_kobo ?? item.data.amount_kobo))
     }
     const topService = Array.from(totals.entries()).sort((a, b) => b[1] - a[1])[0]
+    // Build a per-service breakdown for a horizontal bar chart. Top 5 only.
+    const breakdown = Array.from(totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([label, kobo]) => ({ label, kobo }))
     return {
       recentSpendKobo: recentOrders.reduce((sum, item) => sum + (item.data.display_amount_kobo ?? item.data.amount_kobo), 0),
       recentCount: recentOrders.length,
       successfulCount: successfulOrders.length,
       topService: topService?.[0] ?? null,
       topServiceSpendKobo: topService?.[1] ?? 0,
+      breakdown,
     }
   }, [items])
 
@@ -156,6 +163,7 @@ export default function HistoryPage() {
   if (loading) return <PageSkeleton rows={7} />
 
   return (
+    <PullToRefresh onRefresh={async () => { setRetryCount((c) => c + 1) }}>
     <div className="container max-w-2xl py-8">
       <div className="mb-5 flex items-end justify-between gap-3">
         <div><p className="text-xs font-semibold uppercase tracking-wider text-primary">Activity</p><h1 className="mt-1 text-2xl font-heading font-bold text-secondary">Transaction History</h1></div>
@@ -202,6 +210,29 @@ export default function HistoryPage() {
             <div className="rounded-xl bg-muted/60 p-3"><p className="text-[11px] font-medium text-muted-foreground">Spend in last 30 days</p><p className="mt-1 break-words text-lg font-semibold tabular-nums text-secondary">{formatNaira(spendingInsights.recentSpendKobo)}</p><p className="mt-1 text-[10px] text-muted-foreground">{spendingInsights.recentCount} purchases in loaded records</p></div>
             <div className="col-span-2 rounded-xl bg-muted/60 p-3 sm:col-span-1"><p className="text-[11px] font-medium text-muted-foreground">Top service by spend</p><p className="mt-1 truncate text-sm font-semibold capitalize text-secondary">{spendingInsights.topService ?? "No completed purchases"}</p>{spendingInsights.topService && <p className="mt-1 text-xs text-muted-foreground">{formatNaira(spendingInsights.topServiceSpendKobo)}</p>}</div>
           </div>
+          {/* Per-service breakdown bar chart. Pure CSS so we don't ship a
+              chart library. Only rendered when there's actual breakdown
+              data (>= 2 services - otherwise the bar chart is meaningless). */}
+          {spendingInsights.breakdown.length >= 2 && (
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-[11px] font-medium text-muted-foreground">Top services by spend (last 30 days)</p>
+              <div className="mt-3 space-y-2">
+                {spendingInsights.breakdown.map((row) => {
+                  const max = spendingInsights.breakdown[0]?.kobo || 1
+                  const pct = Math.max(4, Math.round((row.kobo / max) * 100))
+                  return (
+                    <div key={row.label} className="flex items-center gap-3">
+                      <span className="w-28 shrink-0 truncate text-xs font-medium capitalize text-secondary">{row.label}</span>
+                      <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="w-20 shrink-0 text-right text-xs font-semibold tabular-nums text-secondary">{formatNaira(row.kobo)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -247,6 +278,7 @@ export default function HistoryPage() {
       )}
       {copied && <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full bg-secondary px-4 py-2 text-xs font-semibold text-white shadow-lg">Copied to clipboard</div>}
     </div>
+    </PullToRefresh>
   )
 }
 

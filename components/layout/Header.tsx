@@ -86,14 +86,14 @@ function BannerSlider() {
           <button
             aria-label="Previous banner"
             onClick={() => goTo(activeIndex - 1)}
-            className="absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
+            className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
           >
             ‹
           </button>
           <button
             aria-label="Next banner"
             onClick={() => goTo(activeIndex + 1)}
-            className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
+            className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
           >
             ›
           </button>
@@ -191,15 +191,26 @@ export function Header() {
               Dashboard
             </Link>
           )}
+          {/* Blog nav dropdown: keyboard-accessible.
+              Previously hover-only (onMouseEnter/Leave), which made it
+              unusable for keyboard + screen-reader users. Now opens on
+              click, focus, and hover, and closes on Escape / blur. */}
           <div
             className="relative"
             onMouseEnter={() => setBlogMenuOpen(true)}
             onMouseLeave={() => setBlogMenuOpen(false)}
+            onFocus={() => setBlogMenuOpen(true)}
+            onBlur={(e) => {
+              // Only close when focus leaves the entire dropdown container.
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setBlogMenuOpen(false)
+            }}
           >
-            <Link
-              href="/blog"
-              className="flex items-center gap-1 text-sm font-medium text-secondary hover:text-primary"
+            <button
+              type="button"
+              onClick={() => setBlogMenuOpen((v) => !v)}
               aria-expanded={blogMenuOpen}
+              aria-haspopup="true"
+              className="flex items-center gap-1 text-sm font-medium text-secondary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md"
             >
               Blog
               <svg
@@ -214,13 +225,16 @@ export function Header() {
                   clipRule="evenodd"
                 />
               </svg>
-            </Link>
-
+            </button>
             {blogMenuOpen && (
-              <div className="absolute left-0 top-full z-50 w-48 rounded-lg border border-border bg-card py-1 shadow-lg">
+              <div
+                className="absolute left-0 top-full z-50 w-48 rounded-lg border border-border bg-card py-1 shadow-lg"
+                onKeyDown={(e) => { if (e.key === "Escape") setBlogMenuOpen(false) }}
+              >
                 <Link
                   href="/blog"
                   className="block px-4 py-2 text-sm font-medium text-secondary hover:bg-muted hover:text-primary"
+                  onClick={() => setBlogMenuOpen(false)}
                 >
                   All Posts
                 </Link>
@@ -230,6 +244,7 @@ export function Header() {
                     key={c.slug}
                     href={`/blog?category=${c.slug}`}
                     className="block px-4 py-2 text-sm text-secondary hover:bg-muted hover:text-primary"
+                    onClick={() => setBlogMenuOpen(false)}
                   >
                     {c.label}
                   </Link>
@@ -239,6 +254,9 @@ export function Header() {
           </div>
           <Link href="/reseller" prefetch={false} className="text-sm font-medium text-secondary hover:text-primary">
             Become a Reseller
+          </Link>
+          <Link href="/help" className="text-sm font-medium text-secondary hover:text-primary">
+            Help
           </Link>
           {isAdmin && (
             <Link href="/admin" className="text-sm font-medium text-secondary hover:text-primary">
@@ -289,12 +307,12 @@ export function Header() {
             onClick={() => setMenuOpen((v) => !v)}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-border md:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-md border border-border md:hidden"
           >
             <span className="flex flex-col gap-1">
-              <span className={cn("block h-0.5 w-5 bg-secondary transition-transform", menuOpen && "translate-y-1.5 rotate-45")} />
-              <span className={cn("block h-0.5 w-5 bg-secondary transition-opacity", menuOpen && "opacity-0")} />
-              <span className={cn("block h-0.5 w-5 bg-secondary transition-transform", menuOpen && "-translate-y-1.5 -rotate-45")} />
+              <span className={cn("block h-0.5 w-5 bg-secondary transition-transform dark:bg-foreground", menuOpen && "translate-y-1.5 rotate-45")} />
+              <span className={cn("block h-0.5 w-5 bg-secondary transition-opacity dark:bg-foreground", menuOpen && "opacity-0")} />
+              <span className={cn("block h-0.5 w-5 bg-secondary transition-transform dark:bg-foreground", menuOpen && "-translate-y-1.5 -rotate-45")} />
             </span>
           </button>
         </div>
@@ -350,6 +368,13 @@ export function Header() {
               className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Blog
+            </Link>
+            <Link
+              href="/help"
+              onClick={() => setMenuOpen(false)}
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+            >
+              Help Center
             </Link>
             <div className="flex flex-col pl-3">
               {BLOG_NAV_CATEGORIES.map((c) => (

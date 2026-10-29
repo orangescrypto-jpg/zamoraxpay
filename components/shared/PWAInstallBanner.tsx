@@ -3,48 +3,53 @@
 // Listens for the browser's beforeinstallprompt event (Chrome/Edge/
 // Android), stashes it, and shows a dismissible bottom banner offering
 // to install the PWA. Silently renders nothing on browsers that don't
-// fire the event (iOS Safari, already-installed apps, etc.) — this is
+// fire the event (iOS Safari, already-installed apps, etc.) - this is
 // a progressive enhancement, not a requirement.
+//
+// Consolidated dismiss: previously this banner used its own
+// `zamoraxpay:pwa-install-dismissed` boolean flag, while usePWA.ts used
+// `zamoraxpay_pwa_dismissed_at` (timestamp + TTL). They were never
+// synced, so a user could dismiss this banner and still get a
+// re-prompt from the other system on the next session. Now this
+// banner delegates to `usePWA.dismiss()` so both stay in sync. The
+// TTL is 14 days - if the user dismisses, they won't see this banner
+// again for 2 weeks (matches the usePWA.ts canShow default).
 
 "use client"
 
 import { useEffect, useState } from "react"
+import { useInstallPrompt } from "@/hooks/usePWA"
+
+// 14-day cooldown after dismissal. Long enough that the user won't be
+// nagged weekly; short enough that they'll see it again if they
+// initially dismissed by mistake.
+const DISMISS_RESHOW_SEC = 14 * 24 * 60 * 60
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>
 }
 
-const DISMISS_KEY = "zamoraxpay:pwa-install-dismissed"
-
 export default function PWAInstallBanner() {
+  // useInstallPrompt already wires beforeinstallprompt + appinstalled
+  // listeners AND manages the dismissed-at timestamp. We just consume
+  // its state instead of duplicating the storage logic here.
+  const { canShow, dismiss, install } = useInstallPrompt()
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
-
-    // Don't show again this "session" (until localStorage is cleared or
-    // the flag expires) if the user already dismissed it once.
-    let dismissed = false
-    try {
-      dismissed = !!localStorage.getItem(DISMISS_KEY)
-    } catch {
-      // localStorage can throw in private browsing / disabled-storage
-      // contexts — treat as "not dismissed" and continue.
-    }
-    if (dismissed) return
+    // Gate on canShow so we honour the 14-day cooldown.
+    if (!canShow(DISMISS_RESHOW_SEC)) return
 
     function handleBeforeInstallPrompt(e: Event) {
       e.preventDefault()
       setDeferredPrompt(e as BeforeInstallPromptEvent)
       setVisible(true)
     }
-
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
 
-    // If the app gets installed via another path (e.g. browser menu),
-    // hide the banner and drop the stashed prompt.
     function handleAppInstalled() {
       setVisible(false)
       setDeferredPrompt(null)
@@ -55,13 +60,18 @@ export default function PWAInstallBanner() {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
       window.removeEventListener("appinstalled", handleAppInstalled)
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canShow])
 
   async function handleInstall() {
-    if (!deferredPrompt) return
+    if (!deferredPrompt) {
+      // Fall back to the usePWA install path (which itself checks
+      // deferredPrompt - if both are missing, this is a no-op).
+      await install()
+      setVisible(false)
+      return
+    }
     await deferredPrompt.prompt()
-    // Result isn't used for anything beyond letting the OS-level
-    // install UI resolve — either way we're done with this prompt.
     await deferredPrompt.userChoice
     setDeferredPrompt(null)
     setVisible(false)
@@ -69,13 +79,10 @@ export default function PWAInstallBanner() {
 
   function handleDismiss() {
     setVisible(false)
-    if (typeof window === "undefined") return
-    try {
-      localStorage.setItem(DISMISS_KEY, "1")
-    } catch {
-      // localStorage can throw in private browsing / disabled-storage
-      // contexts — dismissal just won't persist, which is fine.
-    }
+    // Delegate to usePWA.dismiss() so the timestamp is recorded and
+    // both systems stay in sync. Also clears the stashed prompt so a
+    // re-prompt only happens after the cooldown.
+    dismiss()
   }
 
   if (!visible || !deferredPrompt) return null
@@ -84,7 +91,7 @@ export default function PWAInstallBanner() {
     <div
       role="dialog"
       aria-label="Install ZamoraxPay app"
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-white p-4 shadow-lg sm:bottom-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:rounded-xl sm:border"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card p-4 shadow-lg sm:bottom-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:rounded-xl sm:border"
     >
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { Flame, Calendar, Gift } from "lucide-react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
+import { getJSON, setJSON } from "@/lib/storage"
 import { SpinCard } from "@/components/dashboard/SpinCard"
 import { useSpinStatus } from "@/components/dashboard/useSpinStatus"
 
@@ -30,6 +31,10 @@ interface StreakData {
   history: CheckinHistoryRow[]
 }
 
+// Streak only changes once per day - long TTL is fine. 5 min.
+const CACHE_KEY = "zamoraxpay:daily-streak:v1"
+const CACHE_TTL_MS = 5 * 60_000
+
 export default function DailyStreakPage() {
   const [data, setData] = useState<StreakData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -46,16 +51,24 @@ export default function DailyStreakPage() {
   }
 
   async function load() {
-    setLoading(true)
+    // Cache-first: streak only changes once per day, so the cached value
+    // is almost always correct - render it instantly, refresh in bg.
+    const cached = getJSON<StreakData | null>(CACHE_KEY, null)
+    if (cached) {
+      setData(cached)
+      setLoading(false)
+    }
     const headers = await getAuthHeader()
     const res = await fetch("/api/daily-streak", { headers })
     const json = await res.json()
     setData(json)
     setLoading(false)
+    try { setJSON(CACHE_KEY, json, CACHE_TTL_MS) } catch { /* storage may be unavailable */ }
   }
 
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleCheckIn() {
@@ -101,7 +114,7 @@ export default function DailyStreakPage() {
           Current streak
         </div>
         <p className="mt-2 text-4xl font-bold tracking-tight">
-          {loading ? "…" : `Day ${data?.currentStreak ?? 0}`}
+          {loading ? "..." : `Day ${data?.currentStreak ?? 0}`}
         </p>
 
         {!loading && data && (
@@ -127,7 +140,7 @@ export default function DailyStreakPage() {
 
         {!loading && (data?.protectionTokens ?? 0) > 0 && (
           <p className="mt-3 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
-            🛡️ {data?.protectionTokens} streak shield{data?.protectionTokens === 1 ? "" : "s"} — saves your streak if you miss a day
+            🛡️ {data?.protectionTokens} streak shield{data?.protectionTokens === 1 ? "" : "s"}, saves your streak if you miss a day
           </p>
         )}
       </div>
@@ -136,11 +149,11 @@ export default function DailyStreakPage() {
         <SpinCard spin={spin} />
       </div>
 
-      <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-white p-4">
+      <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-card p-4">
         <div>
           <p className="text-xs font-medium text-secondary">Unclaimed check-in rewards</p>
           <p className="mt-1 text-lg font-bold text-primary">
-            {loading ? "…" : formatNaira(data?.unclaimedKobo ?? 0)}
+            {loading ? "..." : formatNaira(data?.unclaimedKobo ?? 0)}
           </p>
         </div>
         <button
@@ -160,9 +173,9 @@ export default function DailyStreakPage() {
 
       <div className="mt-8">
         <h2 className="text-lg font-semibold text-primary">Check-in history</h2>
-        <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-white shadow-sm">
+        <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-card shadow-sm">
           {loading ? (
-            <p className="p-4 text-sm text-secondary">Loading…</p>
+            <p className="p-4 text-sm text-secondary">Loading...</p>
           ) : !data?.history.length ? (
             <div className="flex flex-col items-center gap-2 p-8 text-center">
               <Calendar className="h-8 w-8 text-gray-300" />

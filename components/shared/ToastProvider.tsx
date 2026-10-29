@@ -21,9 +21,13 @@ type ToastFn = (message: string, variant?: ToastVariant) => void
 const ToastContext = createContext<ToastFn | null>(null)
 
 const VARIANT_STYLES: Record<ToastVariant, string> = {
-  success: "bg-secondary text-white",
+  // success: accent green so users can visually distinguish a successful
+  // action from a neutral info notice. The previous implementation had
+  // success and info both rendering as bg-secondary text-white, which made
+  // them indistinguishable.
+  success: "bg-accent text-accent-foreground",
   error: "bg-destructive text-destructive-foreground",
-  info: "bg-secondary text-white",
+  info: "bg-secondary text-secondary-foreground",
 }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {

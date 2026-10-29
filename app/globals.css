@@ -60,37 +60,45 @@
     @apply font-heading;
   }
 
-  /* ── Dark-mode global resets ───────────────────────────────────────────
-     Inputs, selects, and textareas rendered without explicit bg/text
-     classes fall back to browser defaults (white bg, black text).
-     These rules force them onto the design-system tokens in dark mode
-     so every form element is readable without touching every file.     */
-  .dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-  .dark select,
-  .dark textarea {
-    background-color: hsl(var(--background));
+  /* Inputs/selects/textarea rendered without explicit bg/text classes
+     fall back to browser defaults (white bg, black text). Force them onto
+     the design-system tokens so every form element is readable. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    background-color: hsl(var(--card));
     color: hsl(var(--foreground));
     border-color: hsl(var(--border));
   }
-  .dark input::placeholder,
-  .dark textarea::placeholder {
+  input::placeholder,
+  textarea::placeholder {
     color: hsl(var(--muted-foreground));
   }
-
-  /* bg-white cards/panels — map to bg-card in dark mode              */
-  .dark .bg-white {
-    background-color: hsl(var(--card));
-  }
-
-  /* text-secondary is near-black navy (#0B1220) — unreadable in dark.
-     In dark mode the secondary CSS variable is remapped to a lighter
-     slate, but class-based `text-secondary` still renders the original
-     value when Tailwind generates it statically. This rule ensures
-     text-secondary elements pick up the remapped token in dark mode.   */
-  .dark .text-secondary {
-    color: hsl(var(--foreground));
-  }
 }
+
+/* ------------------------------------------------------------------
+   Shadow tokens (used by hover states, modals, popovers, sticky bars).
+   Centralised so authors stop re-inventing arbitrary shadows per file.
+   ------------------------------------------------------------------ */
+:root {
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-popover: 0 18px 50px rgb(15 23 42 / 0.20);
+  --shadow-sticky: 0 -8px 24px -18px rgb(15 23 42 / 0.35);
+  --shadow-lift: 0 14px 30px -18px rgb(15 30 77 / 0.35);
+  --shadow-balance: 0 20px 40px -16px rgb(15 30 77 / 0.55);
+}
+.dark {
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.40), 0 1px 3px rgb(0 0 0 / 0.50);
+  --shadow-popover: 0 18px 50px rgb(0 0 0 / 0.55);
+  --shadow-sticky: 0 -8px 24px -18px rgb(0 0 0 / 0.60);
+  --shadow-lift: 0 14px 30px -18px rgb(0 0 0 / 0.55);
+  --shadow-balance: 0 20px 40px -16px rgb(0 0 0 / 0.65);
+}
+.shadow-card { box-shadow: var(--shadow-card); }
+.shadow-popover { box-shadow: var(--shadow-popover); }
+.shadow-sticky { box-shadow: var(--shadow-sticky); }
+.shadow-lift { box-shadow: var(--shadow-lift); }
+.shadow-balance { box-shadow: var(--shadow-balance); }
 
 /* Banner slider transitions */
 @layer utilities {
@@ -101,6 +109,24 @@
     animation: slide-out-left 0.6s ease-out;
   }
 }
+
+/* Skeleton shimmer - more polished than plain animate-pulse.
+   Used by Skeleton component and inline pulse blocks across the app. */
+@keyframes zpx-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.zpx-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted) / 0.5) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: zpx-shimmer 1.4s linear infinite;
+}
+html.zpx-reduce-motion .zpx-shimmer { animation: none; background: hsl(var(--muted)); }
 
 /* Small, opt-in browser-side experience tools. No server calls or stored account data. */
 :root { --local-text-scale: 1; }
@@ -137,6 +163,27 @@ body[data-mobile-menu="open"] [data-whatsapp-fab] {
   pointer-events: none;
   visibility: hidden;
 }
+
+/* Low-data mode: kill decorative background images and large hero blobs.
+   Applied when user toggles Low-data mode in Page tools. Saves bandwidth
+   on 2G/3G networks. */
+html.zpx-low-data img[loading!="lazy"],
+html.zpx-low-data picture source { display: none !important; }
+html.zpx-low-data .zpx-decorative-bg { background: none !important; }
+html.zpx-low-data [data-zpx-bg-image] { background-image: none !important; }
+
+/* Coach-mark guided tour */
+.zpx-tour-overlay { position: fixed; inset: 0; z-index: 220; background: rgb(11 18 32 / 0.55); }
+.zpx-tour-pop {
+  position: fixed; z-index: 221; max-width: min(20rem, calc(100vw - 2rem));
+  background: hsl(var(--card)); color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border)); border-radius: 1rem; padding: 1rem;
+  box-shadow: var(--shadow-popover);
+}
+.zpx-tour-pop h3 { font-size: 0.95rem; font-weight: 700; }
+.zpx-tour-pop p { font-size: 0.8rem; color: hsl(var(--muted-foreground)); margin-top: 0.25rem; }
+.zpx-tour-pop .zpx-tour-actions { display: flex; gap: 0.5rem; justify-content: space-between; margin-top: 0.85rem; }
+html.zpx-reduce-motion .zpx-tour-pop { transition: none; }
 
 
 @keyframes zpx-confetti-fly {

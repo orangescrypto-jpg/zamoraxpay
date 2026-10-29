@@ -30,11 +30,16 @@ export default function AirtimePage() {
   })
   const [phone, setPhone] = useState("")
   // Remember last selected network (local only)
-  
   function selectNetwork(n: NetworkName) {
     setNetwork(n)
     try { localStorage.setItem("zamoraxpay:last-airtime-network", n) } catch {}
+  }
 
+  // Deep-link support: /dashboard/services/airtime?network=MTN&phone=0801...
+  // Pre-fills the form from share links or "Buy again" shortcuts on the
+  // homepage. Lives at the top-level of the component (not inside
+  // selectNetwork) so it runs on mount - the previous version nested this
+  // useEffect inside selectNetwork, which silently broke deep-linking.
   useEffect(() => {
     const n = searchParams.get("network")
     if (n && (NETWORKS as string[]).includes(n)) selectNetwork(n as NetworkName)
@@ -42,7 +47,6 @@ export default function AirtimePage() {
     if (ph) setPhone(normalizeNgPhone(ph))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
-  }
   // Pre-fill with the user's own registered number for the common case
   // (buying for self) - still a plain editable input, so switching to
   // someone else's number just means typing over it.
@@ -256,14 +260,25 @@ export default function AirtimePage() {
 
         <div className="zpx-sticky-pay pt-2">
         <p className="mb-2 text-center text-xs text-muted-foreground">
-          You pay <span className="font-semibold text-secondary dark:text-foreground">{amount && parseFloat(amount) >= 50 ? `₦${parseFloat(amount).toLocaleString("en-NG")}` : "—"}</span>
+          You pay <span className="font-semibold text-secondary dark:text-foreground">{amount && parseFloat(amount) >= 50 ? `₦${parseFloat(amount).toLocaleString("en-NG")}` : "N/A"}</span>
         </p>
         <button
           type="submit"
           disabled={loading || (!!networkConfirmNeeded && !ackMismatch) || phone.length < 11 || !amount || parseFloat(amount) < 50 || pin.length !== 4}
           className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
-          {loading ? "Processing..." : networkConfirmNeeded ? "Confirm and buy anyway" : "Buy airtime"}
+          {loading ? (
+            // Optimistic processing state: show the amount + recipient
+            // so the user knows exactly what's in flight. Much better
+            // than a generic "Processing..." that could mean anything.
+            <span className="flex items-center justify-center gap-2">
+              <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+                <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+              Sending ₦{parseFloat(amount).toLocaleString("en-NG")} to {phone.slice(-4).padStart(phone.length, "•")}
+            </span>
+          ) : networkConfirmNeeded ? "Confirm and buy anyway" : "Buy airtime"}
         </button>
         </div>
       </form>

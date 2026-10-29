@@ -88,11 +88,11 @@ export function CommandPalette() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Search ZamoraxPay"
-        className="hidden h-9 items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 text-xs font-medium text-muted-foreground transition hover:bg-muted md:inline-flex"
+        className="hidden h-11 items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 text-xs font-medium text-muted-foreground transition hover:bg-muted md:inline-flex"
       >
         <Search className="h-3.5 w-3.5" />
         <span>Search</span>
-        <kbd className="rounded border border-border bg-white px-1.5 py-0.5 font-mono text-[10px]">⌘K</kbd>
+        <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">⌘K</kbd>
       </button>
     )
   }
@@ -103,7 +103,7 @@ export function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label="Search ZamoraxPay"
-        className="mx-auto mt-[8vh] w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-white shadow-2xl"
+        className="mx-auto mt-[8vh] w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-2xl"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-border px-4">
@@ -128,7 +128,7 @@ export function CommandPalette() {
             className="h-14 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <kbd className="hidden rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:block">ESC</kbd>
-          <button type="button" onClick={() => setOpen(false)} aria-label="Close search" className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-secondary">
+          <button type="button" onClick={() => setOpen(false)} aria-label="Close search" className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-secondary dark:hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -149,7 +149,7 @@ export function CommandPalette() {
                 onMouseEnter={() => setSelected(index)}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition",
-                  index === selected ? "bg-primary/8 text-primary" : "text-secondary hover:bg-muted",
+                  index === selected ? "bg-primary/10 text-primary" : "text-secondary hover:bg-muted dark:text-foreground",
                 )}
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -164,7 +164,7 @@ export function CommandPalette() {
           )}
         </div>
         <div className="border-t border-border px-4 py-2.5 text-[11px] text-muted-foreground">
-          <span className="font-medium text-secondary">↑↓</span> navigate · <span className="font-medium text-secondary">Enter</span> open · <span className="font-medium text-secondary">Esc</span> close
+          <span className="font-medium text-secondary dark:text-foreground">↑↓</span> navigate · <span className="font-medium text-secondary dark:text-foreground">Enter</span> open · <span className="font-medium text-secondary dark:text-foreground">Esc</span> close
         </div>
       </div>
     </div>

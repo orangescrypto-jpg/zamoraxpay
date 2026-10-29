@@ -167,7 +167,7 @@ body[data-mobile-menu="open"] [data-whatsapp-fab] {
 /* Low-data mode: kill decorative background images and large hero blobs.
    Applied when user toggles Low-data mode in Page tools. Saves bandwidth
    on 2G/3G networks. */
-html.zpx-low-data img[loading!="lazy"],
+html.zpx-low-data img:not([loading="lazy"]),
 html.zpx-low-data picture source { display: none !important; }
 html.zpx-low-data .zpx-decorative-bg { background: none !important; }
 html.zpx-low-data [data-zpx-bg-image] { background-image: none !important; }

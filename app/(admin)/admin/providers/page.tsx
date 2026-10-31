@@ -187,6 +187,29 @@ export default function AdminProvidersPage() {
     }
   }
 
+  async function openPaymentCredsEditor(p: PaymentProvider) {
+    setEditingCreds({ type: "payment", key: p.providerKey })
+    setCredsFields({})
+    setVisibleFields({})
+
+    if (!p.hasCredentials) return // nothing saved yet — blank fields is correct
+
+    setCredsLoading(true)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch(`/api/admin/providers/payment/credentials?providerKey=${p.providerKey}`, { headers })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.credentials) setCredsFields(data.credentials)
+      }
+      // On a non-OK response (e.g. not super_admin) we silently keep
+      // blank fields rather than blocking the modal — the save itself
+      // still enforces the super_admin check.
+    } finally {
+      setCredsLoading(false)
+    }
+  }
+
   async function saveCredentials() {
     if (!editingCreds) return
 
@@ -321,11 +344,7 @@ export default function AdminProvidersPage() {
                       className="w-16 rounded-md border border-border px-2 py-1 text-center text-sm"
                     />
                     <button
-                      onClick={() => {
-                        setEditingCreds({ type: "payment", key: p.providerKey })
-                        setCredsFields({})
-                        setVisibleFields({})
-                      }}
+                      onClick={() => openPaymentCredsEditor(p)}
                       className="text-sm text-primary hover:underline"
                     >
                       Set keys

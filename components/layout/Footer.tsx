@@ -42,7 +42,7 @@ function FooterBanner() {
   const banner = banners[activeIndex]
 
   const content = (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-card/5 shadow-lg transition-transform duration-300 hover:scale-[1.01]">
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-soft transition-transform duration-300 hover:scale-[1.01]">
       <img
         key={banner.id}
         src={banner.imageUrl}
@@ -114,20 +114,20 @@ export function Footer() {
   const showAd = !isPrivatePath(pathname)
 
   return (
-    <footer className="relative overflow-hidden border-t border-white/10 bg-secondary text-white">
+    <footer className="relative overflow-hidden border-t border-border bg-secondary text-white">
       {/* Top accent line */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent"
       />
       {/* Soft background glows */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-primary/10 blur-3xl"
+        className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-primary/15 blur-3xl"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-20 bottom-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl"
+        className="pointer-events-none absolute -left-20 bottom-0 h-72 w-72 rounded-full bg-primary/10 blur-3xl"
       />
 
       <div className="container relative py-12 sm:py-16 lg:py-20">
@@ -137,18 +137,18 @@ export function Footer() {
         <div className="mb-12 grid gap-8 border-b border-white/10 pb-10 md:grid-cols-5 md:gap-10">
           <div className="md:col-span-3">
             <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-lg font-bold text-primary">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-lg font-heading font-bold text-primary-foreground">
                 Z
               </div>
               <div>
                 <p className="text-lg font-semibold tracking-tight text-white">ZamoraxPay</p>
-                <p className="text-xs text-white/50">Fast • Reliable • Fair</p>
+                <p className="text-xs text-white/50">Fast, reliable, fair</p>
               </div>
             </div>
             <p className="max-w-xl text-sm leading-relaxed text-white/65">
               ZamoraxPay is a Nigerian payments platform that lets you buy airtime, data, cable TV
               subscriptions, electricity tokens and exam PINs from one wallet. Every order is routed
-              through several independent providers, if one is slow or down, your purchase moves to
+              through several independent providers. If one is slow or down, your purchase moves to
               the next automatically. If it still fails, the money goes straight back to your wallet.
             </p>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/65">
@@ -157,9 +157,9 @@ export function Footer() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-card/[0.04] p-5 backdrop-blur-sm md:col-span-2">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm md:col-span-2">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-white">
-              <span className="h-4 w-1 rounded-full bg-accent" aria-hidden />
+              <span className="h-4 w-1 rounded-full bg-primary" aria-hidden />
               Contact Us
             </h3>
             <address className="space-y-3 text-sm not-italic text-white/70">
@@ -186,12 +186,12 @@ export function Footer() {
                   href="https://wa.me/2347076479357"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-sm font-medium text-accent transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                  className="inline-flex items-center gap-1.5 rounded-sm font-medium text-primary transition-colors hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
                 >
                   <span aria-hidden>💬</span> Chat on WhatsApp
                 </a>
               </p>
-              <p className="pt-1 text-xs text-white/40">Mon – Sat · 8:00 AM – 8:00 PM WAT</p>
+              <p className="pt-1 text-xs text-white/40">Monday to Saturday · 8:00 AM to 8:00 PM WAT</p>
             </address>
           </div>
         </div>
@@ -343,7 +343,7 @@ export function Footer() {
             </p>
             <a
               href={marketplaceUrl}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3.5 py-2 text-sm font-medium text-accent transition hover:border-accent hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3.5 py-2 text-sm font-medium text-primary transition hover:border-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
             >
               Visit Zamorax Marketplace
               <span aria-hidden>→</span>

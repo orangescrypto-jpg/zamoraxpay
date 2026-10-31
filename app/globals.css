@@ -4,48 +4,48 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;         /* #F5F7FA */
-    --foreground: 222 47% 8%;          /* near-black text */
+    --background: 0 0% 100%;               /* #FFFFFF */
+    --foreground: 222 47% 11%;            /* #0F172A near-black navy */
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 8%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 8%;
-    --primary: 219 100% 50%;           /* #0057FF — Electric Blue */
+    --popover-foreground: 222 47% 11%;
+    --primary: 22 100% 50%;               /* #FF6B00 ZamoraxPay Orange */
     --primary-foreground: 0 0% 100%;
-    --secondary: 217 47% 8%;           /* #0B1220 — near-black navy */
+    --secondary: 222 47% 11%;             /* #0F172A Dark navy */
     --secondary-foreground: 0 0% 100%;
-    --accent: 154 100% 42%;            /* #00D67A — Green */
+    --accent: 22 100% 50%;                /* Orange (alias of primary for accents) */
     --accent-foreground: 0 0% 100%;
-    --muted: 210 20% 94%;
+    --muted: 210 20% 96%;
     --muted-foreground: 215 16% 47%;
-    --destructive: 0 84% 60%;          /* #EF4444 */
+    --destructive: 0 84% 60%;             /* #EF4444 */
     --destructive-foreground: 0 0% 100%;
-    --border: 214 20% 89%;
-    --input: 214 20% 89%;
-    --ring: 219 100% 50%;
-    --radius: 0.75rem;
+    --border: 214 20% 90%;
+    --input: 214 20% 90%;
+    --ring: 22 100% 50%;
+    --radius: 0.625rem;
   }
 
   .dark {
-    --background: 217 47% 6%;
+    --background: 222 47% 7%;              /* deeper navy for dark mode */
     --foreground: 210 20% 98%;
-    --card: 217 40% 10%;
+    --card: 222 40% 11%;
     --card-foreground: 210 20% 98%;
-    --popover: 217 40% 10%;
+    --popover: 222 40% 11%;
     --popover-foreground: 210 20% 98%;
-    --primary: 219 100% 60%;
+    --primary: 22 100% 55%;               /* slightly brighter orange for dark */
     --primary-foreground: 0 0% 100%;
-    --secondary: 217 32% 18%;
+    --secondary: 222 32% 18%;
     --secondary-foreground: 210 20% 98%;
-    --accent: 154 100% 45%;
+    --accent: 22 100% 55%;
     --accent-foreground: 0 0% 100%;
-    --muted: 217 32% 18%;
+    --muted: 222 32% 18%;
     --muted-foreground: 215 20% 65%;
     --destructive: 0 63% 31%;
     --destructive-foreground: 210 20% 98%;
-    --border: 217 32% 22%;
-    --input: 217 32% 22%;
-    --ring: 219 100% 60%;
+    --border: 222 32% 22%;
+    --input: 222 32% 22%;
+    --ring: 22 100% 55%;
   }
 }
 
@@ -54,11 +54,15 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-body;
+    @apply bg-background text-foreground font-body antialiased;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
   }
+
+  /* Improve default heading rhythm for editorial pages */
+  h1 { letter-spacing: -0.025em; }
+  h2 { letter-spacing: -0.02em; }
 
   /* Inputs/selects/textarea rendered without explicit bg/text classes
      fall back to browser defaults (white bg, black text). Force them onto
@@ -74,6 +78,12 @@
   textarea::placeholder {
     color: hsl(var(--muted-foreground));
   }
+
+  /* Friendlier default focus rings everywhere */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
 }
 
 /* ------------------------------------------------------------------
@@ -81,24 +91,27 @@
    Centralised so authors stop re-inventing arbitrary shadows per file.
    ------------------------------------------------------------------ */
 :root {
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
-  --shadow-popover: 0 18px 50px rgb(15 23 42 / 0.20);
-  --shadow-sticky: 0 -8px 24px -18px rgb(15 23 42 / 0.35);
-  --shadow-lift: 0 14px 30px -18px rgb(15 30 77 / 0.35);
-  --shadow-balance: 0 20px 40px -16px rgb(15 30 77 / 0.55);
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.05);
+  --shadow-popover: 0 18px 50px rgb(15 23 42 / 0.18);
+  --shadow-sticky: 0 -8px 24px -18px rgb(15 23 42 / 0.30);
+  --shadow-lift: 0 14px 30px -18px rgb(255 107 0 / 0.28);
+  --shadow-balance: 0 20px 40px -16px rgb(15 23 42 / 0.45);
+  --shadow-soft: 0 1px 0 rgb(15 23 42 / 0.03), 0 6px 20px -10px rgb(15 23 42 / 0.12);
 }
 .dark {
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.40), 0 1px 3px rgb(0 0 0 / 0.50);
   --shadow-popover: 0 18px 50px rgb(0 0 0 / 0.55);
   --shadow-sticky: 0 -8px 24px -18px rgb(0 0 0 / 0.60);
-  --shadow-lift: 0 14px 30px -18px rgb(0 0 0 / 0.55);
+  --shadow-lift: 0 14px 30px -18px rgb(255 107 0 / 0.45);
   --shadow-balance: 0 20px 40px -16px rgb(0 0 0 / 0.65);
+  --shadow-soft: 0 1px 0 rgb(0 0 0 / 0.20), 0 6px 20px -10px rgb(0 0 0 / 0.45);
 }
 .shadow-card { box-shadow: var(--shadow-card); }
 .shadow-popover { box-shadow: var(--shadow-popover); }
 .shadow-sticky { box-shadow: var(--shadow-sticky); }
 .shadow-lift { box-shadow: var(--shadow-lift); }
 .shadow-balance { box-shadow: var(--shadow-balance); }
+.shadow-soft { box-shadow: var(--shadow-soft); }
 
 /* Banner slider transitions */
 @layer utilities {
@@ -136,7 +149,7 @@ html.zpx-high-contrast a:focus-visible,
 html.zpx-high-contrast button:focus-visible,
 html.zpx-high-contrast input:focus-visible,
 html.zpx-high-contrast select:focus-visible,
-html.zpx-high-contrast textarea:focus-visible { outline: 3px solid #0057ff; outline-offset: 3px; }
+html.zpx-high-contrast textarea:focus-visible { outline: 3px solid #FF6B00; outline-offset: 3px; }
 html.zpx-reduce-motion *, html.zpx-reduce-motion *::before, html.zpx-reduce-motion *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 .zpx-reading-progress { position: fixed; inset: 0 auto auto 0; z-index: 180; height: 3px; background: hsl(var(--primary)); transition: width 100ms linear; }
 .zpx-local-tools { position: fixed; right: 1rem; bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px)); z-index: 160; display: flex; flex-direction: column; align-items: flex-end; gap: .5rem; }
@@ -216,3 +229,122 @@ html.zpx-reduce-motion .zpx-shake { animation: none; }
 @media (min-width: 768px) {
   .zpx-sticky-pay { bottom: 1rem; }
 }
+
+/* ------------------------------------------------------------------
+   ZamoraxPay UI polish helpers (UI redesign, October 2026)
+   ------------------------------------------------------------------ */
+
+/* Subtle orange tinted hairline for active cards / inputs */
+.zpx-hairline-primary {
+  box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.35);
+}
+
+/* Eyebrow label used above section titles */
+.zpx-eyebrow {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+}
+
+/* Body container with comfortable article measure */
+.zpx-prose-measure {
+  max-width: 44rem;
+}
+
+/* Subtle dotted background used in hero sections */
+.zpx-dot-grid {
+  background-image: radial-gradient(circle at 1px 1px, hsl(var(--foreground) / 0.06) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+/* Card with consistent editorial padding */
+.zpx-card {
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-card);
+}
+
+/* Section spacing tokens */
+.zpx-section { padding-top: 3.5rem; padding-bottom: 3.5rem; }
+@media (min-width: 768px) {
+  .zpx-section { padding-top: 4.5rem; padding-bottom: 4.5rem; }
+}
+
+/* Smooth scroll for in-page links (respect reduced motion) */
+html:not(.zpx-reduce-motion) { scroll-behavior: smooth; }
+
+/* Better text selection in primary brand colour */
+::selection { background: hsl(var(--primary) / 0.18); color: hsl(var(--foreground)); }
+
+/* Image rendering tweak for blog covers and avatars */
+img { color: transparent; }
+
+/* Print stylesheet for blog articles - so users can save articles as
+   clean PDFs without the chrome, ads, or interactive clutter. */
+@media print {
+  header,
+  footer,
+  nav[aria-label="Breadcrumb"],
+  nav[aria-label="Mobile menu"],
+  .zpx-reading-progress,
+  .zpx-back-to-top,
+  .zpx-local-tools,
+  [data-whatsapp-fab],
+  .adsbygoogle,
+  ins.adsbygoogle,
+  [data-adsense-slot],
+  [data-mobile-bottom-nav],
+  .zpx-mobile-bottom-nav,
+  #mobile-bottom-nav,
+  .zpx-tour-overlay,
+  .zpx-tour-pop,
+  .cookie-consent,
+  [data-cookie-banner] {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  a {
+    color: #000 !important;
+    text-decoration: underline;
+  }
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 9pt;
+    color: #555;
+  }
+  /* Hide URLs for in-page anchor links */
+  a[href^="#"]::after { content: ""; }
+  article {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+  p, li, blockquote {
+    page-break-inside: avoid;
+  }
+  /* Force background colors to print for code blocks and quotes */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .zpx-card,
+  .shadow-soft,
+  .shadow-card,
+  .shadow-lift {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+  }
+}
+

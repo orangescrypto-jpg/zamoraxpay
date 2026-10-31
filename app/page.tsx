@@ -26,13 +26,13 @@ const SERVICES: { href: string; label: string; desc: string; icon: LucideIcon; i
   { href: "/services/airtime", label: "Airtime", desc: "All networks, instant delivery", icon: Smartphone, iconClass: "bg-blue-50 text-blue-600" },
   { href: "/services/data", label: "Data", desc: "Cheap bundles, all networks", icon: Wifi, iconClass: "bg-violet-50 text-violet-600" },
   { href: "/services/cable", label: "Cable TV", desc: "DSTV, GOtv, StarTimes", icon: Tv, iconClass: "bg-orange-50 text-orange-600" },
-  { href: "/services/electricity", label: "Electricity", desc: "Prepaid & postpaid tokens", icon: Zap, iconClass: "bg-amber-50 text-amber-600" },
+  { href: "/services/electricity", label: "Electricity", desc: "Prepaid and postpaid tokens", icon: Zap, iconClass: "bg-amber-50 text-amber-600" },
   { href: "/services/exam-pin", label: "Exam PINs", desc: "WAEC, NECO, JAMB", icon: GraduationCap, iconClass: "bg-emerald-50 text-emerald-600" },
   { href: "/services/airtime-to-cash", label: "Airtime to Cash", desc: "Convert airtime to wallet funds", icon: Banknote, iconClass: "bg-lime-50 text-lime-600" },
   { href: "/services/epin", label: "Buy ePIN", desc: "Instant PINs for redemption", icon: Ticket, iconClass: "bg-fuchsia-50 text-fuchsia-600" },
   { href: "/services/bulk-airtime", label: "Bulk Airtime", desc: "Send airtime to many numbers at once", icon: Users, iconClass: "bg-sky-50 text-sky-600" },
   { href: "/services/bulk-data", label: "Bulk Data", desc: "Send data to many numbers at once", icon: Users, iconClass: "bg-indigo-50 text-indigo-600" },
-  { href: "/services/international-topup", label: "International Airtime & Data", desc: "Top up a phone number in another country", icon: Globe2, iconClass: "bg-cyan-50 text-cyan-600" },
+  { href: "/services/international-topup", label: "International Airtime and Data", desc: "Top up a phone number in another country", icon: Globe2, iconClass: "bg-cyan-50 text-cyan-600" },
 ]
 
 const REWARDS = [
@@ -61,15 +61,15 @@ const TRUST = [
 // real money for first-time internet users needs social proof.
 const TESTIMONIALS = [
   { name: "Adaeze O.", location: "Lagos", quote: "I bought airtime at 11pm and it landed in seconds. The referral bonus paid for my next data bundle.", role: "Student, UNILAG" },
-  { name: "Tunde B.", location: "Ibadan", quote: "DSTV renewal used to be a chore. Now it's one tap from my dashboard. When StarTimes failed, refund came automatically.", role: "Small business owner" },
+  { name: "Tunde B.", location: "Ibadan", quote: "DSTV renewal used to be a chore. Now it is one tap from my dashboard. When StarTimes failed, refund came automatically.", role: "Small business owner" },
   { name: "Fatima I.", location: "Abuja", quote: "I love the daily check-in. Five hundred naira every morning for opening the app adds up over a month.", role: "Civil servant" },
 ]
 
 const PARTNERS = [
-  { label: "MTN", desc: "Airtime & data" },
-  { label: "Airtel", desc: "Airtime & data" },
-  { label: "Glo", desc: "Airtime & data" },
-  { label: "9mobile", desc: "Airtime & data" },
+  { label: "MTN", desc: "Airtime and data" },
+  { label: "Airtel", desc: "Airtime and data" },
+  { label: "Glo", desc: "Airtime and data" },
+  { label: "9mobile", desc: "Airtime and data" },
   { label: "DStv", desc: "Cable TV" },
   { label: "GOtv", desc: "Cable TV" },
   { label: "StarTimes", desc: "Cable TV" },
@@ -105,14 +105,14 @@ const HOMEPAGE_BLOG_CATEGORIES = [
 const HOMEPAGE_POSTS_PER_CATEGORY = 10
 
 // Jobs, Scholarships, Grants and Internships are capped lower than the
-// other homepage categories — these feed fast-expiring listings
+// other homepage categories. These feed fast-expiring listings
 // (retention.ts deletes stale posts in jobs/scholarships), so the
 // homepage only needs a handful, not the full 10 shown for evergreen
 // categories like Guides.
 const HOMEPAGE_JOBS_SCHOLARSHIPS_POST_LIMIT = 6
 const HOMEPAGE_CAPPED_CATEGORY_SLUGS = new Set(["jobs", "scholarships", "grants", "internships"])
 
-export const revalidate = 900 // 15 minutes — homepage content doesn't need to be second-fresh
+export const revalidate = 900 // 15 minutes. Homepage content does not need to be second-fresh.
 
 export default async function HomePage() {
   const [postsByCategory, cappedPostsByCategory] = await Promise.all([
@@ -130,46 +130,49 @@ export default async function HomePage() {
   const categorySections = HOMEPAGE_BLOG_CATEGORIES.filter((c) => postsByCategory[c.slug]?.length)
 
   return (
-    <div>
-      {/* ── Hero ─────────────────────────────────────────────── */}
+    <div className="bg-background">
+      {/* Hero */}
       <section className="relative overflow-hidden border-b border-border bg-secondary">
-        <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/20 blur-3xl" aria-hidden="true" />
-        <div className="absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-accent/10 blur-3xl" aria-hidden="true" />
-        <div className="absolute inset-0 opacity-[0.07]" style={{
-          backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)",
-          backgroundSize: "24px 24px",
-        }} />
-        <div className="container relative py-20 text-center sm:py-28">
-          <h1 className="mx-auto max-w-3xl text-4xl font-heading font-bold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-            Airtime, data, and bills, all from one fast, reliable wallet
-          </h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-white/70">
-            Built for reliability. Transactions go through fast, every time, with instant delivery on airtime,
-            data, and bills. No more failed purchases wasting your money.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href="/signup"
-              className="w-full rounded-md bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 sm:w-auto"
-            >
-              Create free account
-            </Link>
-            <Link
-              href="/login"
-              className="w-full rounded-md border border-white/20 px-8 py-3 text-sm font-semibold text-white hover:bg-white/10 sm:w-auto"
-            >
-              Log in
-            </Link>
-          </div>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-medium text-white/55">
-            <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-accent" /> Fast delivery</span>
-            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-accent" /> Secure wallet</span>
-            <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-accent" /> Multiple providers</span>
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/25 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-primary/10 blur-3xl" aria-hidden="true" />
+        <div className="zpx-dot-grid absolute inset-0 opacity-50" aria-hidden="true" />
+        <div className="container relative py-16 sm:py-24 lg:py-28">
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="zpx-eyebrow inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white/80 backdrop-blur">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+              Digital services and useful information
+            </span>
+            <h1 className="mt-5 text-4xl font-heading font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
+              Airtime, data, and bills, all from one fast, reliable wallet
+            </h1>
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-white/70 sm:text-lg">
+              Built for reliability. Transactions go through fast, every time, with instant delivery on airtime,
+              data, and bills. No more failed purchases wasting your money.
+            </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link
+                href="/signup"
+                className="w-full rounded-lg bg-primary px-7 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-secondary sm:w-auto"
+              >
+                Create free account
+              </Link>
+              <Link
+                href="/login"
+                className="w-full rounded-lg border border-white/20 px-7 py-3 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 sm:w-auto"
+              >
+                Log in
+              </Link>
+            </div>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-medium text-white/55">
+              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Fast delivery</span>
+              <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> Secure wallet</span>
+              <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-primary" /> Multiple providers</span>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── Trust strip ──────────────────────────────────────── */}
+      {/* Trust strip */}
       <section className="border-b border-border bg-white">
         <div className="container grid grid-cols-2 divide-x divide-border py-5 sm:grid-cols-4">
           {[
@@ -186,13 +189,13 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Services grid ────────────────────────────────────── */}
-      <section className="container py-16 sm:py-20">
+      {/* Services grid */}
+      <section className="zpx-section container">
         <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Pay in seconds</p>
-            <h2 className="mt-1 text-2xl font-heading font-bold tracking-tight text-secondary sm:text-3xl">Everything in one place</h2>
-            <p className="mt-2 text-muted-foreground">All your services, one wallet, one login.</p>
+            <span className="zpx-eyebrow">Pay in seconds</span>
+            <h2 className="mt-2 text-2xl font-heading font-bold tracking-tight text-secondary sm:text-3xl">Everything in one place</h2>
+            <p className="mt-2 text-sm text-muted-foreground sm:text-base">All your services, one wallet, one login.</p>
           </div>
           <span className="hidden text-xs font-medium text-muted-foreground sm:block">Choose a service to get started</span>
         </div>
@@ -204,9 +207,9 @@ export default async function HomePage() {
               <Link
                 key={s.href}
                 href={s.href}
-                className="group relative overflow-hidden rounded-2xl border border-border bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_14px_30px_-18px_rgba(15,30,77,0.35)] sm:p-5"
+                className="group relative overflow-hidden rounded-xl border border-border bg-white p-4 shadow-soft transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lift sm:p-5"
               >
-                <span className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl ${s.iconClass}`}>
+                <span className={`mb-4 flex h-10 w-10 items-center justify-center rounded-lg ${s.iconClass}`}>
                   <Icon className="h-5 w-5" />
                 </span>
                 <h3 className="font-heading text-sm font-semibold text-secondary sm:text-base">{s.label}</h3>
@@ -218,40 +221,45 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── How it works ─────────────────────────────────────── */}
-      <section className="border-t border-border py-16">
+      {/* How it works */}
+      <section className="border-t border-border bg-muted/30 py-14 sm:py-16">
         <div className="container">
           <div className="mb-8 text-center">
-            <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">How ZamoraxPay works</h2>
-            <p className="mt-2 text-muted-foreground">Four simple steps from sign up to delivery.</p>
+            <span className="zpx-eyebrow">Getting started</span>
+            <h2 className="mt-2 text-2xl font-heading font-bold text-secondary sm:text-3xl">How ZamoraxPay works</h2>
+            <p className="mt-2 text-sm text-muted-foreground sm:text-base">Four simple steps from sign up to delivery.</p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map((step) => (
-              <div key={step.n} className="relative rounded-2xl border border-border bg-white p-5 shadow-sm">
-                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm">
+            {STEPS.map((step, idx) => (
+              <div key={step.n} className="relative rounded-xl border border-border bg-white p-5 shadow-soft">
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
                   {step.n}
                 </div>
                 <h3 className="font-heading font-semibold text-secondary">{step.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{step.desc}</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{step.desc}</p>
+                {idx < STEPS.length - 1 && (
+                  <span aria-hidden className="pointer-events-none absolute -right-2 top-7 hidden h-px w-4 bg-border lg:block" />
+                )}
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Why ZamoraxPay ───────────────────────────────────── */}
-      <section className="border-t border-border bg-bg py-16">
+      {/* Why ZamoraxPay */}
+      <section className="zpx-section">
         <div className="container">
           <div className="mb-8 text-center">
-            <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">Why people trust ZamoraxPay</h2>
-            <p className="mt-2 mx-auto max-w-2xl text-muted-foreground">
+            <span className="zpx-eyebrow">Why ZamoraxPay</span>
+            <h2 className="mt-2 text-2xl font-heading font-bold text-secondary sm:text-3xl">Why people trust ZamoraxPay</h2>
+            <p className="mx-auto mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
               We built ZamoraxPay after seeing too many failed top-ups and slow refunds. Here is how we try to do better.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {TRUST.map((t, i) => (
-              <div key={t.title} className="group rounded-2xl border border-border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-primary">
+              <div key={t.title} className="group rounded-xl border border-border bg-white p-5 shadow-soft transition hover:-translate-y-0.5 hover:shadow-card">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-primary">
                   {i === 0 ? <Zap className="h-5 w-5" /> : i === 1 ? <ShieldCheck className="h-5 w-5" /> : i === 2 ? <CheckCircle2 className="h-5 w-5" /> : <Users className="h-5 w-5" />}
                 </div>
                 <h3 className="font-heading font-semibold text-secondary">{t.title}</h3>
@@ -262,18 +270,18 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Partner networks (logos as text chips - no image dependency) ── */}
-      <section className="border-t border-border py-12">
+      {/* Partner networks (logos as text chips, no image dependency) */}
+      <section className="border-t border-border bg-muted/30 py-12">
         <div className="container">
           <div className="mb-6 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Supported networks & billers</p>
-            <h2 className="mt-1 text-xl font-heading font-bold text-secondary sm:text-2xl">Every network and biller you actually use</h2>
+            <span className="zpx-eyebrow">Supported networks and billers</span>
+            <h2 className="mt-2 text-xl font-heading font-bold text-secondary sm:text-2xl">Every network and biller you actually use</h2>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
             {PARTNERS.map((p) => (
               <span
                 key={p.label}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-secondary shadow-sm"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-4 py-2 text-sm font-medium text-secondary shadow-soft"
                 title={`${p.label} - ${p.desc}`}
               >
                 <span className="font-heading font-bold">{p.label}</span>
@@ -284,16 +292,17 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Security & compliance badges ───────────────────── */}
-      <section className="border-t border-border bg-bg py-12">
+      {/* Security and compliance badges */}
+      <section className="border-t border-border py-12">
         <div className="container">
           <div className="mb-6 text-center">
-            <h2 className="text-xl font-heading font-bold text-secondary sm:text-2xl">Security and compliance</h2>
+            <span className="zpx-eyebrow">Security and compliance</span>
+            <h2 className="mt-2 text-xl font-heading font-bold text-secondary sm:text-2xl">Protected by these guarantees</h2>
             <p className="mt-2 text-sm text-muted-foreground">Your money and data are protected by these guarantees.</p>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {SECURITY_BADGES.map((b) => (
-              <div key={b.label} className="flex items-start gap-3 rounded-xl border border-border bg-white p-4 shadow-sm">
+              <div key={b.label} className="flex items-start gap-3 rounded-xl border border-border bg-white p-4 shadow-soft">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
                   <ShieldCheck className="h-4 w-4" />
                 </span>
@@ -307,16 +316,16 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Testimonials ───────────────────────────────────── */}
-      <section className="border-t border-border py-16">
+      {/* Testimonials */}
+      <section className="border-t border-border bg-muted/30 py-16">
         <div className="container">
           <div className="mb-8 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">What Nigerians say</p>
-            <h2 className="mt-1 text-2xl font-heading font-bold text-secondary sm:text-3xl">Real users, real transactions</h2>
+            <span className="zpx-eyebrow">What Nigerians say</span>
+            <h2 className="mt-2 text-2xl font-heading font-bold text-secondary sm:text-3xl">Real users, real transactions</h2>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {TESTIMONIALS.map((t) => (
-              <figure key={t.name} className="flex h-full flex-col rounded-2xl border border-border bg-white p-5 shadow-sm">
+              <figure key={t.name} className="flex h-full flex-col rounded-xl border border-border bg-white p-5 shadow-soft">
                 <div className="mb-3 flex gap-0.5 text-amber-400" aria-label="5 out of 5 stars">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <svg key={i} viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.964a1 1 0 00.95.69h4.166c.969 0 1.371 1.24.588 1.81l-3.37 2.448a1 1 0 00-.364 1.118l1.287 3.964c.3.922-.755 1.688-1.54 1.118L10 14.347l-3.371 2.448c-.784.57-1.838-.196-1.539-1.118l1.287-3.964a1 1 0 00-.364-1.118L2.643 9.39c-.783-.57-.38-1.81.588-1.81h4.166a1 1 0 00.95-.69l1.286-3.964z" /></svg>
@@ -335,47 +344,49 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Rewards ──────────────────────────────────────────── */}
+      {/* Rewards */}
       <section className="border-t border-border py-16">
         <div className="container">
           <div className="mb-8 text-center">
-            <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">Get rewarded for every purchase</h2>
-            <p className="mt-2 text-muted-foreground">
+            <span className="zpx-eyebrow">Earn as you spend</span>
+            <h2 className="mt-2 text-2xl font-heading font-bold text-secondary sm:text-3xl">Get rewarded for every purchase</h2>
+            <p className="mt-2 text-sm text-muted-foreground sm:text-base">
               Cashback, referral bonuses, daily streaks, and prizes, all credited to your ZamoraxPay wallet.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {REWARDS.map((r) => (
-              <div key={r.label} className="rounded-lg border border-border bg-white p-5">
+              <div key={r.label} className="rounded-xl border border-border bg-white p-5 shadow-soft">
                 <div className="mb-2 text-2xl" aria-hidden="true">{r.icon}</div>
                 <h3 className="font-heading font-semibold text-secondary">{r.label}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{r.desc}</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{r.desc}</p>
               </div>
             ))}
           </div>
           <div className="mt-8 text-center">
             <Link
               href="/signup"
-              className="inline-block rounded-md bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-110"
             >
               Create free account to start earning
+              <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </div>
       </section>
 
-      {/* ── Jobs and scholarships: visible even before the first post ─ */}
-      <section className="border-t border-border bg-white py-14 sm:py-16">
+      {/* Jobs and scholarships: visible even before the first post */}
+      <section className="border-t border-border bg-muted/30 py-14 sm:py-16">
         <div className="container">
           <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">New opportunities</p>
-              <h2 className="mt-1 text-2xl font-heading font-bold text-secondary sm:text-3xl">Jobs, scholarships, grants and internships</h2>
+              <span className="zpx-eyebrow">New opportunities</span>
+              <h2 className="mt-2 text-2xl font-heading font-bold text-secondary sm:text-3xl">Jobs, scholarships, grants and internships</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 Explore career openings and education funding opportunities. Always confirm details and deadlines with the official provider.
               </p>
             </div>
-            <Link href="/blog" className="text-sm font-semibold text-primary hover:underline">Explore the blog <ArrowRight className="ml-1 inline h-4 w-4" /></Link>
+            <Link href="/blog" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">Explore the blog <ArrowRight className="h-4 w-4" /></Link>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[
@@ -387,9 +398,9 @@ export default async function HomePage() {
               const Icon = item.icon
               const posts = (postsByCategory[item.slug] ?? []).slice(0, 3)
               return (
-                <article key={item.slug} className="flex h-full flex-col rounded-2xl border border-border bg-card p-5 shadow-sm transition hover:border-primary/30 hover:shadow-md sm:p-6">
+                <article key={item.slug} className="flex h-full flex-col rounded-xl border border-border bg-white p-5 shadow-soft transition hover:border-primary/30 hover:shadow-card sm:p-6">
                   <div className="flex items-start gap-3">
-                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${item.tone}`}><Icon className="h-5 w-5" /></span>
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${item.tone}`}><Icon className="h-5 w-5" /></span>
                     <div className="min-w-0 flex-1">
                       <h3 className="font-heading text-lg font-bold text-secondary">{item.label}</h3>
                       <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.description}</p>
@@ -405,10 +416,10 @@ export default async function HomePage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-4 rounded-xl bg-muted/50 px-3 py-3 text-sm text-muted-foreground">New opportunities will appear here as articles are published.</p>
+                    <p className="mt-4 rounded-lg bg-muted/60 px-3 py-3 text-sm text-muted-foreground">New opportunities will appear here as articles are published.</p>
                   )}
-                  <Link href={`/blog?category=${item.slug}`} className="mt-5 inline-flex items-center text-sm font-semibold text-primary hover:underline">
-                    Browse {item.slug} <ArrowRight className="ml-1 h-4 w-4" />
+                  <Link href={`/blog?category=${item.slug}`} className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+                    Browse {item.slug} <ArrowRight className="h-4 w-4" />
                   </Link>
                 </article>
               )
@@ -417,16 +428,16 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── From the blog: magazine-style rows by category ─ */}
+      {/* From the blog: magazine-style rows by category */}
       {categorySections.length > 0 && (
-        <section className="border-t border-border bg-bg py-16">
+        <section className="border-t border-border py-16">
           <div className="container">
             <div className="mb-10 flex items-end justify-between">
               <div>
-                <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">From the blog</h2>
-                <p className="mt-2 text-muted-foreground">Guides, updates, and tips.</p>
+                <span className="zpx-eyebrow">From the blog</span>
+                <h2 className="mt-2 text-2xl font-heading font-bold text-secondary sm:text-3xl">Guides, updates, and tips</h2>
               </div>
-              <Link href="/blog" className="hidden text-sm font-medium text-primary hover:underline sm:block">
+              <Link href="/blog" className="hidden text-sm font-semibold text-primary hover:underline sm:block">
                 View all posts →
               </Link>
             </div>
@@ -436,11 +447,11 @@ export default async function HomePage() {
                 const posts = postsByCategory[cat.slug] ?? []
                 return (
                   <div key={cat.slug}>
-                    <div className="mb-5 flex items-end justify-between">
+                    <div className="mb-5 flex items-end justify-between border-b border-border pb-2">
                       <h3 className="text-xl font-heading font-bold text-secondary">{cat.label}</h3>
                       <Link
                         href={`/blog?category=${cat.slug}`}
-                        className="text-sm font-medium text-primary hover:underline"
+                        className="text-sm font-semibold text-primary hover:underline"
                       >
                         See more →
                       </Link>
@@ -450,18 +461,19 @@ export default async function HomePage() {
                       <div className="space-y-6">
                         {/* Featured post */}
                         <Link href={`/blog/${posts[0].slug}`} className="group block">
-                          <div className="mb-4 aspect-[1200/630] overflow-hidden rounded-xl bg-secondary">
+                          <div className="mb-4 aspect-[1200/630] overflow-hidden rounded-xl border border-border bg-secondary">
                             <img
                               src={posts[0].coverImageUrl || "/blog-fallback-cover.svg"}
                               alt={posts[0].title}
-                              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              loading="lazy"
                             />
                           </div>
                           <h4 className="mb-1 text-lg font-heading font-semibold text-secondary group-hover:text-primary sm:text-xl">
                             {posts[0].title}
                           </h4>
                           {posts[0].excerpt && (
-                            <p className="mb-2 text-sm text-muted-foreground line-clamp-2">{posts[0].excerpt}</p>
+                            <p className="mb-2 text-sm leading-6 text-muted-foreground line-clamp-2">{posts[0].excerpt}</p>
                           )}
                           {posts[0].publishedAt && (
                             <p className="text-xs text-muted-foreground">{formatDate(posts[0].publishedAt)}</p>
@@ -470,18 +482,19 @@ export default async function HomePage() {
 
                         {/* Remaining posts as a list */}
                         {posts.length > 1 && (
-                          <div className="divide-y divide-border rounded-xl border border-border">
+                          <div className="divide-y divide-border rounded-xl border border-border bg-white shadow-soft">
                             {posts.slice(1).map((post) => (
                               <Link
                                 key={post.id}
                                 href={`/blog/${post.slug}`}
-                                className="group flex items-center gap-4 p-4"
+                                className="group flex items-center gap-4 p-4 transition hover:bg-muted/40"
                               >
                                 <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-secondary sm:h-20 sm:w-28">
                                   <img
                                     src={post.coverImageUrl || "/blog-fallback-cover.svg"}
                                     alt={post.title}
-                                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                    loading="lazy"
                                   />
                                 </div>
                                 <div className="min-w-0">
@@ -504,7 +517,7 @@ export default async function HomePage() {
             </div>
 
             <div className="mt-10 text-center sm:hidden">
-              <Link href="/blog" className="text-sm font-medium text-primary hover:underline">
+              <Link href="/blog" className="text-sm font-semibold text-primary hover:underline">
                 View all posts →
               </Link>
             </div>
@@ -512,16 +525,17 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ── Bottom CTA ────────────────────────────────────────── */}
-      <section className="border-t border-border py-16">
+      {/* Bottom CTA */}
+      <section className="border-t border-border bg-secondary py-16 text-white sm:py-20">
         <div className="container text-center">
-          <h2 className="text-2xl font-heading font-bold text-secondary sm:text-3xl">Ready to get started?</h2>
-          <p className="mx-auto mt-2 max-w-md text-muted-foreground">
+          <span className="zpx-eyebrow text-primary">Get started today</span>
+          <h2 className="mt-2 text-2xl font-heading font-bold sm:text-3xl">Ready to get started?</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-white/70 sm:text-base">
             Sign up in under a minute and fund your wallet to make your first purchase.
           </p>
           <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/signup" className="inline-flex rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90">Create free account</Link>
-            <Link href="/blog" className="inline-flex rounded-xl border border-border bg-white px-8 py-3 text-sm font-semibold text-secondary hover:border-primary/30 hover:text-primary">Explore our guides</Link>
+            <Link href="/signup" className="inline-flex items-center gap-2 rounded-lg bg-primary px-7 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-110">Create free account <ArrowRight className="h-4 w-4" /></Link>
+            <Link href="/blog" className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-7 py-3 text-sm font-semibold text-white transition hover:bg-white/10">Explore our guides</Link>
           </div>
         </div>
       </section>

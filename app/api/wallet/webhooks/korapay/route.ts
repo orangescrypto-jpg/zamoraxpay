@@ -24,18 +24,21 @@ export async function POST(req: NextRequest) {
   const rawBody = await req.text()
   const signature = req.headers.get("x-korapay-signature") ?? ""
 
-  const credentials = await getPaymentProviderCredentials("korapay")
-  const validSignature = korapayAdapter.verifyWebhookSignature(rawBody, signature, credentials)
-
-  if (!validSignature) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
-  }
-
   let payload: any
   try {
     payload = JSON.parse(rawBody)
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+  }
+
+  const credentials = await getPaymentProviderCredentials("korapay")
+  // Korapay signs HMAC-SHA256 of JSON.stringify(payload.data) using the
+  // account's Secret Key — not the raw body, and not a separate
+  // "webhook secret" (Korapay has none). See korapay.ts adapter.
+  const validSignature = korapayAdapter.verifyWebhookSignature(payload?.data, signature, credentials)
+
+  if (!validSignature) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
   }
 
   const eventId = payload?.data?.reference ?? payload?.data?.id

@@ -56,8 +56,14 @@ export interface IPaymentProviderAdapter {
 
   verify(reference: string, credentials: PaymentProviderCredentials): Promise<PaymentVerifyResult>
 
-  /** Validates a webhook's signature against the raw request body. */
-  verifyWebhookSignature(rawBody: string, signatureHeader: string, credentials: PaymentProviderCredentials): boolean
+  /**
+   * Validates a webhook's signature. The second argument's shape is
+   * provider-specific: most providers (e.g. Paystack) sign the raw
+   * request body (pass the raw string), but some (e.g. Korapay) sign
+   * a re-serialized subset of the parsed payload — check the adapter's
+   * own implementation/comments before assuming "raw body" applies.
+   */
+  verifyWebhookSignature(payload: string | unknown, signatureHeader: string, credentials: PaymentProviderCredentials): boolean
 
   /**
    * Sends money OUT to a bank account — used for automated withdrawal

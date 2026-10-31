@@ -94,11 +94,18 @@ export const korapayAdapter: IPaymentProviderAdapter = {
     }
   },
 
-  verifyWebhookSignature(rawBody: string, signatureHeader: string, credentials: PaymentProviderCredentials): boolean {
-    const webhookSecret = credentials.webhookSecret || process.env.KORAPAY_WEBHOOK_SECRET
-    if (!webhookSecret) return false
+  // Korapay has no separate "webhook secret" — per their documented
+  // reference implementation, webhooks are signed with the same
+  // Secret Key used for API requests (sk_live_/sk_test_), and the
+  // signed payload is HMAC-SHA256 of JSON.stringify(payload.data) —
+  // the parsed, re-serialized `data` object — NOT the raw request
+  // body/bytes. Caller must pass the already-parsed `data` object.
+  verifyWebhookSignature(data: unknown, signatureHeader: string, credentials: PaymentProviderCredentials): boolean {
+    const secretKey = credentials.secretKey || process.env.KORAPAY_SECRET_KEY
+    if (!secretKey) return false
 
-    const computed = crypto.createHmac("sha256", webhookSecret).update(rawBody).digest("hex")
+    const serializedData = JSON.stringify(data)
+    const computed = crypto.createHmac("sha256", secretKey).update(serializedData).digest("hex")
     try {
       return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(signatureHeader))
     } catch {

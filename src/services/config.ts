@@ -189,8 +189,19 @@ export async function updatePaymentProviderConfig(
     params.push(updates.priority)
   }
   if (updates.credentials !== undefined) {
+    // Merge with whatever is already saved instead of replacing the
+    // whole blob — same fix as updateVtuProviderConfig above. Without
+    // this, saving just the Webhook Secret (leaving Secret Key blank
+    // in the form) silently wiped the Secret Key, and vice versa. An
+    // empty-string value explicitly clears that one key; keys the
+    // admin didn't touch are left untouched.
+    const existing = await getPaymentProviderCredentials(providerKey, nativeDB)
+    const merged = { ...existing, ...updates.credentials }
+    for (const key of Object.keys(merged)) {
+      if (merged[key] === "") delete merged[key]
+    }
     sets.push("credentials_json = ?")
-    params.push(JSON.stringify(updates.credentials))
+    params.push(JSON.stringify(merged))
   }
   sets.push("updated_by = ?", "updated_at = datetime('now')")
   params.push(adminUserId, providerKey)

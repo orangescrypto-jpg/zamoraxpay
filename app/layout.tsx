@@ -1,6 +1,6 @@
 
 // app/layout.tsx
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Inter, Space_Grotesk } from "next/font/google"
 import "./globals.css"
 import { SiteChrome } from "@/components/layout/SiteChrome"
@@ -12,23 +12,32 @@ import { AdSenseLoader } from "@/components/shared/AdSenseLoader"
 // `revalidate` per-route (see app/page.tsx, app/(public)/blog/page.tsx,
 // etc.). The root layout itself stays static so the chrome (Header,
 // Footer, theme script, fonts) can be cached on the CDN edge.
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
-const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" })
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+  adjustFontFallback: false,
+})
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+  display: "swap",
+  adjustFontFallback: false,
+})
+
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://zamoraxpay.com.ng"
 
 export const metadata: Metadata = {
+  metadataBase: new URL(BASE_URL),
   title: {
     default: "ZamoraxPay - Airtime, Data, Bills & More",
-    template: "%s · ZamoraxPay",
+    template: "%s - ZamoraxPay",
   },
   description:
     "Buy airtime, data, cable TV, electricity, and exam PINs, all from one fast, reliable wallet. Built for reliability on Nigerian networks.",
   manifest: "/manifest.json",
-  // themeColor accepts an array for media-query variants - the browser
-  // chrome (mobile address bar) matches the OS theme automatically.
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#0057FF" },
-    { media: "(prefers-color-scheme: dark)", color: "#0B1220" },
-  ],
+  // themeColor is now exported from `viewport` (Next.js 14+ requirement).
+  // See viewport export at the bottom of this file.
   icons: {
     icon: [
       { url: "/favicon.svg", type: "image/svg+xml" },
@@ -44,9 +53,18 @@ export const metadata: Metadata = {
     title: "ZamoraxPay - Airtime, Data, Bills & More",
     description:
       "Buy airtime, data, cable TV, electricity, and exam PINs, all from one fast, reliable wallet.",
-    images: [{ url: "/icon-512.png", width: 512, height: 512 }],
-    type: "website",
+    url: BASE_URL,
     siteName: "ZamoraxPay",
+    locale: "en_NG",
+    type: "website",
+    images: [
+      {
+        url: "/icon-512.png",
+        width: 512,
+        height: 512,
+        alt: "ZamoraxPay logo",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -108,11 +126,32 @@ const websiteJsonLd = {
   },
 }
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#0F172A" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  colorScheme: "light dark",
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <AdSenseLoader />
+        {/* Performance hints: preconnect to the origins we hit on first paint.
+            Saves ~150-250ms of TLS round-trips on the very first navigation. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://zamorax.com" />
+        <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+        <link rel="dns-prefetch" href="https://zamorax.com" />
+        {/* Helpful for older browsers / Slack / Telegram / Outlook link previews */}
+        <meta name="application-name" content="ZamoraxPay" />
+        <meta name="format-detection" content="telephone=no" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}

@@ -175,19 +175,22 @@ export function Header() {
   }, [menuOpen])
 
   return (
-    <header className="relative sticky top-0 z-[70] border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+    <header className="relative sticky top-0 z-[70] border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
       <div className="container flex h-16 items-center justify-between">
         {/* Always link to "/" here - middleware already redirects logged-in
             visitors from "/" to "/dashboard" server-side, so this never
             depends on (potentially stale) client auth state. */}
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-xl font-heading font-bold text-primary">Zamorax</span>
-          <span className="text-xl font-heading font-bold text-secondary">Pay</span>
+        <Link href="/" className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" aria-label="ZamoraxPay home">
+          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-heading font-bold text-primary-foreground">Z</span>
+          <span className="text-lg font-heading font-bold tracking-tight text-secondary sm:text-xl">
+            <span className="text-primary">Zamorax</span>
+            <span className="text-secondary">Pay</span>
+          </span>
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="hidden items-center gap-1 md:flex">
           {isAuthenticated && (
-            <Link href="/dashboard" className="text-sm font-medium text-secondary hover:text-primary">
+            <Link href="/dashboard" className="rounded-md px-3 py-2 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary">
               Dashboard
             </Link>
           )}
@@ -210,7 +213,7 @@ export function Header() {
               onClick={() => setBlogMenuOpen((v) => !v)}
               aria-expanded={blogMenuOpen}
               aria-haspopup="true"
-              className="flex items-center gap-1 text-sm font-medium text-secondary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-md"
+              className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               Blog
               <svg
@@ -228,12 +231,12 @@ export function Header() {
             </button>
             {blogMenuOpen && (
               <div
-                className="absolute left-0 top-full z-50 w-48 rounded-lg border border-border bg-card py-1 shadow-lg"
+                className="absolute left-0 top-full z-50 w-56 rounded-xl border border-border bg-card py-2 shadow-popover"
                 onKeyDown={(e) => { if (e.key === "Escape") setBlogMenuOpen(false) }}
               >
                 <Link
                   href="/blog"
-                  className="block px-4 py-2 text-sm font-medium text-secondary hover:bg-muted hover:text-primary"
+                  className="block px-4 py-2 text-sm font-semibold text-secondary hover:bg-muted hover:text-primary"
                   onClick={() => setBlogMenuOpen(false)}
                 >
                   All Posts
@@ -252,14 +255,14 @@ export function Header() {
               </div>
             )}
           </div>
-          <Link href="/reseller" prefetch={false} className="text-sm font-medium text-secondary hover:text-primary">
+          <Link href="/reseller" prefetch={false} className="rounded-md px-3 py-2 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary">
             Become a Reseller
           </Link>
-          <Link href="/help" className="text-sm font-medium text-secondary hover:text-primary">
+          <Link href="/help" className="rounded-md px-3 py-2 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary">
             Help
           </Link>
           {isAdmin && (
-            <Link href="/admin" className="text-sm font-medium text-secondary hover:text-primary">
+            <Link href="/admin" className="rounded-md px-3 py-2 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary">
               Admin
             </Link>
           )}
@@ -270,33 +273,33 @@ export function Header() {
           <CommandPalette />
           {isAuthenticated ? (
             <>
-              <Link href="/wallet" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+              <Link href="/wallet" className="hidden rounded-md px-2.5 py-1.5 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary sm:block">
                 Wallet
               </Link>
-              <Link href="/rewards" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+              <Link href="/rewards" className="hidden rounded-md px-2.5 py-1.5 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary sm:block">
                 Rewards
               </Link>
-              <Link href="/refund" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+              <Link href="/refund" className="hidden rounded-md px-2.5 py-1.5 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary sm:block">
                 Refund
               </Link>
-              <Link href="/settings" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+              <Link href="/settings" className="hidden rounded-md px-2.5 py-1.5 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary sm:block">
                 Settings
               </Link>
               <button
                 onClick={handleSignOut}
-                className="hidden rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted sm:block"
+                className="hidden rounded-md border border-border px-3 py-1.5 text-sm font-medium text-secondary transition hover:bg-muted sm:block"
               >
                 Sign out
               </button>
             </>
           ) : (
             <>
-              <Link href="/login" className="hidden text-sm font-medium text-secondary hover:text-primary sm:block">
+              <Link href="/login" className="hidden rounded-md px-2.5 py-1.5 text-sm font-medium text-secondary transition hover:bg-muted hover:text-primary sm:block">
                 Log in
               </Link>
               <Link
                 href="/signup"
-                className="hidden rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 sm:block"
+                className="hidden rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-110 sm:block"
               >
                 Sign up
               </Link>
@@ -307,7 +310,7 @@ export function Header() {
             onClick={() => setMenuOpen((v) => !v)}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
-            className="flex h-11 w-11 items-center justify-center rounded-md border border-border md:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-md border border-border text-secondary transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:hidden"
           >
             <span className="flex flex-col gap-1">
               <span className={cn("block h-0.5 w-5 bg-secondary transition-transform dark:bg-foreground", menuOpen && "translate-y-1.5 rotate-45")} />
@@ -321,7 +324,7 @@ export function Header() {
       {menuOpen && (
         <nav
           aria-label="Mobile menu"
-          className="absolute inset-x-0 top-full z-50 flex max-h-[min(85dvh,calc(100dvh-4rem))] flex-col border-t border-border bg-card shadow-lg md:hidden"
+          className="absolute inset-x-0 top-full z-50 flex max-h-[min(85dvh,calc(100dvh-4rem))] flex-col border-t border-border bg-card shadow-popover md:hidden"
           onTouchStart={(e) => { touchStartX.current = e.touches[0]?.clientX ?? null }}
           onTouchEnd={(e) => {
             const start = touchStartX.current
@@ -336,7 +339,7 @@ export function Header() {
               <Link
                 href="/dashboard"
                 onClick={() => setMenuOpen(false)}
-                className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+                className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
               >
                 Dashboard
               </Link>
@@ -344,35 +347,35 @@ export function Header() {
             <Link
               href="/wallet"
               onClick={() => setMenuOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Wallet
             </Link>
             <Link
               href="/rewards"
               onClick={() => setMenuOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Rewards
             </Link>
             <Link
               href="/refund"
               onClick={() => setMenuOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Refund
             </Link>
             <Link
               href="/blog"
               onClick={() => setMenuOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Blog
             </Link>
             <Link
               href="/help"
               onClick={() => setMenuOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Help Center
             </Link>
@@ -382,7 +385,7 @@ export function Header() {
                   key={c.slug}
                   href={`/blog?category=${c.slug}`}
                   onClick={() => setMenuOpen(false)}
-                  className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-primary"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-primary"
                 >
                   {c.label}
                 </Link>
@@ -392,14 +395,14 @@ export function Header() {
               href="/reseller"
               prefetch={false}
               onClick={() => setMenuOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Become a Reseller
             </Link>
             <Link
               href="/settings"
               onClick={() => setMenuOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
             >
               Settings
             </Link>
@@ -407,7 +410,7 @@ export function Header() {
               <Link
                 href="/admin"
                 onClick={() => setMenuOpen(false)}
-                className="block rounded-md px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
+                className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-muted dark:text-foreground"
               >
                 Admin
               </Link>
@@ -423,7 +426,7 @@ export function Header() {
                   setMenuOpen(false)
                   handleSignOut()
                 }}
-                className="w-full rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm font-semibold text-secondary transition hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 dark:text-foreground"
+                className="w-full rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm font-semibold text-secondary transition hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 dark:text-foreground"
               >
                 Sign out
               </button>
@@ -432,14 +435,14 @@ export function Header() {
                 <Link
                   href="/login"
                   onClick={() => setMenuOpen(false)}
-                  className="flex-1 rounded-xl border border-border px-4 py-3 text-center text-sm font-semibold text-secondary hover:bg-muted dark:text-foreground"
+                  className="flex-1 rounded-lg border border-border px-4 py-3 text-center text-sm font-semibold text-secondary hover:bg-muted dark:text-foreground"
                 >
                   Log in
                 </Link>
                 <Link
                   href="/signup"
                   onClick={() => setMenuOpen(false)}
-                  className="flex-1 rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground hover:opacity-90"
+                  className="flex-1 rounded-lg bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-110"
                 >
                   Sign up
                 </Link>

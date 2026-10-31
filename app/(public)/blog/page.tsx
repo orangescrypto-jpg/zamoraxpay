@@ -5,6 +5,7 @@ import { listPublishedPostsPaginated } from "@/src/services/blog"
 import { d1Query } from "@/lib/db"
 import { cn } from "@/lib/utils"
 import { BlogPostSearch } from "@/components/shared/BlogPostSearch"
+import { Breadcrumbs } from "@/components/shared/Breadcrumbs"
 
 const POSTS_PER_PAGE = 30
 const CATEGORY_POSTS_PER_PAGE = 20
@@ -99,120 +100,139 @@ export default async function BlogListPage({
   const featured = posts[0]
 
   return (
-    <div className="bg-gradient-to-b from-primary/[0.035] via-background to-background">
-      <div className="container py-10 sm:py-14">
-        <div className="mb-8 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-secondary via-secondary to-primary/35 p-6 text-white shadow-sm sm:p-8 lg:p-10">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">ZamoraxPay Journal</p>
-            <h1 className="mt-2 text-3xl font-heading font-bold tracking-tight sm:text-4xl">{activeLabel ?? "Guides, updates & useful reads"}</h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">{intro}</p>
+    <div className="bg-background">
+      <Breadcrumbs
+        items={[
+          { label: "Home", href: "/" },
+          { label: "Blog", href: "/blog" },
+          ...(activeLabel ? [{ label: activeLabel }] : []),
+        ]}
+      />
+      {/* Blog hero header */}
+      <section className="relative overflow-hidden border-b border-border bg-secondary">
+        <div className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-primary/20 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-primary/10 blur-3xl" aria-hidden="true" />
+        <div className="container relative py-12 sm:py-16 lg:py-20">
+          <div className="max-w-3xl">
+            <span className="zpx-eyebrow inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white/80 backdrop-blur">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+              ZamoraxPay Journal
+            </span>
+            <h1 className="mt-4 text-3xl font-heading font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">{activeLabel ?? "Guides, updates and useful reads"}</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-white/70 sm:text-base">{intro}</p>
           </div>
         </div>
+      </section>
 
-      {featured && !category && (
-        <section className="mb-10 grid overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md md:grid-cols-[1.15fr_0.85fr]">
-          <Link href={`/blog/${featured.slug}`} className="group relative min-h-[220px] overflow-hidden bg-secondary sm:min-h-[280px] md:min-h-[320px]">
-            <img src={featured.coverImageUrl || "/blog-fallback-cover.svg"} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
-            <span className="absolute left-4 top-4 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">Featured</span>
-          </Link>
-          <div className="flex flex-col justify-center p-5 sm:p-7 lg:p-8">
-            {featured.category && <p className="text-xs font-semibold uppercase tracking-wider text-primary">{featured.category.replace(/-/g, " ")}</p>}
-            <h2 className="mt-2 text-xl font-heading font-bold tracking-tight text-foreground sm:text-2xl">{featured.title}</h2>
-            {featured.excerpt && <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted-foreground">{featured.excerpt}</p>}
-            <Link href={`/blog/${featured.slug}`} className="mt-5 inline-flex w-fit rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white hover:opacity-90">Read article →</Link>
-          </div>
-        </section>
-      )}
+      <div className="container py-10 sm:py-14">
+        {featured && !category && (
+          <section className="mb-10 grid overflow-hidden rounded-2xl border border-border bg-card shadow-soft transition-shadow hover:shadow-card md:grid-cols-[1.15fr_0.85fr]">
+            <Link href={`/blog/${featured.slug}`} className="group relative min-h-[220px] overflow-hidden bg-secondary sm:min-h-[280px] md:min-h-[320px]">
+              <img src={featured.coverImageUrl || "/blog-fallback-cover.svg"} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
+              <span className="absolute left-4 top-4 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary shadow-sm">Featured</span>
+            </Link>
+            <div className="flex flex-col justify-center p-5 sm:p-7 lg:p-8">
+              {featured.category && <p className="text-xs font-semibold uppercase tracking-wider text-primary">{featured.category.replace(/-/g, " ")}</p>}
+              <h2 className="mt-2 text-xl font-heading font-bold tracking-tight text-foreground sm:text-2xl">{featured.title}</h2>
+              {featured.excerpt && <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted-foreground">{featured.excerpt}</p>}
+              <Link href={`/blog/${featured.slug}`} className="mt-5 inline-flex w-fit items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition hover:brightness-110">Read article <span aria-hidden>→</span></Link>
+            </div>
+          </section>
+        )}
 
-      <div className="mb-10 flex flex-wrap gap-2 rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4">
-        <Link
-          href="/blog"
-          className={cn(
-            "rounded-full border px-3 py-1 text-xs font-medium",
-            !category ? "border-primary bg-primary/10 text-primary" : "border-border bg-white text-secondary hover:border-primary",
-          )}
-        >
-          All
-        </Link>
-        {categories.map((c: any) => (
+        {/* Category filter chips */}
+        <div className="mb-8 flex flex-wrap gap-2 rounded-2xl border border-border bg-white p-3 shadow-soft sm:p-4">
           <Link
-            key={c.slug}
-            href={`/blog?category=${c.slug}`}
+            href="/blog"
             className={cn(
-              "rounded-full border px-3 py-1 text-xs font-medium",
-              category === c.slug
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-white text-secondary hover:border-primary",
+              "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+              !category ? "border-primary bg-primary/10 text-primary" : "border-border bg-white text-secondary hover:border-primary hover:text-primary",
             )}
           >
-            {c.label}
+            All
           </Link>
-        ))}
-      </div>
-
-      {category && posts.length > 0 && (
-        <nav aria-label="Table of contents" className="mb-10 rounded-lg border border-border bg-white p-5">
-          <p className="mb-3 text-sm font-semibold text-secondary">
-            In this category{totalPages > 1 ? ` (page ${page} of ${totalPages})` : ""}
-          </p>
-          <ol className="grid list-decimal gap-x-6 gap-y-1.5 pl-5 sm:grid-cols-2">
-            {posts.map((post) => (
-              <li key={post.id} className="text-sm">
-                <Link href={`/blog/${post.slug}`} className="text-secondary hover:text-primary hover:underline">
-                  {post.title}
-                </Link>
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )}
-
-      <div className="mb-5 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-end">
-        <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Latest reads</p><h2 className="mt-1 text-xl font-heading font-bold text-secondary">{activeLabel ?? "Latest from ZamoraxPay"}</h2></div>
-        <span className="text-xs text-muted-foreground">{posts.length} article{posts.length === 1 ? "" : "s"} shown</span>
-      </div>
-
-      <BlogPostSearch posts={posts.map((post: any) => ({ id: post.id, slug: post.slug, title: post.title, excerpt: post.excerpt, category: post.category, publishedAt: post.publishedAt, coverImageUrl: post.coverImageUrl }))} />
-
-      {totalPages > 1 && (
-        <nav aria-label="Blog pagination" className="mt-10 flex flex-wrap items-center justify-center gap-2">
-          {page > 1 && (
+          {categories.map((c: any) => (
             <Link
-              href={buildPageHref(page - 1)}
-              rel="prev"
-              className="inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-            >
-              Previous
-            </Link>
-          )}
-
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => Math.max(1, Math.min(page - 2, totalPages - 4)) + i).map((p) => (
-            <Link
-              key={p}
-              href={buildPageHref(p)}
-              aria-current={p === page ? "page" : undefined}
+              key={c.slug}
+              href={`/blog?category=${c.slug}`}
               className={cn(
-                "rounded-md border px-3 py-1.5 text-sm font-medium",
-                p === page
+                "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                category === c.slug
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-foreground hover:border-primary hover:text-primary",
+                  : "border-border bg-white text-secondary hover:border-primary hover:text-primary",
               )}
             >
-              {p}
+              {c.label}
             </Link>
           ))}
+        </div>
 
-          {page < totalPages && (
-            <Link
-              href={buildPageHref(page + 1)}
-              rel="next"
-              className="inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-            >
-              Next
-            </Link>
-          )}
-        </nav>
-      )}
+        {category && posts.length > 0 && (
+          <nav aria-label="Table of contents" className="mb-10 rounded-xl border border-border bg-white p-5 shadow-soft">
+            <p className="mb-3 text-sm font-semibold text-secondary">
+              In this category{totalPages > 1 ? ` (page ${page} of ${totalPages})` : ""}
+            </p>
+            <ol className="grid list-decimal gap-x-6 gap-y-1.5 pl-5 sm:grid-cols-2">
+              {posts.map((post) => (
+                <li key={post.id} className="text-sm">
+                  <Link href={`/blog/${post.slug}`} className="text-secondary hover:text-primary hover:underline">
+                    {post.title}
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </nav>
+        )}
+
+        <div className="mb-5 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-end">
+          <div>
+            <span className="zpx-eyebrow">Latest reads</span>
+            <h2 className="mt-1 text-xl font-heading font-bold text-secondary sm:text-2xl">{activeLabel ?? "Latest from ZamoraxPay"}</h2>
+          </div>
+          <span className="text-xs text-muted-foreground">{posts.length} article{posts.length === 1 ? "" : "s"} shown</span>
+        </div>
+
+        <BlogPostSearch posts={posts.map((post: any) => ({ id: post.id, slug: post.slug, title: post.title, excerpt: post.excerpt, category: post.category, publishedAt: post.publishedAt, coverImageUrl: post.coverImageUrl }))} />
+
+        {totalPages > 1 && (
+          <nav aria-label="Blog pagination" className="mt-10 flex flex-wrap items-center justify-center gap-2">
+            {page > 1 && (
+              <Link
+                href={buildPageHref(page - 1)}
+                rel="prev"
+                className="inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                Previous
+              </Link>
+            )}
+
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => Math.max(1, Math.min(page - 2, totalPages - 4)) + i).map((p) => (
+              <Link
+                key={p}
+                href={buildPageHref(p)}
+                aria-current={p === page ? "page" : undefined}
+                className={cn(
+                  "rounded-md border px-3 py-1.5 text-sm font-medium transition",
+                  p === page
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card text-foreground hover:border-primary hover:text-primary",
+                )}
+              >
+                {p}
+              </Link>
+            ))}
+
+            {page < totalPages && (
+              <Link
+                href={buildPageHref(page + 1)}
+                rel="next"
+                className="inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                Next
+              </Link>
+            )}
+          </nav>
+        )}
       </div>
     </div>
   )

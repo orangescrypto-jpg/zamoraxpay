@@ -13,6 +13,7 @@ import { MobileBottomNav } from "@/components/layout/MobileBottomNav"
 import { ServiceChrome } from "@/components/dashboard/ServiceChrome"
 import { ToastProvider, useToast } from "@/components/shared/ToastProvider"
 import { LocalExperienceTools } from "@/components/shared/LocalExperienceTools"
+import { BackToTop } from "@/components/shared/BackToTop"
 import { DashboardWorkspace } from "@/components/dashboard/DashboardWorkspace"
 import { ThemeProvider } from "@/components/theme-provider"
 import { useServiceWorkerUpdate } from "@/hooks/useServiceWorkerUpdate"
@@ -110,6 +111,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
       <Footer />
       <CookieConsentBanner />
       <WhatsAppSupportButton />
+      <BackToTop />
       <LocalExperienceTools />
       <ServiceWorkerUpdateToast />
     </ToastProvider>

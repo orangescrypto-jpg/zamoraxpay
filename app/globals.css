@@ -87,22 +87,20 @@
 }
 
 /* `text-secondary` is used across ~100 components as "the heading/dark
-   body-text color" (it reads fine in light mode: near-black navy on
-   white). But `--secondary` is ALSO the navy *surface* color used for
-   `bg-secondary` (footer, badges, buttons, pills with white text on
-   top) — and in dark mode that surface navy is deliberately close to
-   the page background, by design, so those surfaces blend in rather
-   than glow. The problem: `text-secondary` shares that same variable,
-   so in dark mode it renders near-invisible navy-on-navy text (e.g.
-   the article byline, "Share" button, section headings on /blog/[slug]).
-   Rather than rewrite every one of those call sites (and risk missing
-   intentional uses of text-secondary-on-a-light-card), override just
-   the `color` of the compiled `.text-secondary` utility for dark mode
-   so it resolves to the readable foreground color instead — this does
-   NOT touch `--secondary` itself, so `bg-secondary` surfaces (footer,
-   badges, buttons) keep their correct navy background exactly as
-   designed. */
-.dark .text-secondary {
+   body-text color", and resolves to the same navy variable as
+   `bg-secondary` (footer, badges, buttons). In dark mode that navy is
+   deliberately close to the page background, so `bg-secondary` surfaces
+   blend in correctly — but `text-secondary` used as TEXT on the
+   theme's own dark background becomes near-invisible navy-on-navy.
+   A blanket override here is NOT safe though: ~55 files use a literal
+   `bg-white` card (by design — "white card on a dark page") that also
+   contains `text-secondary` headings, e.g. the /blog listing cards in
+   BlogPostSearch.tsx and app/(public)/blog/page.tsx. Those need navy
+   text on their white card and must NOT be repainted white-on-white.
+   So this is scoped to `.zpx-dark-surface-text`, opted into only by
+   elements confirmed to sit on the theme's own dark background/card
+   (not a literal bg-white), rather than rewritten globally. */
+.dark .zpx-dark-surface-text {
   color: hsl(var(--foreground));
 }
 

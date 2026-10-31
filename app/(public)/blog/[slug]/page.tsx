@@ -135,7 +135,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           <h1 className="mb-4 text-3xl font-heading font-bold leading-tight tracking-tight text-foreground sm:text-4xl lg:text-5xl">{post.title}</h1>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-5">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="font-medium text-secondary">{post.authorName || "ZamoraxPay Team"}</span>
+              <span className="zpx-dark-surface-text font-medium text-secondary">{post.authorName || "ZamoraxPay Team"}</span>
               {post.publishedAt && (
                 <>
                   <span aria-hidden>·</span>
@@ -189,7 +189,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
       {relatedPosts.length > 0 && (
         <section className="border-t border-border bg-muted/30 py-12">
           <div className="container max-w-5xl">
-            <h2 className="mb-6 text-xl font-heading font-bold text-secondary">Related posts</h2>
+            <h2 className="zpx-dark-surface-text mb-6 text-xl font-heading font-bold text-secondary">Related posts</h2>
             <div className="grid gap-6 sm:grid-cols-2">
               {relatedPosts.map((related) => {
                 const relReading = estimateReadingTime(related.excerpt ?? "")

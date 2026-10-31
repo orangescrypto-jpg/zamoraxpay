@@ -42,7 +42,11 @@ export function ShareButton({ title, text, url, className }: ShareButtonProps) {
       onClick={handleShare}
       className={
         className ??
-        "inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-secondary hover:border-primary hover:text-primary"
+        // zpx-dark-surface-text: this button sits directly on the
+        // page's own dark background (no bg-white/light card wrapper),
+        // so its text-secondary needs the dark-mode override — see
+        // globals.css for why that's opt-in rather than global.
+        "zpx-dark-surface-text inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-secondary hover:border-primary hover:text-primary"
       }
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

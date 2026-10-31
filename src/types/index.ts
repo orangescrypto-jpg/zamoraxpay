@@ -119,7 +119,11 @@ export interface PaymentProviderConfig {
 
 export interface Banner {
   id: string
-  placement: "header_slider" | "footer"
+  // 'footer_standalone' is a single always-visible banner slot below
+  // the existing footer carousel, rendered at the image's own natural
+  // dimensions (no cropping, no fixed height) — unlike 'header_slider'
+  // and 'footer', which both share the cropped carousel styling.
+  placement: "header_slider" | "footer" | "footer_standalone"
   title: string | null
   imageUrl: string
   linkUrl: string | null

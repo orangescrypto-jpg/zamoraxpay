@@ -101,6 +101,43 @@ function FooterBanner() {
   )
 }
 
+// A single always-visible banner slot, separate from the carousel
+// above — rendered at the image's own natural width/height (no
+// object-cover crop, no fixed max-height) so it can hold any banner
+// dimensions the admin uploads. Only the most recent active one for
+// this placement is shown (the API already orders by sort_order, so
+// this takes the first result).
+function StandaloneFooterBanner() {
+  const [banner, setBanner] = useState<Banner | null>(null)
+
+  useEffect(() => {
+    getPublicBanners()
+      .then((items) => {
+        const match = items.find((item) => item.placement === "footer_standalone")
+        setBanner(match ?? null)
+      })
+      .catch(() => setBanner(null))
+  }, [])
+
+  if (!banner) return null
+
+  const content = (
+    <img
+      src={banner.imageUrl}
+      alt={banner.title ?? "Promotion"}
+      className="block h-auto w-full rounded-2xl"
+      loading="lazy"
+    />
+  )
+
+  return (
+    <div className="relative mb-12" aria-label="Footer promotion">
+      {banner.linkUrl ? <Link href={banner.linkUrl}>{content}</Link> : content}
+      {banner.title && <p className="mt-2 text-center text-sm font-medium text-white/80">{banner.title}</p>}
+    </div>
+  )
+}
+
 // Same route list AdSenseLoader uses to decide "is this a logged-in
 // app screen" - the footer is rendered site-wide from the root layout,
 // so it needs its own check to keep the ad out of the dashboard/admin
@@ -132,6 +169,7 @@ export function Footer() {
 
       <div className="container relative py-12 sm:py-16 lg:py-20">
         <FooterBanner />
+        <StandaloneFooterBanner />
 
         {/* Brand + Contact */}
         <div className="mb-12 grid gap-8 border-b border-white/10 pb-10 md:grid-cols-5 md:gap-10">

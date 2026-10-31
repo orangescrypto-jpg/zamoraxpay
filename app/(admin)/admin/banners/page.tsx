@@ -10,7 +10,7 @@ import { ImagePicker } from "@/components/admin/ImagePicker"
 
 interface AdminBanner {
   id: string
-  placement: "header_slider" | "footer"
+  placement: "header_slider" | "footer" | "footer_standalone"
   title: string | null
   image_url: string
   link_url: string | null
@@ -19,7 +19,7 @@ interface AdminBanner {
 }
 
 export default function AdminBannersPage() {
-  const [tab, setTab] = useState<"header_slider" | "footer">("header_slider")
+  const [tab, setTab] = useState<"header_slider" | "footer" | "footer_standalone">("header_slider")
   const [banners, setBanners] = useState<AdminBanner[]>([])
   const [loading, setLoading] = useState(true)
   const [draftTitle, setDraftTitle] = useState("")
@@ -109,7 +109,24 @@ export default function AdminBannersPage() {
         >
           Footer Banner
         </button>
+        <button
+          onClick={() => setTab("footer_standalone")}
+          className={cn(
+            "flex-1 rounded-md px-4 py-2 text-sm font-medium",
+            tab === "footer_standalone" ? "bg-white shadow-sm" : "text-muted-foreground",
+          )}
+        >
+          Standalone Banner
+        </button>
       </div>
+
+      {tab === "footer_standalone" && (
+        <p className="mb-4 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          Shown as its own block below the footer banner carousel, at the image&apos;s own width/height — not
+          cropped or resized to any fixed aspect ratio. Only the most recently added active one is shown (add a
+          new one and deactivate the old to swap it).
+        </p>
+      )}
 
       {/* Add new banner */}
       <div className="mb-8 rounded-lg border border-border p-4">

@@ -32,8 +32,11 @@ export async function POST(req: NextRequest) {
     if (!placement || !imageUrl) {
       return NextResponse.json({ error: "placement and imageUrl are required" }, { status: 400 })
     }
-    if (!["header_slider", "footer"].includes(placement)) {
-      return NextResponse.json({ error: "placement must be 'header_slider' or 'footer'" }, { status: 400 })
+    if (!["header_slider", "footer", "footer_standalone"].includes(placement)) {
+      return NextResponse.json(
+        { error: "placement must be 'header_slider', 'footer', or 'footer_standalone'" },
+        { status: 400 },
+      )
     }
 
     const id = randomUUID()

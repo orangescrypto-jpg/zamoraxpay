@@ -10,15 +10,17 @@
 // `reference`, and this uses the exact same reference format the
 // Korapay webhook uses, so this never double-credits a payment the
 // webhook already processed (and vice versa).
+//
+// Only covers the case where the user actually returns to
+// /wallet?funding=complete&reference=... — see
+// app/api/wallet/fund/reconcile/route.ts for the case where the user
+// closes/abandons the checkout tab and never comes back to that URL
+// at all. Both share the same verify-and-credit logic in
+// src/services/walletFundingVerification.ts.
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth-server"
-import { korapayAdapter } from "@/src/services/providers/payment/korapay"
-import { getPaymentProviderCredentials } from "@/src/services/config"
-import { creditWallet } from "@/src/services/wallet"
-import { recordFundingSource, extractKorapayFundingSource } from "@/src/services/fundingSource"
-import { awardDepositBonusForFunding } from "@/src/services/depositBonus"
-import { applyKorapayChargeForFunding } from "@/src/services/korapayCharge"
+import { verifyKorapayFundingAndCredit } from "@/src/services/walletFundingVerification"
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req)
@@ -29,52 +31,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "reference is required" }, { status: 400 })
   }
 
-  const credentials = await getPaymentProviderCredentials("korapay")
-  const result = await korapayAdapter.verify(reference, credentials)
-
-  if (result.status === "pending") {
-    return NextResponse.json({ status: "pending" })
-  }
-
-  if (result.status === "failed" || !result.success) {
-    return NextResponse.json({ status: "failed" })
-  }
-
-  if (!result.amountKobo) {
-    return NextResponse.json({ status: "pending" })
-  }
-
-  const eventReference = `ZPWF-KORAPAY-${result.providerReference ?? reference}`
-
-  const { newBalanceKobo } = await creditWallet({
-    userId: auth.uid,
-    amountKobo: result.amountKobo,
-    type: "funding",
-    reference: eventReference,
-    providerReference: result.providerReference ?? reference,
-    metadata: { provider: "korapay", source: "verify-on-return" },
-  })
-
-  // Same guardrail-source recording the webhook does — without this,
-  // a payment confirmed via this fallback path (rather than the
-  // webhook) would leave the user with a credited balance but no
-  // eligible withdrawal account on file.
-  const fundingSource = extractKorapayFundingSource(result.raw)
-  recordFundingSource(auth.uid, "korapay", fundingSource).catch((err) =>
-    console.error("[wallet/fund/verify] Funding source recording failed:", err),
-  )
-
-  awardDepositBonusForFunding({
-    userId: auth.uid,
-    depositAmountKobo: result.amountKobo,
-    fundingReference: eventReference,
-  }).catch((err) => console.error("[wallet/fund/verify] Deposit bonus award failed:", err))
-
-  applyKorapayChargeForFunding({
-    userId: auth.uid,
-    depositAmountKobo: result.amountKobo,
-    fundingReference: eventReference,
-  }).catch((err) => console.error("[wallet/fund/verify] Korapay charge deduction failed:", err))
-
-  return NextResponse.json({ status: "success", newBalanceKobo })
+  const result = await verifyKorapayFundingAndCredit(auth.uid, reference, "verify-on-return")
+  return NextResponse.json(result)
 }

@@ -83,7 +83,15 @@ export function ConnectionStatus() {
   return (
     <div
       role="status"
-      className={`fixed inset-x-3 bottom-3 z-[65] mx-auto flex max-w-md items-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg backdrop-blur sm:inset-x-auto sm:right-5 ${
+      // Sits just above the mobile bottom nav instead of on top of it
+      // (it used to be bottom-3, which sat directly over the nav bar and
+      // hid its icons/labels). z-[70] keeps it above the .zpx-local-tools
+      // / .zpx-back-to-top FABs (z-index 150/160) only while this toast
+      // is visible — it's transient, so briefly covering a FAB corner is
+      // fine, but it must never be covered BY the nav bar it's warning
+      // about. On >=sm screens there's no bottom nav, so it sits near
+      // the corner as before.
+      className={`fixed inset-x-3 z-[70] mx-auto flex max-w-md items-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg backdrop-blur bottom-[calc(3.75rem+env(safe-area-inset-bottom))] sm:inset-x-auto sm:bottom-5 sm:right-5 ${
         online ? "border-emerald-200 bg-emerald-50/95 text-emerald-900" : "border-amber-200 bg-amber-50/95 text-amber-950"
       }`}
     >

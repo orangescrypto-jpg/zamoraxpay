@@ -19,6 +19,7 @@ import {
   recordWebhookEvent,
   isWebhookEventProcessed,
 } from "@/src/services/paymentWebhook"
+import { resolvePendingWalletFunding } from "@/src/services/pendingWalletFundings"
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
@@ -93,6 +94,15 @@ export async function POST(req: NextRequest) {
           amountKobo,
           fundingSource: extractKorapayFundingSource(payload),
         })
+
+        // Our own reference (ZPWF-<uuid>) is what fund/route.ts wrote
+        // to pending_wallet_fundings, and Korapay echoes it back as
+        // data.reference. Stops this payment from being re-flagged by
+        // the abandoned-tab reconciliation check now that it's credited.
+        resolvePendingWalletFunding(eventIdStr).catch((err) =>
+          console.error("[korapay webhook] Failed to mark pending funding resolved (non-fatal):", eventIdStr, err),
+        )
+
         return NextResponse.json({ received: true })
       }
     }

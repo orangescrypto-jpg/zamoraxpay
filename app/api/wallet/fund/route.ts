@@ -2,6 +2,13 @@
 // Initializes a wallet-funding payment. Picks the highest-priority
 // enabled payment provider (Korapay first per admin config, falling
 // back to Paystack) — never hardcoded here.
+//
+// Also records the attempt in pending_wallet_fundings BEFORE handing
+// the user off to the provider's checkout page. This is what lets
+// GET /api/wallet/fund/reconcile (called on a plain /wallet page load,
+// not just the funding=complete redirect) find and re-verify a payment
+// whose tab the user closed or abandoned before the redirect ever
+// happened — see migrations/2026-10-pending-wallet-fundings.sql.
 
 import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
@@ -65,6 +72,21 @@ export async function POST(req: NextRequest) {
       )
 
       if (result.success) {
+        // Best-effort: if this write fails, the payment can still be
+        // completed and credited normally via the webhook or the
+        // funding=complete redirect flow — it just won't be eligible
+        // for the abandoned-tab reconciliation check below. Never
+        // block the user's checkout redirect on this.
+        try {
+          await d1Query(
+            `INSERT INTO pending_wallet_fundings (reference, user_id, provider, amount_kobo, status)
+             VALUES (?, ?, ?, ?, 'pending')`,
+            [reference, auth.uid, provider.providerKey, amountKobo],
+          )
+        } catch (err) {
+          console.error("[wallet/fund] Failed to record pending funding (non-fatal):", reference, err)
+        }
+
         return NextResponse.json({
           provider: provider.providerKey,
           authorizationUrl: result.authorizationUrl,

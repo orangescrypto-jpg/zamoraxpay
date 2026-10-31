@@ -137,6 +137,48 @@ function WalletPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Abandoned-tab safety net: the poll() above only runs when the user
+  // actually lands back on /wallet?funding=complete&reference=... —
+  // i.e. when Korapay's checkout page redirects them. If they instead
+  // close or abandon that tab (common with the bank-transfer checkout
+  // option: copy the account number, switch to their banking app, pay,
+  // never return to that tab), there's no redirect to trigger the poll
+  // above, and the webhook becomes the ONLY thing that can credit them.
+  // This silently checks, on every plain /wallet visit, whether the
+  // signed-in user has any funding attempt that never resolved, and
+  // actively re-verifies it — independent of both the webhook and the
+  // redirect. See app/api/wallet/fund/reconcile/route.ts.
+  useEffect(() => {
+    const funding = searchParams.get("funding")
+    if (funding === "complete") return // the poll() effect above already covers this visit
+
+    let cancelled = false
+
+    async function reconcile() {
+      try {
+        const headers = await getAuthHeader()
+        const res = await fetch("/api/wallet/fund/reconcile", { headers })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled || !res.ok) return
+
+        if (typeof data.credited === "number" && data.credited > 0) {
+          setVerifyStatus("success")
+          if (typeof data.newBalanceKobo === "number") setBalanceKobo(data.newBalanceKobo)
+        }
+      } catch {
+        // Silent — this is a background self-healing check, not a
+        // user-initiated action. A failure here just means the balance
+        // stays as it already is; nothing for the user to react to.
+      }
+    }
+
+    reconcile()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function handleFund() {
     setError(null)
     const amountKobo = Math.round(parseFloat(amount) * 100)

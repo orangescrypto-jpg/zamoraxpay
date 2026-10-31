@@ -38,6 +38,19 @@ export async function POST(req: NextRequest) {
   const validSignature = korapayAdapter.verifyWebhookSignature(payload?.data, signature, credentials)
 
   if (!validSignature) {
+    // No visibility into failed verifications before this log existed —
+    // every prior failure (wrong/missing key, URL not configured,
+    // Korapay not calling us at all) looked identical from the outside.
+    // This tells us, on the next failure, which of those it actually is.
+    const hasSecretKey = Boolean(credentials.secretKey || process.env.KORAPAY_SECRET_KEY)
+    console.error("[korapay webhook] Signature verification failed", {
+      hasSecretKey, // false => the real bug is a missing/unsaved Secret Key, not the signing logic
+      secretKeySource: credentials.secretKey ? "admin-panel" : process.env.KORAPAY_SECRET_KEY ? "env-var" : "none",
+      signatureHeaderPresent: Boolean(signature),
+      signatureHeaderLength: signature.length,
+      eventType: payload?.event,
+      reference: payload?.data?.reference,
+    })
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
   }
 

@@ -86,6 +86,26 @@
   }
 }
 
+/* `text-secondary` is used across ~100 components as "the heading/dark
+   body-text color" (it reads fine in light mode: near-black navy on
+   white). But `--secondary` is ALSO the navy *surface* color used for
+   `bg-secondary` (footer, badges, buttons, pills with white text on
+   top) — and in dark mode that surface navy is deliberately close to
+   the page background, by design, so those surfaces blend in rather
+   than glow. The problem: `text-secondary` shares that same variable,
+   so in dark mode it renders near-invisible navy-on-navy text (e.g.
+   the article byline, "Share" button, section headings on /blog/[slug]).
+   Rather than rewrite every one of those call sites (and risk missing
+   intentional uses of text-secondary-on-a-light-card), override just
+   the `color` of the compiled `.text-secondary` utility for dark mode
+   so it resolves to the readable foreground color instead — this does
+   NOT touch `--secondary` itself, so `bg-secondary` surfaces (footer,
+   badges, buttons) keep their correct navy background exactly as
+   designed. */
+.dark .text-secondary {
+  color: hsl(var(--foreground));
+}
+
 /* ------------------------------------------------------------------
    Shadow tokens (used by hover states, modals, popovers, sticky bars).
    Centralised so authors stop re-inventing arbitrary shadows per file.

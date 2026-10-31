@@ -155,9 +155,12 @@ export default function AdminProvidersPage() {
       { key: "testMode", label: "Test Mode (\"true\" or \"false\")", placeholder: "false" },
     ],
   }
+  // Neither Korapay nor Paystack has a separate "webhook secret" — both
+  // sign webhooks with this same Secret Key. A webhookSecret field used
+  // to be shown here, but nothing in either adapter reads it anymore, so
+  // it was removed to stop admins saving a value that does nothing.
   const PAYMENT_CRED_FIELDS: { key: string; label: string; secret?: boolean; placeholder?: string }[] = [
     { key: "secretKey", label: "Secret Key", secret: true },
-    { key: "webhookSecret", label: "Webhook Secret", secret: true },
   ]
 
   function fieldsFor(type: "vtu" | "payment", key: string) {

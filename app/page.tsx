@@ -481,12 +481,16 @@ export default async function HomePage() {
                           )}
                         </Link>
 
-                        {/* Remaining posts as a two-up grid, image-led */}
+                        {/* Remaining posts as card grid after featured */}
                         {posts.length > 1 && (
-                          <div className="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2">
+                          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                             {posts.slice(1).map((post) => (
-                              <Link key={post.id} href={`/blog/${post.slug}`} className="group block">
-                                <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-xl border border-border bg-secondary">
+                              <Link
+                                key={post.id}
+                                href={`/blog/${post.slug}`}
+                                className="group block overflow-hidden rounded-xl border border-border bg-white p-3 shadow-soft transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card"
+                              >
+                                <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
                                   <img
                                     src={post.coverImageUrl || "/blog-fallback-cover.svg"}
                                     alt={post.title}
@@ -494,11 +498,11 @@ export default async function HomePage() {
                                     loading="lazy"
                                   />
                                 </div>
-                                <h4 className="mb-1 font-heading text-base font-semibold text-secondary group-hover:text-primary line-clamp-2 sm:text-lg">
+                                <h4 className="mb-1 px-1 font-heading text-base font-semibold text-secondary group-hover:text-primary line-clamp-2 sm:text-lg">
                                   {post.title}
                                 </h4>
                                 {post.publishedAt && (
-                                  <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
+                                  <p className="px-1 text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
                                 )}
                               </Link>
                             ))}

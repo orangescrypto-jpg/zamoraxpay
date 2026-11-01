@@ -73,6 +73,28 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function deleteUser(u: AdminUserRow) {
+    if (updatingUserId) return
+    if (!confirm(`Permanently delete ${u.fullName}? This removes them from D1 and Supabase and cannot be undone.`)) return
+    setUpdatingUserId(u.id)
+    setError(null)
+    try {
+      const headers = await getAuthHeader()
+      const res = await fetch(`/api/admin/users/${u.id}`, {
+        method: "DELETE",
+        headers,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? data.message ?? "Could not delete this user.")
+      if (data.warning) setError(data.warning)
+      setUsers((prev) => prev.filter((x) => x.id !== u.id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete this user.")
+    } finally {
+      setUpdatingUserId(null)
+    }
+  }
+
   const StatusBadge = ({ status }: { status: string }) => (
     <span
       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -83,16 +105,22 @@ export default function AdminUsersPage() {
     </span>
   )
 
-  const ActionButton = ({ u }: { u: AdminUserRow }) =>
-    u.status === "active" ? (
-      <button onClick={() => changeStatus(u.id, "suspended")} disabled={updatingUserId !== null} className="text-xs text-destructive hover:underline disabled:opacity-50">
-        {updatingUserId === u.id ? "Updating..." : "Suspend"}
+  const ActionButton = ({ u }: { u: AdminUserRow }) => (
+    <div className="flex items-center justify-end gap-3">
+      {u.status === "active" ? (
+        <button onClick={() => changeStatus(u.id, "suspended")} disabled={updatingUserId !== null} className="text-xs text-destructive hover:underline disabled:opacity-50">
+          {updatingUserId === u.id ? "Updating..." : "Suspend"}
+        </button>
+      ) : (
+        <button onClick={() => changeStatus(u.id, "active")} disabled={updatingUserId !== null} className="text-xs text-accent hover:underline disabled:opacity-50">
+          {updatingUserId === u.id ? "Updating..." : "Reactivate"}
+        </button>
+      )}
+      <button onClick={() => deleteUser(u)} disabled={updatingUserId !== null} className="text-xs font-semibold text-destructive hover:underline disabled:opacity-50">
+        Delete
       </button>
-    ) : (
-      <button onClick={() => changeStatus(u.id, "active")} disabled={updatingUserId !== null} className="text-xs text-accent hover:underline disabled:opacity-50">
-        {updatingUserId === u.id ? "Updating..." : "Reactivate"}
-      </button>
-    )
+    </div>
+  )
 
   return (
     <div className="p-4 sm:p-6">

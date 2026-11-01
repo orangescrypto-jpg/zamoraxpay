@@ -477,16 +477,16 @@ export default async function HomePage() {
                           )}
                         </Link>
 
-                        {/* Remaining posts as cards in a two-up grid */}
+                        {/* Remaining posts as a list */}
                         {posts.length > 1 && (
-                          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                          <div className="divide-y divide-border rounded-xl border border-border bg-white shadow-soft">
                             {posts.slice(1).map((post) => (
                               <Link
                                 key={post.id}
                                 href={`/blog/${post.slug}`}
-                                className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-white shadow-soft transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card"
+                                className="group flex items-center gap-4 p-4 transition hover:bg-muted/40"
                               >
-                                <div className="aspect-[1200/630] overflow-hidden bg-secondary">
+                                <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-secondary sm:h-20 sm:w-28">
                                   <img
                                     src={post.coverImageUrl || "/blog-fallback-cover.svg"}
                                     alt={post.title}
@@ -494,15 +494,12 @@ export default async function HomePage() {
                                     loading="lazy"
                                   />
                                 </div>
-                                <div className="flex flex-1 flex-col p-4 sm:p-5">
-                                  <h4 className="mb-1 font-heading text-base font-semibold text-secondary group-hover:text-primary line-clamp-2 sm:text-lg">
+                                <div className="min-w-0">
+                                  <h4 className="mb-1 font-heading font-semibold text-secondary group-hover:text-primary line-clamp-2">
                                     {post.title}
                                   </h4>
-                                  {post.excerpt && (
-                                    <p className="mb-2 text-sm leading-6 text-muted-foreground line-clamp-2">{post.excerpt}</p>
-                                  )}
                                   {post.publishedAt && (
-                                    <p className="mt-auto pt-2 text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
+                                    <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
                                   )}
                                 </div>
                               </Link>

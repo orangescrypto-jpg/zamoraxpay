@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { requireStaff, requireSuperAdmin } from "@/lib/auth-server"
-import { d1Query } from "@/lib/db"
+import { d1Query, d1Batch } from "@/lib/db"
 import { createServiceRoleClient } from "@/src/services/providers/supabase/server"
 import { randomUUID } from "crypto"
 import { withDisplayAmount } from "@/src/services/vtuOrders"
@@ -88,28 +88,57 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     [randomUUID(), auth.uid, id, JSON.stringify(user)],
   )
 
-  // Delete dependent rows first (D1/SQLite foreign keys aren't
-  // enforced by default, but doing this explicitly keeps the data
-  // model honest regardless of that setting).
-  //
-  // vtu_orders_archive is created by a separate retention migration
-  // (migrations/retention_vtu_orders.sql) that may not have been run
-  // on every environment, so its DELETE is wrapped individually —
-  // otherwise one missing table 500s the whole deletion and nothing
-  // gets removed.
-  await Promise.all([
-    d1Query("DELETE FROM wallet_transactions WHERE user_id = ?", [id]),
-    d1Query("DELETE FROM vtu_orders WHERE user_id = ?", [id]),
-    d1Query("DELETE FROM vtu_orders_archive WHERE user_id = ?", [id]).catch(() => null),
-    d1Query("DELETE FROM beneficiaries WHERE user_id = ?", [id]),
-    d1Query("DELETE FROM auto_reload_rules WHERE user_id = ?", [id]),
-    d1Query("DELETE FROM reseller_bvn_verifications WHERE user_id = ?", [id]),
-    d1Query("DELETE FROM fraud_flags WHERE user_id = ?", [id]),
-    d1Query("DELETE FROM referrals WHERE referrer_user_id = ? OR referred_user_id = ?", [id, id]),
-    d1Query("DELETE FROM wallets WHERE user_id = ?", [id]),
-  ])
+  // Hard delete: every row anywhere in D1 that references this user,
+  // deepest children first, then the user row itself — run as ONE
+  // atomic D1 batch so this is all-or-nothing. (Previously these ran
+  // as separate parallel queries: when one failed — e.g. referencing
+  // a table that doesn't exist in this environment — the others had
+  // already executed, leaving the user half-deleted: wallet gone,
+  // user row still there. A batch can't partially apply like that.)
+  // Nothing is archived; this is a permanent, total removal.
+  try {
+    await d1Batch(
+      [
+      // grandchildren of per-user rows, keyed off those rows' own ids
+      { sql: "DELETE FROM bulk_purchase_items WHERE run_id IN (SELECT id FROM bulk_purchase_runs WHERE user_id = ?)", params: [id] },
+      { sql: "DELETE FROM contact_batch_numbers WHERE batch_id IN (SELECT id FROM contact_batches WHERE user_id = ?)", params: [id] },
 
-  await d1Query("DELETE FROM users WHERE id = ?", [id])
+      // direct children, by user_id (or equivalent column)
+      { sql: "DELETE FROM wallet_transactions WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM vtu_orders WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM international_topup_orders WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM beneficiaries WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM auto_reload_rules WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM reseller_bvn_verifications WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM fraud_flags WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM referrals WHERE referrer_user_id = ? OR referred_user_id = ?", params: [id, id] },
+      { sql: "DELETE FROM withdrawals WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM funding_source_accounts WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM funding_sources WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM bulk_purchase_runs WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM contact_batches WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM push_subscriptions WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM push_notification_log WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM daily_streak_checkins WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM daily_streaks WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM spin_tickets WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM spin_spins WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM spin_vouchers WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM spin_loss_streaks WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM streak_protections WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM cookie_consents WHERE user_id = ?", params: [id] },
+      { sql: "DELETE FROM wallets WHERE user_id = ?", params: [id] },
+
+        // the user row itself, last
+        { sql: "DELETE FROM users WHERE id = ?", params: [id] },
+      ],
+    )
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Delete failed, nothing was removed: ${err instanceof Error ? err.message : "Unknown D1 error"}` },
+      { status: 500 },
+    )
+  }
 
   // Also remove the Supabase auth account — otherwise the person could
   // still "exist" as a login even though their ZamoraxPay profile is

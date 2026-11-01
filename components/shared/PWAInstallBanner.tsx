@@ -91,7 +91,7 @@ export default function PWAInstallBanner() {
     <div
       role="dialog"
       aria-label="Install ZamoraxPay app"
-      className="fixed inset-x-0 top-0 z-50 border-b border-border bg-card p-4 shadow-lg sm:top-4 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:rounded-xl sm:border"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-lg sm:bottom-4 sm:left-1/2 sm:right-auto sm:top-auto sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:rounded-xl sm:border sm:pb-4"
     >
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">

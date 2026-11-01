@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   GraduationCap,
   Globe2,
+  Newspaper,
   ShieldCheck,
   Smartphone,
   Ticket,
@@ -143,11 +144,11 @@ export default async function HomePage() {
               Digital services and useful information
             </span>
             <h1 className="mt-5 text-4xl font-heading font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Airtime, data, and bills, all from one fast, reliable wallet
+              One wallet for your bills, and the news and opportunities that matter to you
             </h1>
             <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-white/70 sm:text-lg">
-              Built for reliability. Transactions go through fast, every time, with instant delivery on airtime,
-              data, and bills. No more failed purchases wasting your money.
+              Pay for airtime, data, cable TV, electricity, and exam PINs in seconds, with instant delivery every
+              time. Plus tech news, network updates, jobs, scholarships, and grants, all in one place.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
@@ -166,7 +167,7 @@ export default async function HomePage() {
             <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-medium text-white/55">
               <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Fast delivery</span>
               <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> Secure wallet</span>
-              <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-primary" /> Multiple providers</span>
+              <span className="inline-flex items-center gap-1.5"><Newspaper className="h-3.5 w-3.5 text-primary" /> Fresh daily updates</span>
             </div>
           </div>
         </div>
@@ -480,16 +481,16 @@ export default async function HomePage() {
                           )}
                         </Link>
 
-                        {/* Remaining posts as a list */}
+                        {/* Remaining posts as a two-up grid of vertical cards */}
                         {posts.length > 1 && (
-                          <div className="divide-y divide-border rounded-xl border border-border bg-white shadow-soft">
+                          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                             {posts.slice(1).map((post) => (
                               <Link
                                 key={post.id}
                                 href={`/blog/${post.slug}`}
-                                className="group flex items-center gap-4 p-4 transition hover:bg-muted/40"
+                                className="group block overflow-hidden rounded-xl border border-border bg-white shadow-soft transition hover:border-primary/30 hover:shadow-card"
                               >
-                                <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-secondary sm:h-20 sm:w-28">
+                                <div className="aspect-[1200/630] overflow-hidden bg-secondary">
                                   <img
                                     src={post.coverImageUrl || "/blog-fallback-cover.svg"}
                                     alt={post.title}
@@ -497,7 +498,7 @@ export default async function HomePage() {
                                     loading="lazy"
                                   />
                                 </div>
-                                <div className="min-w-0">
+                                <div className="p-4">
                                   <h4 className="mb-1 font-heading font-semibold text-secondary group-hover:text-primary line-clamp-2">
                                     {post.title}
                                   </h4>

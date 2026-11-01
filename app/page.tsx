@@ -460,9 +460,9 @@ export default async function HomePage() {
 
                     {posts.length > 0 && (
                       <div className="space-y-6">
-                        {/* Featured post */}
+                        {/* Featured post — big magazine card */}
                         <Link href={`/blog/${posts[0].slug}`} className="group block">
-                          <div className="mb-4 aspect-[1200/630] overflow-hidden rounded-xl border border-border bg-secondary">
+                          <div className="mb-5 aspect-[16/9] overflow-hidden rounded-xl border border-border bg-secondary sm:aspect-[21/9]">
                             <img
                               src={posts[0].coverImageUrl || "/blog-fallback-cover.svg"}
                               alt={posts[0].title}
@@ -470,27 +470,23 @@ export default async function HomePage() {
                               loading="lazy"
                             />
                           </div>
-                          <h4 className="mb-1 text-lg font-heading font-semibold text-secondary group-hover:text-primary sm:text-xl">
+                          <h4 className="mb-2 text-xl font-heading font-semibold text-secondary group-hover:text-primary sm:text-2xl">
                             {posts[0].title}
                           </h4>
                           {posts[0].excerpt && (
-                            <p className="mb-2 text-sm leading-6 text-muted-foreground line-clamp-2">{posts[0].excerpt}</p>
+                            <p className="mb-2 max-w-2xl text-sm leading-6 text-muted-foreground line-clamp-2 sm:text-base">{posts[0].excerpt}</p>
                           )}
                           {posts[0].publishedAt && (
                             <p className="text-xs text-muted-foreground">{formatDate(posts[0].publishedAt)}</p>
                           )}
                         </Link>
 
-                        {/* Remaining posts as a two-up grid of vertical cards */}
+                        {/* Remaining posts as a two-up grid, image-led */}
                         {posts.length > 1 && (
-                          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                          <div className="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2">
                             {posts.slice(1).map((post) => (
-                              <Link
-                                key={post.id}
-                                href={`/blog/${post.slug}`}
-                                className="group block overflow-hidden rounded-xl border border-border bg-white shadow-soft transition hover:border-primary/30 hover:shadow-card"
-                              >
-                                <div className="aspect-[1200/630] overflow-hidden bg-secondary">
+                              <Link key={post.id} href={`/blog/${post.slug}`} className="group block">
+                                <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-xl border border-border bg-secondary">
                                   <img
                                     src={post.coverImageUrl || "/blog-fallback-cover.svg"}
                                     alt={post.title}
@@ -498,14 +494,12 @@ export default async function HomePage() {
                                     loading="lazy"
                                   />
                                 </div>
-                                <div className="p-4">
-                                  <h4 className="mb-1 font-heading font-semibold text-secondary group-hover:text-primary line-clamp-2">
-                                    {post.title}
-                                  </h4>
-                                  {post.publishedAt && (
-                                    <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
-                                  )}
-                                </div>
+                                <h4 className="mb-1 font-heading text-base font-semibold text-secondary group-hover:text-primary line-clamp-2 sm:text-lg">
+                                  {post.title}
+                                </h4>
+                                {post.publishedAt && (
+                                  <p className="text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
+                                )}
                               </Link>
                             ))}
                           </div>

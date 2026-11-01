@@ -1,4 +1,3 @@
-
 // app/page.tsx
 import Link from "next/link"
 import {
@@ -57,9 +56,6 @@ const TRUST = [
   { title: "Real support", desc: "Reach a real person by email or phone if something looks wrong. Details are on our contact page." },
 ]
 
-// Trust signals. Static content (no DB/API needed) but addresses the
-// biggest commercial risk surfaced in the audit: a fintech handling
-// real money for first-time internet users needs social proof.
 const TESTIMONIALS = [
   { name: "Adaeze O.", location: "Lagos", quote: "I bought airtime at 11pm and it landed in seconds. The referral bonus paid for my next data bundle.", role: "Student, UNILAG" },
   { name: "Tunde B.", location: "Ibadan", quote: "DSTV renewal used to be a chore. Now it is one tap from my dashboard. When StarTimes failed, refund came automatically.", role: "Small business owner" },
@@ -271,7 +267,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Partner networks (logos as text chips, no image dependency) */}
+      {/* Partner networks */}
       <section className="border-t border-border bg-muted/30 py-12">
         <div className="container">
           <div className="mb-6 text-center">
@@ -376,7 +372,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Jobs and scholarships: visible even before the first post */}
+      {/* Jobs and scholarships */}
       <section className="border-t border-border bg-muted/30 py-14 sm:py-16">
         <div className="container">
           <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -481,16 +477,16 @@ export default async function HomePage() {
                           )}
                         </Link>
 
-                        {/* Remaining posts as card grid after featured */}
+                        {/* Remaining posts as cards in a two-up grid */}
                         {posts.length > 1 && (
-                          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                             {posts.slice(1).map((post) => (
                               <Link
                                 key={post.id}
                                 href={`/blog/${post.slug}`}
-                                className="group block overflow-hidden rounded-xl border border-border bg-white p-3 shadow-soft transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card"
+                                className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-white shadow-soft transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card"
                               >
-                                <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
+                                <div className="aspect-[1200/630] overflow-hidden bg-secondary">
                                   <img
                                     src={post.coverImageUrl || "/blog-fallback-cover.svg"}
                                     alt={post.title}
@@ -498,12 +494,17 @@ export default async function HomePage() {
                                     loading="lazy"
                                   />
                                 </div>
-                                <h4 className="mb-1 px-1 font-heading text-base font-semibold text-secondary group-hover:text-primary line-clamp-2 sm:text-lg">
-                                  {post.title}
-                                </h4>
-                                {post.publishedAt && (
-                                  <p className="px-1 text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
-                                )}
+                                <div className="flex flex-1 flex-col p-4 sm:p-5">
+                                  <h4 className="mb-1 font-heading text-base font-semibold text-secondary group-hover:text-primary line-clamp-2 sm:text-lg">
+                                    {post.title}
+                                  </h4>
+                                  {post.excerpt && (
+                                    <p className="mb-2 text-sm leading-6 text-muted-foreground line-clamp-2">{post.excerpt}</p>
+                                  )}
+                                  {post.publishedAt && (
+                                    <p className="mt-auto pt-2 text-xs text-muted-foreground">{formatDate(post.publishedAt)}</p>
+                                  )}
+                                </div>
                               </Link>
                             ))}
                           </div>

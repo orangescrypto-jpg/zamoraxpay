@@ -477,16 +477,16 @@ export default async function HomePage() {
                           )}
                         </Link>
 
-                        {/* Remaining posts, two per row */}
+                        {/* Remaining posts, always two per row (even on small phones) */}
                         {posts.length > 1 && (
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div className="grid grid-cols-2 gap-3 sm:gap-5">
                             {posts.slice(1).map((post) => (
                               <Link
                                 key={post.id}
                                 href={`/blog/${post.slug}`}
-                                className="group flex items-center gap-4 rounded-xl border border-border bg-white p-4 shadow-soft transition hover:bg-muted/40"
+                                className="group block overflow-hidden rounded-xl border border-border bg-white shadow-soft transition hover:border-primary/30 hover:shadow-card"
                               >
-                                <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-secondary sm:h-20 sm:w-28">
+                                <div className="aspect-[1200/630] overflow-hidden bg-secondary">
                                   <img
                                     src={post.coverImageUrl || "/blog-fallback-cover.svg"}
                                     alt={post.title}
@@ -494,8 +494,8 @@ export default async function HomePage() {
                                     loading="lazy"
                                   />
                                 </div>
-                                <div className="min-w-0">
-                                  <h4 className="mb-1 font-heading font-semibold text-secondary group-hover:text-primary line-clamp-2">
+                                <div className="p-3 sm:p-4">
+                                  <h4 className="mb-1 font-heading text-sm font-semibold leading-snug text-secondary group-hover:text-primary sm:text-base">
                                     {post.title}
                                   </h4>
                                   {post.publishedAt && (

@@ -89,56 +89,61 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   )
 
   // Hard delete: every row anywhere in D1 that references this user,
-  // deepest children first, then the user row itself — run as ONE
-  // atomic D1 batch so this is all-or-nothing. Nothing is archived;
-  // this is a permanent, total removal.
+  // then the user row itself — run as ONE atomic D1 batch so this is
+  // all-or-nothing. Nothing is archived; this is a permanent removal.
   //
-  // The schema file in the repo and the tables that actually exist on
-  // this deployed D1 database have drifted apart (e.g. funding_sources,
-  // vtu_orders_archive) — some migrations evidently were never run
-  // here. A statement against a table that doesn't exist throws
-  // D1_ERROR and, since this now runs as one atomic batch, aborts the
-  // WHOLE delete. So: ask D1 what tables actually exist first, and
-  // only include a DELETE for a table that's really there.
-  const existingTablesResult = await d1Query("SELECT name FROM sqlite_master WHERE type = 'table'")
-  const existingTables = new Set((existingTablesResult.results ?? []).map((r: any) => r.name))
+  // This DOESN'T use a hardcoded table list. The repo's schema.sql and
+  // what's actually deployed on this D1 database have drifted apart
+  // (funding_sources and vtu_orders_archive don't exist here; some
+  // other table DOES have a live foreign key to users that isn't in
+  // schema.sql at all — that's what the FOREIGN KEY constraint error
+  // was). A hardcoded list can't keep up with that drift, so instead:
+  // ask D1's own schema (PRAGMA foreign_key_list) which tables
+  // reference users — directly, or transitively through another table
+  // that references users — and build the DELETE statements from
+  // that, so coverage always matches what D1 actually enforces.
+  const existingTablesResult = await d1Query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+  const existingTables = (existingTablesResult.results ?? []).map((r: any) => r.name as string)
 
-  const candidateStatements: { table: string; sql: string; params: unknown[] }[] = [
-    // grandchildren of per-user rows, keyed off those rows' own ids
-    { table: "bulk_purchase_items", sql: "DELETE FROM bulk_purchase_items WHERE run_id IN (SELECT id FROM bulk_purchase_runs WHERE user_id = ?)", params: [id] },
-    { table: "contact_batch_numbers", sql: "DELETE FROM contact_batch_numbers WHERE batch_id IN (SELECT id FROM contact_batches WHERE user_id = ?)", params: [id] },
+  type FkEdge = { table: string; column: string; refTable: string }
+  const fkEdges: FkEdge[] = []
+  for (const table of existingTables) {
+    const fkResult = await d1Query(`PRAGMA foreign_key_list(${table})`)
+    for (const fk of (fkResult.results ?? []) as any[]) {
+      fkEdges.push({ table, column: fk.from, refTable: fk.table })
+    }
+  }
 
-    // direct children, by user_id (or equivalent column)
-    { table: "wallet_transactions", sql: "DELETE FROM wallet_transactions WHERE user_id = ?", params: [id] },
-    { table: "vtu_orders", sql: "DELETE FROM vtu_orders WHERE user_id = ?", params: [id] },
-    { table: "vtu_orders_archive", sql: "DELETE FROM vtu_orders_archive WHERE user_id = ?", params: [id] },
-    { table: "international_topup_orders", sql: "DELETE FROM international_topup_orders WHERE user_id = ?", params: [id] },
-    { table: "beneficiaries", sql: "DELETE FROM beneficiaries WHERE user_id = ?", params: [id] },
-    { table: "auto_reload_rules", sql: "DELETE FROM auto_reload_rules WHERE user_id = ?", params: [id] },
-    { table: "reseller_bvn_verifications", sql: "DELETE FROM reseller_bvn_verifications WHERE user_id = ?", params: [id] },
-    { table: "fraud_flags", sql: "DELETE FROM fraud_flags WHERE user_id = ?", params: [id] },
-    { table: "referrals", sql: "DELETE FROM referrals WHERE referrer_user_id = ? OR referred_user_id = ?", params: [id, id] },
-    { table: "withdrawals", sql: "DELETE FROM withdrawals WHERE user_id = ?", params: [id] },
-    { table: "funding_source_accounts", sql: "DELETE FROM funding_source_accounts WHERE user_id = ?", params: [id] },
-    { table: "funding_sources", sql: "DELETE FROM funding_sources WHERE user_id = ?", params: [id] },
-    { table: "bulk_purchase_runs", sql: "DELETE FROM bulk_purchase_runs WHERE user_id = ?", params: [id] },
-    { table: "contact_batches", sql: "DELETE FROM contact_batches WHERE user_id = ?", params: [id] },
-    { table: "push_subscriptions", sql: "DELETE FROM push_subscriptions WHERE user_id = ?", params: [id] },
-    { table: "push_notification_log", sql: "DELETE FROM push_notification_log WHERE user_id = ?", params: [id] },
-    { table: "daily_streak_checkins", sql: "DELETE FROM daily_streak_checkins WHERE user_id = ?", params: [id] },
-    { table: "daily_streaks", sql: "DELETE FROM daily_streaks WHERE user_id = ?", params: [id] },
-    { table: "spin_tickets", sql: "DELETE FROM spin_tickets WHERE user_id = ?", params: [id] },
-    { table: "spin_spins", sql: "DELETE FROM spin_spins WHERE user_id = ?", params: [id] },
-    { table: "spin_vouchers", sql: "DELETE FROM spin_vouchers WHERE user_id = ?", params: [id] },
-    { table: "spin_loss_streaks", sql: "DELETE FROM spin_loss_streaks WHERE user_id = ?", params: [id] },
-    { table: "streak_protections", sql: "DELETE FROM streak_protections WHERE user_id = ?", params: [id] },
-    { table: "cookie_consents", sql: "DELETE FROM cookie_consents WHERE user_id = ?", params: [id] },
-    { table: "wallets", sql: "DELETE FROM wallets WHERE user_id = ?", params: [id] },
-  ]
+  // For a table, build a DELETE condition that reaches back to the
+  // user via however many hops of foreign keys it takes (e.g.
+  // bulk_purchase_items -> bulk_purchase_runs -> users). Returns null
+  // if this table has no path back to users at all.
+  function buildCondition(table: string, visiting: Set<string> = new Set()): string | null {
+    if (table === "users") return "id = ?"
+    if (visiting.has(table)) return null // guard against FK cycles
+    visiting.add(table)
+    for (const edge of fkEdges.filter((e) => e.table === table)) {
+      const parentCondition = buildCondition(edge.refTable, visiting)
+      if (parentCondition) {
+        return `${edge.column} IN (SELECT id FROM ${edge.refTable} WHERE ${parentCondition})`
+      }
+    }
+    return null
+  }
 
-  const statements = candidateStatements
-    .filter((s) => existingTables.has(s.table))
-    .map((s) => ({ sql: s.sql, params: s.params }))
+  const statements: { sql: string; params: unknown[] }[] = []
+  for (const table of existingTables) {
+    if (table === "users" || table === "admin_audit_log") continue // audit log is the deletion record itself — never erase it
+    const condition = buildCondition(table)
+    if (condition) statements.push({ sql: `DELETE FROM ${table} WHERE ${condition}`, params: [id] })
+  }
+
+  // Defer FK checks to the end of this transaction/batch instead of
+  // per-statement — belt-and-braces against ordering issues between
+  // the statements above (it does NOT paper over missing coverage;
+  // buildCondition above is what guarantees every referencing table
+  // is included).
+  statements.unshift({ sql: "PRAGMA defer_foreign_keys = ON", params: [] })
 
   // the user row itself, last
   statements.push({ sql: "DELETE FROM users WHERE id = ?", params: [id] })

@@ -477,14 +477,14 @@ export default async function HomePage() {
                           )}
                         </Link>
 
-                        {/* Remaining posts as a list */}
+                        {/* Remaining posts, two per row */}
                         {posts.length > 1 && (
-                          <div className="divide-y divide-border rounded-xl border border-border bg-white shadow-soft">
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             {posts.slice(1).map((post) => (
                               <Link
                                 key={post.id}
                                 href={`/blog/${post.slug}`}
-                                className="group flex items-center gap-4 p-4 transition hover:bg-muted/40"
+                                className="group flex items-center gap-4 rounded-xl border border-border bg-white p-4 shadow-soft transition hover:bg-muted/40"
                               >
                                 <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-secondary sm:h-20 sm:w-28">
                                   <img

@@ -99,7 +99,7 @@ const HOMEPAGE_BLOG_CATEGORIES = [
   { slug: "internships", label: "Internships" },
 ]
 
-const HOMEPAGE_POSTS_PER_CATEGORY = 10
+const HOMEPAGE_POSTS_PER_CATEGORY = 11
 
 // Jobs, Scholarships, Grants and Internships are capped lower than the
 // other homepage categories. These feed fast-expiring listings

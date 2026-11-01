@@ -91,10 +91,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   // Delete dependent rows first (D1/SQLite foreign keys aren't
   // enforced by default, but doing this explicitly keeps the data
   // model honest regardless of that setting).
+  //
+  // vtu_orders_archive is created by a separate retention migration
+  // (migrations/retention_vtu_orders.sql) that may not have been run
+  // on every environment, so its DELETE is wrapped individually —
+  // otherwise one missing table 500s the whole deletion and nothing
+  // gets removed.
   await Promise.all([
     d1Query("DELETE FROM wallet_transactions WHERE user_id = ?", [id]),
     d1Query("DELETE FROM vtu_orders WHERE user_id = ?", [id]),
-    d1Query("DELETE FROM vtu_orders_archive WHERE user_id = ?", [id]),
+    d1Query("DELETE FROM vtu_orders_archive WHERE user_id = ?", [id]).catch(() => null),
     d1Query("DELETE FROM beneficiaries WHERE user_id = ?", [id]),
     d1Query("DELETE FROM auto_reload_rules WHERE user_id = ?", [id]),
     d1Query("DELETE FROM reseller_bvn_verifications WHERE user_id = ?", [id]),

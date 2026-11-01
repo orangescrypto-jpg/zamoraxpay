@@ -39,7 +39,7 @@
     "RESEND_FROM_EMAIL": "ZamoraxPay <noreply@zamoraxpay.com.ng>",
     "BVN_VERIFICATION_PROVIDER": "stub",
     "CHEAPDATAHUB_BASE_URL": "https://www.cheapdatahub.ng/api/v1/resellers",
-    "PAIRGATE_BASE_URL": "https://api.pairgate.com/v1",
+    "PAIRGATE_BASE_URL": "https://pairgate.com/api/v1",
     "VTPASS_BASE_URL": "https://vtpass.com/api",
     "VTUNG_BASE_URL": "https://vtu.ng/wp-json/api/v2"
   },

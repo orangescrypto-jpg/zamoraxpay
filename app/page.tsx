@@ -104,9 +104,9 @@ const HOMEPAGE_POSTS_PER_CATEGORY = 11
 // Jobs, Scholarships, Grants and Internships are capped lower than the
 // other homepage categories. These feed fast-expiring listings
 // (retention.ts deletes stale posts in jobs/scholarships), so the
-// homepage only needs a handful, not the full 10 shown for evergreen
+// homepage only needs a handful, not the full number shown for evergreen
 // categories like Guides.
-const HOMEPAGE_JOBS_SCHOLARSHIPS_POST_LIMIT = 6
+const HOMEPAGE_JOBS_SCHOLARSHIPS_POST_LIMIT = 11
 const HOMEPAGE_CAPPED_CATEGORY_SLUGS = new Set(["jobs", "scholarships", "grants", "internships"])
 
 export const revalidate = 900 // 15 minutes. Homepage content does not need to be second-fresh.
@@ -393,7 +393,7 @@ export default async function HomePage() {
               { slug: "internships", label: "Internships", description: "Internship openings and placement programmes to build real work experience.", icon: Briefcase, tone: "bg-fuchsia-50 text-fuchsia-700" },
             ].map((item) => {
               const Icon = item.icon
-              const posts = (postsByCategory[item.slug] ?? []).slice(0, 3)
+              const posts = (postsByCategory[item.slug] ?? []).slice(0, 11)
               return (
                 <article key={item.slug} className="flex h-full flex-col rounded-xl border border-border bg-white p-5 shadow-soft transition hover:border-primary/30 hover:shadow-card sm:p-6">
                   <div className="flex items-start gap-3">

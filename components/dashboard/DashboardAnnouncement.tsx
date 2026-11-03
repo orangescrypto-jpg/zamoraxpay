@@ -1,179 +1,150 @@
-// components/dashboard/DashboardAnnouncement.tsx
-// Announcement slider shown on the dashboard only, between the
-// wallet balance card and Quick actions. Same auto+manual slide
-// mechanics as the header BannerSlider. Images render at their
-// natural aspect ratio (no forced crop or letterbox) so any upload
-// size displays correctly; only the text-only fallback (no image)
-// uses a fixed 3:1 shape since it has no natural size of its own -
-// backgroundColor (admin-set, optional) overrides the default navy
-// fill for that fallback. Admin can set text, an image, or both per
-// slide - the link is optional per slide, so this doubles as a plain
-// announcement when there's nothing to click through to.
+// components/shared/PWAInstallBanner.tsx
+// Lightweight "Add to Home Screen" prompt for supporting browsers.
+// Listens for the browser's beforeinstallprompt event (Chrome/Edge/
+// Android), stashes it, and shows a dismissible bottom banner offering
+// to install the PWA. Silently renders nothing on browsers that don't
+// fire the event (iOS Safari, already-installed apps, etc.) - this is
+// a progressive enhancement, not a requirement.
 //
-// This only renders 'banner'-style items - popups are a separate
-// component (DashboardPopupAnnouncement) sourced from the same API
-// response's `popups` array.
-//
-// Has its own Dismiss button below the strip (session-only, via
-// sessionStorage) - reappears on next login, same as a popup with
-// show_once = 0.
+// Consolidated dismiss: previously this banner used its own
+// `zamoraxpay:pwa-install-dismissed` boolean flag, while usePWA.ts used
+// `zamoraxpay_pwa_dismissed_at` (timestamp + TTL). They were never
+// synced, so a user could dismiss this banner and still get a
+// re-prompt from the other system on the next session. Now this
+// banner delegates to `usePWA.dismiss()` so both stay in sync. The
+// TTL is 14 days - if the user dismisses, they won't see this banner
+// again for 2 weeks (matches the usePWA.ts canShow default).
+
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import Link from "next/link"
-import { getDashboardAnnouncements } from "./announcementClient"
-import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react"
+import { useInstallPrompt } from "@/hooks/usePWA"
 
-const AUTO_SLIDE_INTERVAL_MS = 5000
+// 14-day cooldown after dismissal. Long enough that the user won't be
+// nagged weekly; short enough that they'll see it again if they
+// initially dismissed by mistake.
+const DISMISS_RESHOW_SEC = 14 * 24 * 60 * 60
 
-interface Announcement {
-  id: string
-  text: string | null
-  imageUrl: string | null
-  linkUrl: string | null
-  backgroundColor: string | null
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>
 }
 
-const BANNER_DISMISSED_KEY = "zpay_banner_dismissed_session"
-
-export function DashboardAnnouncement() {
-  const [announcements, setAnnouncements] = useState<Announcement[]>([])
-  const [activeIndex, setActiveIndex] = useState(0)
-  const [loading, setLoading] = useState(true)
-  // Session-only dismissal for the whole banner strip (not per-slide) -
-  // closing it hides it for the rest of this browser session and it
-  // comes back on next login, same spirit as a popup's show_once = 0.
-  const [dismissed, setDismissed] = useState(false)
+export default function PWAInstallBanner() {
+  // useInstallPrompt already wires beforeinstallprompt + appinstalled
+  // listeners AND manages the dismissed-at timestamp. We just consume
+  // its state instead of duplicating the storage logic here.
+  const { canShow, dismiss, install } = useInstallPrompt()
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const [visible, setVisible] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    setDismissed(window.sessionStorage.getItem(BANNER_DISMISSED_KEY) === "1")
-  }, [])
+    // Gate on canShow so we honour the 14-day cooldown.
+    if (!canShow(DISMISS_RESHOW_SEC)) return
 
-  function handleDismiss() {
-    if (typeof window !== "undefined") window.sessionStorage.setItem(BANNER_DISMISSED_KEY, "1")
-    setDismissed(true)
+    function handleBeforeInstallPrompt(e: Event) {
+      e.preventDefault()
+      setDeferredPrompt(e as BeforeInstallPromptEvent)
+      setVisible(true)
+    }
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
+
+    function handleAppInstalled() {
+      setVisible(false)
+      setDeferredPrompt(null)
+    }
+    window.addEventListener("appinstalled", handleAppInstalled)
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
+      window.removeEventListener("appinstalled", handleAppInstalled)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canShow])
+
+  async function handleInstall() {
+    if (!deferredPrompt) {
+      // Fall back to the usePWA install path (which itself checks
+      // deferredPrompt - if both are missing, this is a no-op).
+      await install()
+      setVisible(false)
+      return
+    }
+    await deferredPrompt.prompt()
+    await deferredPrompt.userChoice
+    setDeferredPrompt(null)
+    setVisible(false)
   }
 
-  useEffect(() => {
-    let cancelled = false
+  function handleDismiss() {
+    setVisible(false)
+    // Delegate to usePWA.dismiss() so the timestamp is recorded and
+    // both systems stay in sync. Also clears the stashed prompt so a
+    // re-prompt only happens after the cooldown.
+    dismiss()
+  }
 
-    async function load() {
-      try {
-        const data = await getDashboardAnnouncements()
-        if (!cancelled) setAnnouncements(data.announcements ?? [])
-      } catch {
-        if (!cancelled) setAnnouncements([])
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const goTo = useCallback(
-    (index: number) => {
-      if (announcements.length === 0) return
-      setActiveIndex(((index % announcements.length) + announcements.length) % announcements.length)
-    },
-    [announcements.length],
-  )
-
-  // Auto-slide
-  useEffect(() => {
-    if (announcements.length <= 1) return
-    const timer = setInterval(() => { if (document.visibilityState === "visible") goTo(activeIndex + 1) }, AUTO_SLIDE_INTERVAL_MS)
-    return () => clearInterval(timer)
-  }, [activeIndex, announcements.length, goTo])
-
-  if (loading || announcements.length === 0 || dismissed) return null
-
-  const current = announcements[activeIndex]
-  if (!current.text && !current.imageUrl) return null
-
-  // Wide banner strip - same aspect family as the header slider (just
-  // shorter), so a 1200x400 upload renders full-bleed instead of
-  // being cropped into a thumbnail. Text (if set) overlays the bottom
-  // as a gradient caption, same treatment as the header BannerSlider,
-  // so admins can use image-only, text-only, or both.
-  const slide = (
-    <div className="relative w-full overflow-hidden rounded-2xl bg-secondary shadow-[0_2px_10px_-6px_rgba(15,30,77,0.15)]">
-      {current.imageUrl ? (
-        <img
-          key={current.id}
-          src={current.imageUrl}
-          alt={current.text ?? "Announcement"}
-          className="block h-auto w-full"
-        />
-      ) : (
-        <div
-          className="flex aspect-[3/1] w-full items-center px-4"
-          style={{ backgroundColor: current.backgroundColor || "#0F1E4D" }}
-        >
-          <p className="whitespace-pre-wrap text-sm font-medium leading-snug text-white sm:text-base">{current.text}</p>
-        </div>
-      )}
-      {current.imageUrl && current.text && (
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
-          <p className="truncate text-[13px] font-medium leading-snug text-white sm:text-sm">{current.text}</p>
-        </div>
-      )}
-    </div>
-  )
+  if (!visible || !deferredPrompt) return null
 
   return (
-    <div className="relative mt-4">
-      {current.linkUrl ? (
-        <Link href={current.linkUrl} className="block">
-          {slide}
-        </Link>
-      ) : (
-        slide
-      )}
+    <div
+      role="dialog"
+      aria-label="Install ZamoraxPay app"
+      className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-[70] border-t border-border bg-card p-4 pb-4 shadow-lg sm:bottom-4 sm:left-1/2 sm:right-auto sm:top-auto sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:rounded-xl sm:border"
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-5 w-5 text-primary"
+            aria-hidden="true"
+          >
+            <path d="M12 3v13" />
+            <path d="m7 11 5 5 5-5" />
+            <path d="M5 21h14" />
+          </svg>
+        </div>
 
-      {/* Manual controls */}
-      {announcements.length > 1 && (
-        <>
-          <button
-            aria-label="Previous announcement"
-            onClick={() => goTo(activeIndex - 1)}
-            className="absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
-          >
-            ‹
-          </button>
-          <button
-            aria-label="Next announcement"
-            onClick={() => goTo(activeIndex + 1)}
-            className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60"
-          >
-            ›
-          </button>
-          <div className="mt-2 flex justify-center gap-1.5">
-            {announcements.map((a, i) => (
-              <button
-                key={a.id}
-                aria-label={`Go to announcement ${i + 1}`}
-                onClick={() => goTo(i)}
-                className={cn(
-                  "h-1.5 rounded-full transition-all",
-                  i === activeIndex ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30",
-                )}
-              />
-            ))}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-secondary">Install ZamoraxPay</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            For quick access, install ZamoraxPay.
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleInstall}
+              className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            >
+              Install
+            </button>
+            <button
+              type="button"
+              onClick={handleDismiss}
+              className="rounded-md px-4 py-2 text-xs font-medium text-secondary hover:bg-muted"
+            >
+              Not now
+            </button>
           </div>
-        </>
-      )}
+        </div>
 
-      <button
-        onClick={handleDismiss}
-        className="mt-2 w-full rounded-xl border border-border py-2 text-xs font-semibold text-muted-foreground hover:bg-muted"
-      >
-        Dismiss
-      </button>
+        <button
+          type="button"
+          onClick={handleDismiss}
+          aria-label="Dismiss"
+          className="shrink-0 text-muted-foreground hover:text-secondary"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   )
 }

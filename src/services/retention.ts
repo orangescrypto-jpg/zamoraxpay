@@ -631,7 +631,7 @@ async function jobUnbackedPricingRules(ctx: RunContext): Promise<JobResult> {
       JOIN   vtu_provider_configs   vpc ON vpc.provider_key = pm.provider_key
       WHERE  pm.plan_code  = pricing_rules.plan_code
         AND  pm.is_active  = 1
-        AND  vpc.enabled   = 1
+        AND  vpc.is_enabled = 1
     )
   `
   const r = await deleteInBatches(ctx, "pricing_rules", "id", WHERE.trim(), [])
@@ -740,7 +740,7 @@ const PREVIEW_SQL: Record<RetentionJobKey, { sql: string; table: string }> = {
   pin_attempts: { table: "pin_attempts", sql: "SELECT COUNT(*) AS n FROM pin_attempts WHERE failed_attempts = 0 AND (locked_until IS NULL OR locked_until <= datetime('now')) AND updated_at < ?" },
   blog_jobs_scholarships: { table: "blog_posts", sql: "SELECT COUNT(*) AS n FROM blog_posts WHERE category IN ('jobs', 'scholarships', 'grants', 'internships') AND created_at < ?" },
   // No cutoff parameter — condition is structural (no active provider), not age-based.
-  unbacked_pricing_rules: { table: "pricing_rules", sql: "SELECT COUNT(*) AS n FROM pricing_rules WHERE is_active = 1 AND plan_code IS NOT NULL AND NOT EXISTS (SELECT 1 FROM provider_plan_mappings pm JOIN vtu_provider_configs vpc ON vpc.provider_key = pm.provider_key WHERE pm.plan_code = pricing_rules.plan_code AND pm.is_active = 1 AND vpc.enabled = 1)" },
+  unbacked_pricing_rules: { table: "pricing_rules", sql: "SELECT COUNT(*) AS n FROM pricing_rules WHERE is_active = 1 AND plan_code IS NOT NULL AND NOT EXISTS (SELECT 1 FROM provider_plan_mappings pm JOIN vtu_provider_configs vpc ON vpc.provider_key = pm.provider_key WHERE pm.plan_code = pricing_rules.plan_code AND pm.is_active = 1 AND vpc.is_enabled = 1)" },
 }
 
 export interface JobStatus {

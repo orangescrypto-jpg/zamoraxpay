@@ -46,6 +46,7 @@ export type RetentionJobKey =
   | "vtu_orders_failed"
   | "pin_attempts"
   | "blog_jobs_scholarships"
+  | "unbacked_pricing_rules"
 
 export interface RetentionJobDef {
   key: RetentionJobKey
@@ -82,6 +83,14 @@ export const RETENTION_JOBS: RetentionJobDef[] = [
   { key: "vtu_orders_failed", label: "VTU orders: failed", settingKey: "retention_vtu_failed_days", defaultDays: 30, minDays: 30, action: "delete", keeps: "Deleted for good, no archive. Failed orders were never charged or were already refunded. Successful, refunded and pending orders are never touched." },
   { key: "pin_attempts", label: "Idle PIN-attempt rows", settingKey: "retention_pin_attempts_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Rows with failed attempts or an active lock are kept." },
   { key: "blog_jobs_scholarships", label: "Blog posts: Jobs, Scholarships, Grants & Internships", settingKey: "retention_blog_jobs_scholarships_days", defaultDays: 30, minDays: 1, action: "delete", keeps: "Only posts in the 'jobs', 'scholarships', 'grants' or 'internships' categories are touched, published or draft. Every other blog category is never touched by this job. The post's cover image is deleted from R2 first, then the row." },
+  // Not age-based — this job deletes pricing_rules rows that are visible to
+  // users (is_active = 1, plan_code IS NOT NULL) but have NO active provider
+  // mapping backing them. Those plans can never be fulfilled: the user pays,
+  // the router finds no enabled provider, and the order fails. This job keeps
+  // the catalogue clean. Days is unused at runtime (condition is existence, not
+  // age), but we keep it as a conventional on/off: 0 = disabled, any value ≥ 1
+  // = enabled. The minDays floor of 1 ensures 0 is the only off value.
+  { key: "unbacked_pricing_rules", label: "Pricing rules: no active provider backup", settingKey: "retention_unbacked_pricing_rules_enabled", defaultDays: 1, minDays: 1, action: "delete", keeps: "Only is_active = 1 plans with a plan_code and zero active+enabled provider_plan_mappings rows are deleted. Plans that have an active mapping (even if the plan itself is toggled off) are never touched. Flat-rate services that never use plan_code are never touched." },
 ]
 
 export function getJobDef(key: string): RetentionJobDef | undefined {
@@ -592,6 +601,43 @@ async function jobWalletTx(ctx: RunContext, days: number): Promise<JobResult> {
   return result("wallet_tx", total, false, "Wallet transactions archived & deleted")
 }
 
+/**
+ * UNBACKED PRICING RULES — not age-based.
+ *
+ * Deletes pricing_rules rows that are visible to users (is_active = 1,
+ * plan_code IS NOT NULL) but have no active+enabled provider route under them.
+ * Such plans will always fail at purchase time: the wallet is debited, the
+ * router finds zero enabled candidates, and the order is refunded. This job
+ * removes the dead entries so they never appear on the buy page again.
+ *
+ * The "days" parameter is only used as an on/off gate here (0 = disabled,
+ * ≥ 1 = run). The condition is purely structural, not time-based.
+ *
+ * Safe to re-run at any time: if a provider is re-enabled between two runs,
+ * its plans are no longer "unbacked" and won't be touched.
+ */
+async function jobUnbackedPricingRules(ctx: RunContext): Promise<JobResult> {
+  // A plan is "unbacked" when no row in provider_plan_mappings satisfies BOTH:
+  //   • pm.plan_code  = pr.plan_code
+  //   • pm.is_active  = 1
+  //   • the matching vtu_provider_configs row is enabled = 1
+  // We use NOT EXISTS so we never delete plans that have at least one live route.
+  const WHERE = `
+    is_active = 1
+    AND plan_code IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM   provider_plan_mappings pm
+      JOIN   vtu_provider_configs   vpc ON vpc.provider_key = pm.provider_key
+      WHERE  pm.plan_code  = pricing_rules.plan_code
+        AND  pm.is_active  = 1
+        AND  vpc.enabled   = 1
+    )
+  `
+  const r = await deleteInBatches(ctx, "pricing_rules", "id", WHERE.trim(), [])
+  return result("unbacked_pricing_rules", r.deleted, r.finished, "Unbacked pricing rules deleted")
+}
+
 // ── Dispatcher ───────────────────────────────────────────────────────
 
 async function dispatch(job: RetentionJobDef, ctx: RunContext, days: number): Promise<JobResult> {
@@ -616,6 +662,7 @@ async function dispatch(job: RetentionJobDef, ctx: RunContext, days: number): Pr
     case "vtu_orders_failed": return jobVtuOrdersFailed(ctx, days)
     case "pin_attempts": return jobPinAttempts(ctx, days)
     case "blog_jobs_scholarships": return jobBlogJobsScholarships(ctx, days)
+    case "unbacked_pricing_rules": return jobUnbackedPricingRules(ctx)
   }
 }
 
@@ -692,6 +739,8 @@ const PREVIEW_SQL: Record<RetentionJobKey, { sql: string; table: string }> = {
   vtu_orders_failed: { table: "vtu_orders", sql: "SELECT COUNT(*) AS n FROM vtu_orders WHERE status = 'failed' AND created_at < ?" },
   pin_attempts: { table: "pin_attempts", sql: "SELECT COUNT(*) AS n FROM pin_attempts WHERE failed_attempts = 0 AND (locked_until IS NULL OR locked_until <= datetime('now')) AND updated_at < ?" },
   blog_jobs_scholarships: { table: "blog_posts", sql: "SELECT COUNT(*) AS n FROM blog_posts WHERE category IN ('jobs', 'scholarships', 'grants', 'internships') AND created_at < ?" },
+  // No cutoff parameter — condition is structural (no active provider), not age-based.
+  unbacked_pricing_rules: { table: "pricing_rules", sql: "SELECT COUNT(*) AS n FROM pricing_rules WHERE is_active = 1 AND plan_code IS NOT NULL AND NOT EXISTS (SELECT 1 FROM provider_plan_mappings pm JOIN vtu_provider_configs vpc ON vpc.provider_key = pm.provider_key WHERE pm.plan_code = pricing_rules.plan_code AND pm.is_active = 1 AND vpc.enabled = 1)" },
 }
 
 export interface JobStatus {
@@ -715,7 +764,10 @@ export async function getRetentionOverview(nativeDB?: any): Promise<{ jobs: JobS
       let eligible: number | null = null
       if (days > 0) {
         try {
-          const r = await d1Query(PREVIEW_SQL[job.key].sql, [cutoffSql(days, now)], nativeDB)
+          // unbacked_pricing_rules has no cutoff parameter — the SQL is
+          // self-contained. All other jobs need a date cutoff as the first bind.
+          const params = job.key === "unbacked_pricing_rules" ? [] : [cutoffSql(days, now)]
+          const r = await d1Query(PREVIEW_SQL[job.key].sql, params, nativeDB)
           eligible = Number(r.results?.[0]?.n ?? 0)
         } catch {
           eligible = null

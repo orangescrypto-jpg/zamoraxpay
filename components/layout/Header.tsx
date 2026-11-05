@@ -29,6 +29,7 @@ const BLOG_NAV_CATEGORIES = [
   { slug: "scholarships", label: "Scholarships" },
   { slug: "grants", label: "Grants" },
   { slug: "internships", label: "Internships" },
+  { slug: "upskilling", label: "Upskilling" },
 ]
 
 function BannerSlider() {

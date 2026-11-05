@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Award,
   Banknote,
+  BookOpen,
   Briefcase,
   CheckCircle2,
   GraduationCap,
@@ -97,17 +98,18 @@ const HOMEPAGE_BLOG_CATEGORIES = [
   { slug: "scholarships", label: "Scholarships" },
   { slug: "grants", label: "Grants" },
   { slug: "internships", label: "Internships" },
+  { slug: "upskilling", label: "Upskilling" },
 ]
 
 const HOMEPAGE_POSTS_PER_CATEGORY = 11
 
-// Jobs, Scholarships, Grants and Internships are capped lower than the
-// other homepage categories. These feed fast-expiring listings
-// (retention.ts deletes stale posts in jobs/scholarships), so the
-// homepage only needs a handful, not the full number shown for evergreen
-// categories like Guides.
+// Jobs, Scholarships, Grants, Internships and Upskilling are capped lower
+// than the other homepage categories. These feed fast-expiring listings
+// (retention.ts deletes stale posts in jobs/scholarships/grants/internships/
+// upskilling), so the homepage only needs a handful, not the full number
+// shown for evergreen categories like Guides.
 const HOMEPAGE_JOBS_SCHOLARSHIPS_POST_LIMIT = 11
-const HOMEPAGE_CAPPED_CATEGORY_SLUGS = new Set(["jobs", "scholarships", "grants", "internships"])
+const HOMEPAGE_CAPPED_CATEGORY_SLUGS = new Set(["jobs", "scholarships", "grants", "internships", "upskilling"])
 
 export const revalidate = 900 // 15 minutes. Homepage content does not need to be second-fresh.
 
@@ -144,7 +146,7 @@ export default async function HomePage() {
             </h1>
             <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-white/70 sm:text-lg">
               Pay for airtime, data, cable TV, electricity, and exam PINs in seconds, with instant delivery every
-              time. Plus tech news, network updates, jobs, scholarships, and grants, all in one place.
+              time. Plus tech news, network updates, jobs, scholarships, grants, and upskilling resources, all in one place.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
@@ -372,25 +374,26 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Jobs and scholarships */}
+      {/* Jobs, scholarships, grants, internships and upskilling */}
       <section className="border-t border-border bg-muted/30 py-14 sm:py-16">
         <div className="container">
           <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <span className="zpx-eyebrow">New opportunities</span>
-              <h2 className="mt-2 text-2xl font-heading font-bold text-secondary sm:text-3xl">Jobs, scholarships, grants and internships</h2>
+              <h2 className="mt-2 text-2xl font-heading font-bold text-secondary sm:text-3xl">Jobs, scholarships, grants, internships and upskilling</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Explore career openings and education funding opportunities. Always confirm details and deadlines with the official provider.
+                Explore career openings, education funding, and learning resources to grow your skills and income. Always confirm details and deadlines with the official provider.
               </p>
             </div>
             <Link href="/blog" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">Explore the blog <ArrowRight className="h-4 w-4" /></Link>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {[
               { slug: "jobs", label: "Jobs and Career Opportunities", description: "Explore vacancies, graduate trainee programmes, and entry-level roles.", icon: Users, tone: "bg-blue-50 text-blue-700" },
               { slug: "scholarships", label: "Scholarships and Bursaries", description: "Find education funding opportunities and practical guides to preparing applications.", icon: GraduationCap, tone: "bg-emerald-50 text-emerald-700" },
               { slug: "grants", label: "Grants", description: "Grant opportunities and funding calls, with eligibility and application guidance.", icon: Award, tone: "bg-amber-50 text-amber-700" },
               { slug: "internships", label: "Internships", description: "Internship openings and placement programmes to build real work experience.", icon: Briefcase, tone: "bg-fuchsia-50 text-fuchsia-700" },
+              { slug: "upskilling", label: "Upskilling", description: "Courses, certifications, bootcamps, and self-paced resources to build new skills and grow your income.", icon: BookOpen, tone: "bg-cyan-50 text-cyan-700" },
             ].map((item) => {
               const Icon = item.icon
               const posts = (postsByCategory[item.slug] ?? []).slice(0, 11)

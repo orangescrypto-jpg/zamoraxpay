@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Copy, Download, FileText, Share2 } from "lucide-react"
+import { Check, Copy, Download, Share2 } from "lucide-react"
 import { useToast } from "@/components/shared/ToastProvider"
 
 interface ReceiptButtonProps {
@@ -151,20 +151,10 @@ export function ReceiptButton(props: ReceiptButtonProps) {
     } catch {}
   }
 
+  // "Receipt" used to download a plain .txt file. It now opens the same
+  // styled receipt as the PDF button, so "download" and "print/PDF" look
+  // identical - the only difference is the button that triggered it.
   const download = () => {
-    const blob = new Blob([receiptText(props)], { type: "text/plain;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = `zamoraxpay-receipt-${props.reference}.txt`
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
-    toast("Receipt downloaded", "success")
-  }
-
-  const printPdf = () => {
     printReceiptAsPdf(props)
     toast("Opening print dialog, save as PDF to download", "info")
   }
@@ -197,20 +187,11 @@ export function ReceiptButton(props: ReceiptButtonProps) {
         type="button"
         onClick={download}
         className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-muted-foreground transition hover:bg-muted hover:text-primary"
-        aria-label={`Download receipt for ${props.reference}`}
+        aria-label={`Download receipt as PDF for ${props.reference}`}
+        title="Save as PDF"
       >
         <Download className="h-3 w-3" />
         Receipt
-      </button>
-      <button
-        type="button"
-        onClick={printPdf}
-        className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-muted-foreground transition hover:bg-muted hover:text-primary"
-        aria-label={`Print or save receipt as PDF for ${props.reference}`}
-        title="Print or save as PDF"
-      >
-        <FileText className="h-3 w-3" />
-        PDF
       </button>
       <button
         type="button"

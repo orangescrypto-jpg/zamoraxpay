@@ -24,6 +24,7 @@ const CATEGORY_INTROS: Record<string, string> = {
   scholarships: "Scholarships, bursaries, and education funding opportunities for students. Review eligibility, funding details, and official application instructions.",
   grants: "Grant opportunities and funding calls. Check eligibility, deadlines, and official application instructions before applying.",
   internships: "Internship openings and placement programmes. Check eligibility and application deadlines before applying.",
+  upskilling: "Courses, certifications, bootcamps, and self-paced learning resources to help you build new skills and grow your income. Confirm enrolment details, costs, and deadlines with the official provider.",
 }
 
 export async function generateMetadata({

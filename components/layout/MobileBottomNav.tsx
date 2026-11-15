@@ -10,7 +10,11 @@ import { useAuth } from "@/hooks/useAuth"
 
 const ITEMS = [
   { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/dashboard/services/data", label: "Services", icon: LayoutGrid },
+  // Points at the services INDEX (new) instead of hard-linking the data
+  // page — every service used to be two taps deeper than Data, and
+  // Airtime is the most common purchase. The index pins Airtime/Data
+  // at the top so the old shortcut's purpose survives.
+  { href: "/dashboard/services", label: "Services", icon: LayoutGrid },
   { href: "/history", label: "Activity", icon: ReceiptText },
   { href: "/rewards", label: "Rewards", icon: Gift },
 ]
@@ -49,8 +53,13 @@ export function MobileBottomNav() {
       >
         <div className="mx-auto grid max-w-lg grid-cols-5">
           {ITEMS.map(({ href, label, icon: Icon }) => {
+            // /dashboard/* highlights Home EXCEPT the services subtree,
+            // which belongs to the Services tab (and its index page is
+            // matched exactly so "Home" doesn't win on /dashboard/services).
             const active =
-              pathname === href || (href === "/dashboard" && pathname.startsWith("/dashboard/"))
+              href === "/dashboard/services"
+                ? pathname === href || pathname.startsWith("/dashboard/services/")
+                : pathname === href || (href === "/dashboard" && pathname.startsWith("/dashboard/"))
             return (
               <Link
                 key={href}

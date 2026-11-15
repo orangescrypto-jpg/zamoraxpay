@@ -142,12 +142,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         <AdSenseLoader />
-        {/* Performance hints: preconnect to the origins we hit on first paint.
-            Saves ~150-250ms of TLS round-trips on the very first navigation. */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Performance hints: preconnect to origins we actually hit on
+            first paint. The Google Fonts hints were removed — next/font
+            self-hosts Inter and Space Grotesk, so fonts.googleapis.com
+            is never contacted and those preconnects only wasted one of
+            the browser's ~6 early connection slots. */}
         <link rel="preconnect" href="https://zamorax.com" />
-        <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
         <link rel="dns-prefetch" href="https://zamorax.com" />
         {/* Helpful for older browsers / Slack / Telegram / Outlook link previews */}
         <meta name="application-name" content="ZamoraxPay" />

@@ -26,21 +26,37 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "serviceType and networkOrBiller are required" }, { status: 400 })
   }
 
+  // PERF FIX (audit finding: "pricing plans never cached"): every buy
+  // screen fetched this route fresh on each mount AND on every network
+  // change — the hottest authenticated path in the app (a Supabase
+  // session check, a users-tier query and up to three pricing queries
+  // per hit). The route is tier-scoped, so the browser is only allowed
+  // to reuse it for this user's session, and only briefly: private
+  // (never a shared CDN — the response embeds reseller-tier pricing)
+  // with a 60s max-age + 5-minute stale-while-revalidate window.
+  // Pricing changes are rare and non-critical (the purchase flow
+  // re-verifies the price server-side via expectedPriceKobo), so a
+  // minute-old plan list is always safe to render from.
+  const cacheHeaders = {
+    "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+    Vary: "Authorization",
+  }
+
   const userResult = await d1Query("SELECT tier FROM users WHERE id = ?", [auth.uid])
   const tier = (userResult.results?.[0]?.tier as "retail" | "reseller" | undefined) ?? "retail"
 
   if (flat) {
     const price = await lookupPrice(serviceType, networkOrBiller, null, tier)
-    if (!price.found) return NextResponse.json({ priceKobo: null })
-    return NextResponse.json({ priceKobo: price.chargeAmountKobo })
+    if (!price.found) return NextResponse.json({ priceKobo: null }, { headers: cacheHeaders })
+    return NextResponse.json({ priceKobo: price.chargeAmountKobo }, { headers: cacheHeaders })
   }
 
   const grouped = req.nextUrl.searchParams.get("grouped") === "1"
   if (grouped) {
     const groups = await listPlanGroups(serviceType, networkOrBiller, tier)
-    return NextResponse.json({ groups })
+    return NextResponse.json({ groups }, { headers: cacheHeaders })
   }
 
   const plans = await listPlans(serviceType, networkOrBiller, tier)
-  return NextResponse.json({ plans })
+  return NextResponse.json({ plans }, { headers: cacheHeaders })
 }

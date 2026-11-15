@@ -1,14 +1,18 @@
 // app/(public)/about/page.tsx
+import { cache } from "react"
 import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import { d1Query } from "@/lib/db"
 import { MarkdownContent } from "@/components/shared/MarkdownContent"
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs"
 
-async function getPage() {
+// PERF FIX (audit finding: no request-level memoization): generateMetadata
+// and the page body each ran this query; React cache() dedupes them into
+// one D1 read per request.
+const getPage = cache(async () => {
   const result = await d1Query("SELECT * FROM site_pages WHERE slug = ?", ["about"])
   return result.results?.[0] ?? null
-}
+})
 
 export async function generateMetadata(): Promise<Metadata> {
   const page = await getPage()

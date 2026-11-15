@@ -1,7 +1,8 @@
 // app/(dashboard)/services/epin/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useAuthCachedFetch } from "@/hooks/useCachedFetch"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 import { ResultBanner } from "@/components/ui/result-banner"
@@ -39,44 +40,23 @@ export default function EpinPage() {
   const [reviewOpen, setReviewOpen] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [deliveredData, setDeliveredData] = useState<DeliveredData | null>(null)
-  const [plans, setPlans] = useState<Plan[]>([])
-  const [plansLoading, setPlansLoading] = useState(true)
-  const [plansError, setPlansError] = useState<string | null>(null)
+  // PERF FIX: price loading now goes through useAuthCachedFetch
+  // (cache-first from localStorage, 60s TTL matching the API's private
+  // max-age) instead of a fresh fetch on every mount/network change.
+  const plansUrl = `/api/pricing?serviceType=epin&networkOrBiller=${encodeURIComponent(network)}`
+  const {
+    data: plansData,
+    loading: plansLoading,
+    error: plansError,
+  } = useAuthCachedFetch<{ plans: Plan[] }>(plansUrl, {
+    storageKey: `pricing:epin:${String(network).toLowerCase()}`,
+    storageVersion: 2,
+    ttlMs: 60_000,
+    fallback: { plans: [] },
+    transform: (raw) => ({ plans: (raw as { plans?: Plan[] }).plans ?? [] }),
+  })
+  const plans = useMemo(() => plansData.plans, [plansData])
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadPlans() {
-      setPlansLoading(true)
-      setPlansError(null)
-      setPlans([])
-
-      try {
-        const supabase = createClient()
-        const { data: { session } } = await supabase.auth.getSession()
-
-        const res = await fetch(
-          `/api/pricing?serviceType=epin&networkOrBiller=${encodeURIComponent(network)}`,
-          { headers: { Authorization: `Bearer ${session?.access_token}` } },
-        )
-        const data = await res.json()
-        if (cancelled) return
-
-        if (!res.ok) {
-          setPlansError(data.error ?? "Could not load price")
-          return
-        }
-        setPlans(data.plans ?? [])
-      } catch {
-        if (!cancelled) setPlansError("Could not load price")
-      } finally {
-        if (!cancelled) setPlansLoading(false)
-      }
-    }
-
-    loadPlans()
-    return () => { cancelled = true }
-  }, [network])
 
   const selectedPlan = plans.find((p) => p.planCode === denomination)
   const unitPriceKobo = selectedPlan?.priceKobo ?? null

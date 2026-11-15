@@ -4,11 +4,12 @@ const sw = self;
 // Bump this on every deploy so old caches are torn down instead of served
 // stale. (Previously hardcoded "v1" forever — stale cache was likely the
 // cause of the "loads then disappears" bug.)
-const CACHE_NAME = "zamoraxpay-v2";
+const CACHE_NAME = "zamoraxpay-v3";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
   "/favicon.svg",
+  "/offline.html",
 ];
 
 // ── Install — cache static assets ─────────────────────────────────────────
@@ -75,16 +76,14 @@ sw.addEventListener("fetch", (event) => {
         .catch(() =>
           caches.match(event.request).then((cached) => {
             if (cached) return cached;
-            if (!navigator.onLine) {
-              return caches.match("/") ?? new Response("Offline — please check your connection", {
+            // Dedicated branded offline page (precached at install) instead
+            // of a bare 503 string — reassures users their money is safe.
+            return caches.match("/offline.html").then((offline) => offline
+              ?? new Response("Offline — please check your connection", {
                 status: 503,
                 headers: { "Content-Type": "text/plain" },
-              });
-            }
-            return new Response("Unable to load this page — please try again.", {
-              status: 503,
-              headers: { "Content-Type": "text/plain" },
-            });
+              })
+            );
           })
         )
     );

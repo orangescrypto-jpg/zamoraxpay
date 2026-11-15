@@ -23,7 +23,10 @@ export async function POST(req: NextRequest) {
       const result = await d1Query("SELECT email FROM users WHERE phone = ?", [identifier])
       const row = result.results?.[0]
       if (!row?.email) {
-        return NextResponse.json({ error: "No account found with that phone number" }, { status: 404 })
+        // Same message and status as the bad-password branch below — a
+        // distinct "no account" response would let attackers enumerate
+        // which phone numbers are registered.
+        return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
       }
       email = row.email
     }
@@ -47,17 +50,6 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error || !data.user) {
-      // TEMP DEBUG: logs the real Supabase error to `wrangler tail` so we
-      // can see what's actually failing post-migration (network/DNS error
-      // vs genuine bad credentials vs project misconfig). Remove once
-      // diagnosed.
-      console.error("[login] supabase signInWithPassword failed", {
-        status: (error as any)?.status,
-        code: (error as any)?.code,
-        message: error?.message,
-        name: error?.name,
-      })
-
       // Supabase returns a specific error when email confirmation is
       // required and hasn't happened yet — surface that distinctly so
       // the frontend can show "check your email" instead of a generic
@@ -80,6 +72,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ user: { id: data.user.id } })
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Login failed" }, { status: 500 })
+    console.error("[login] unexpected failure", err)
+    return NextResponse.json({ error: "Login failed. Please try again." }, { status: 500 })
   }
 }

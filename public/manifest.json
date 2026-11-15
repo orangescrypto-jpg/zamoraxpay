@@ -17,8 +17,9 @@
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Buy Airtime",   "url": "/services/airtime", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Buy Data",      "url": "/services/data",    "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Fund Wallet",   "url": "/wallet",           "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Buy Airtime",   "url": "/dashboard/services/airtime", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Buy Data",      "url": "/dashboard/services/data",    "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "All Services",  "url": "/dashboard/services",         "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Fund Wallet",   "url": "/wallet",                     "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
   ]
 }

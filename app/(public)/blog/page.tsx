@@ -1,5 +1,6 @@
 // app/(public)/blog/page.tsx
 import Link from "next/link"
+import Image from "next/image"
 import type { Metadata } from "next"
 import { listPublishedPostsPaginated } from "@/src/services/blog"
 import { d1Query } from "@/lib/db"
@@ -129,7 +130,7 @@ export default async function BlogListPage({
         {featured && !category && (
           <section className="mb-10 grid overflow-hidden rounded-2xl border border-border bg-card shadow-soft transition-shadow hover:shadow-card md:grid-cols-[1.15fr_0.85fr]">
             <Link href={`/blog/${featured.slug}`} className="group relative min-h-[220px] overflow-hidden bg-secondary sm:min-h-[280px] md:min-h-[320px]">
-              <img src={featured.coverImageUrl || "/blog-fallback-cover.svg"} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
+              <Image src={featured.coverImageUrl || "/blog-fallback-cover.svg"} alt="" fill sizes="(max-width: 768px) 100vw, 1200px" className="object-cover transition duration-500 group-hover:scale-105" />
               <span className="absolute left-4 top-4 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary shadow-sm">Featured</span>
             </Link>
             <div className="flex flex-col justify-center p-5 sm:p-7 lg:p-8">

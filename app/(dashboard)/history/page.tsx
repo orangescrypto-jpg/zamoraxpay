@@ -29,9 +29,9 @@ const REPEAT_PATHS: Record<string, string> = {
 }
 
 function statusMeta(status: string) {
-  if (status === "success" || status === "completed") return { className: "text-emerald-700 bg-emerald-50", Icon: CheckCircle2 }
-  if (status === "failed" || status === "reversed") return { className: "text-red-700 bg-red-50", Icon: XCircle }
-  return { className: "text-amber-700 bg-amber-50", Icon: Clock3 }
+  if (status === "success" || status === "completed") return { className: "text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40", Icon: CheckCircle2 }
+  if (status === "failed" || status === "reversed") return { className: "text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40", Icon: XCircle }
+  return { className: "text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40", Icon: Clock3 }
 }
 
 function parseDelivered(value?: string | null) {
@@ -199,7 +199,7 @@ export default function HistoryPage() {
       {items.length > 0 && (
         <section className="mb-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5" aria-labelledby="spending-overview-title">
           <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><TrendingUp className="h-5 w-5" /></span>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"><TrendingUp className="h-5 w-5" /></span>
             <div className="min-w-0 flex-1">
               <h2 id="spending-overview-title" className="text-sm font-semibold text-secondary">Spending overview</h2>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Completed purchases from the transaction records currently loaded on this page. Wallet deposits and pending or failed purchases are excluded.</p>
@@ -236,7 +236,7 @@ export default function HistoryPage() {
         </section>
       )}
 
-      {error && <div role="alert" className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><p>{error}</p><button type="button" onClick={() => setRetryCount((count) => count + 1)} disabled={loading} className="mt-2 font-semibold underline disabled:opacity-60">Try again</button></div>}
+      {error && <div role="alert" className="mb-4 rounded-2xl border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 p-4 text-sm text-red-800 dark:text-red-200"><p>{error}</p><button type="button" onClick={() => setRetryCount((count) => count + 1)} disabled={loading} className="mt-2 font-semibold underline disabled:opacity-60">Try again</button></div>}
 
       {items.length === 0 && !error ? (
         <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center"><ReceiptText className="mx-auto h-9 w-9 text-muted-foreground/40" /><h2 className="mt-3 font-semibold text-secondary">No transactions yet</h2><p className="mt-1 text-sm text-muted-foreground">Your airtime, data, bills and wallet activity will appear here.</p><Link href="/dashboard" className="mt-4 inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white">Go to dashboard</Link></div>
@@ -261,10 +261,10 @@ export default function HistoryPage() {
                 </button>
                 {isExpanded && <div className="border-t border-border bg-muted/20 p-4">
                   <div className="grid grid-cols-2 gap-3 text-xs"><Detail label="Service" value={`${order.service_type.replaceAll("_", " ")} · ${order.network_or_biller}`} /><Detail label="Recipient" value={order.recipient} /><Detail label="Amount" value={formatNaira(amount)} /><Detail label="Reference" value={order.id} copy={copy} /></div>
-                  {order.is_free_prize && <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs font-medium text-emerald-800">This transaction was delivered as a free prize.</p>}
+                  {order.is_free_prize && <p className="mt-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-3 text-xs font-medium text-emerald-800 dark:text-emerald-200">This transaction was delivered as a free prize.</p>}
                   {delivered?.pins?.map((p, i) => <DeliveredValue key={i} label="PIN" value={p.pin} serial={p.serialNumber} copy={copy} copied={copied} />)}
                   {delivered?.token && <DeliveredValue label="Token" value={delivered.token} serial={delivered.units ? `Units: ${delivered.units}` : undefined} copy={copy} copied={copied} />}
-                  {delivered?.deliveryNote && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{delivered.deliveryNote}</p>}
+                  {delivered?.deliveryNote && <p className="mt-3 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-900 dark:text-amber-100">{delivered.deliveryNote}</p>}
                   <div className="mt-4 flex flex-wrap items-center gap-2"><ReceiptButton service={`${order.service_type} · ${order.network_or_biller}`} reference={order.id} amount={formatNaira(amount)} status={order.status} date={formatDate(order.created_at)} recipient={order.recipient} />{repeat && <Link href={repeat} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:opacity-90"><ArrowUpRight className="h-3.5 w-3.5" /> Buy again</Link>}</div>
                 </div>}
               </div>
@@ -272,7 +272,7 @@ export default function HistoryPage() {
             const tx = item.data
             const meta = statusMeta(tx.status)
             const label = WALLET_TYPE_LABELS[tx.type] ?? tx.type.replaceAll("_", " ")
-            return <div key={`wallet-${tx.id}`} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.className}`}>{tx.direction === "credit" ? <ArrowDownToLine className="h-4.5 w-4.5" /> : <ArrowUpRight className="h-4.5 w-4.5" />}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold capitalize text-secondary">{label}</p><p className="mt-1 text-[11px] text-muted-foreground">{formatDate(tx.created_at)} · {tx.id}</p></div><div className="text-right"><p className={`text-sm font-semibold ${tx.direction === "credit" ? "text-emerald-700" : "text-secondary"}`}>{tx.direction === "credit" ? "+" : "-"}{formatNaira(tx.amount_kobo)}</p><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${meta.className}`}>{tx.status}</span></div></div>
+            return <div key={`wallet-${tx.id}`} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.className}`}>{tx.direction === "credit" ? <ArrowDownToLine className="h-4.5 w-4.5" /> : <ArrowUpRight className="h-4.5 w-4.5" />}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold capitalize text-secondary">{label}</p><p className="mt-1 text-[11px] text-muted-foreground">{formatDate(tx.created_at)} · {tx.id}</p></div><div className="text-right"><p className={`text-sm font-semibold ${tx.direction === "credit" ? "text-emerald-700 dark:text-emerald-300" : "text-secondary"}`}>{tx.direction === "credit" ? "+" : "-"}{formatNaira(tx.amount_kobo)}</p><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${meta.className}`}>{tx.status}</span></div></div>
           })}
         </div>
       )}

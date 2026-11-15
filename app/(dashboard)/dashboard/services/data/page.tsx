@@ -1,9 +1,12 @@
 // app/(dashboard)/services/data/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useAuth } from "@/hooks/useAuth"
+import { useAuthCachedFetch } from "@/hooks/useCachedFetch"
+import { useOrderStatusPolling } from "@/hooks/useOrderStatusPolling"
+import { useWalletBalance } from "@/hooks/useWalletBalance"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 import { ResultBanner } from "@/components/ui/result-banner"
@@ -14,6 +17,7 @@ import { pushRecentPhone } from "@/lib/recentPhones"
 import { AmountChips } from "@/components/ui/amount-chips"
 import { detectNetwork, matchesSelectedNetwork, type NetworkName } from "@/lib/networkDetect"
 import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
+import { DataBalanceCheck } from "@/components/ui/data-balance-check"
 
 const NETWORKS: NetworkName[] = ["MTN", "Airtel", "Glo", "9mobile"]
 
@@ -158,9 +162,8 @@ export default function DataPage() {
     if (user?.phone && phone === "") setPhone(user.phone)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.phone])
-  const [groups, setGroups] = useState<PlanGroup[]>([])
-  const [plansLoading, setPlansLoading] = useState(true)
-  const [plansError, setPlansError] = useState<string | null>(null)
+  // groups/plansLoading/plansError now come from useAuthCachedFetch above
+  // (cache-first, per-network localStorage key) instead of local state.
   const [bucket, setBucket] = useState<ValidityBucket>("daily")
   const [groupKey, setGroupKey] = useState("")
   const [planCode, setPlanCode] = useState("")
@@ -171,7 +174,45 @@ export default function DataPage() {
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [result, setResult] = useState<{
+    success: boolean
+    message: string
+    /** Set when the order is pending — drives the live status poller. */
+    orderId?: string
+    isPending?: boolean
+  } | null>(null)
+  // LIVE STATUS (audit finding: no live purchase status): when a
+  // purchase returns isPending, poll /api/vtu/order-status with a
+  // gentle backoff until the order resolves, and update the banner in
+  // place — the user watches it flip from "Processing" to
+  // "Successful/Failed" instead of a static message they must refresh.
+  const authHeader = useCallback(async () => {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    return { Authorization: `Bearer ${session?.access_token ?? ""}` }
+  }, [])
+  const { order: polledOrder, polling: statusPolling, timedOut: statusTimedOut } = useOrderStatusPolling(
+    result?.isPending && result.orderId ? result.orderId : null,
+    authHeader,
+    (resolved) => {
+      setResult((current) =>
+        current && current.orderId === resolved.id
+          ? {
+              success: resolved.status === "success" || resolved.status === "refunded",
+              isPending: false,
+              orderId: resolved.id,
+              message:
+                resolved.status === "success"
+                  ? "Purchase confirmed — your data has been delivered."
+                  : resolved.status === "refunded"
+                    ? "This purchase could not be completed and your wallet has been refunded."
+                    : (resolved.failureReason ?? "The purchase failed."),
+            }
+          : current,
+      )
+    },
+  )
+
   // Set when the backend reports the price changed or the picked plan
   // just went unavailable - holds what the customer needs to see and
   // explicitly accept before anything is charged. Nothing is charged
@@ -186,76 +227,63 @@ export default function DataPage() {
     detectedNetwork?: string | null
   } | null>(null)
 
+  // PERF FIX (audit finding: dead useCachedFetch hook + hottest
+  // authenticated path uncached): plan loading previously hand-rolled a
+  // fetch on every mount AND network change. Now it goes through the
+  // purpose-built useAuthCachedFetch hook — cache-first render from
+  // localStorage (per network key), background revalidation, TTL 60s
+  // matching the API's private max-age, visibility-triggered refetch,
+  // and abort-on-unmount. Network switches stay instant: a network the
+  // user looked at 30 seconds ago renders from cache immediately.
+  const plansUrl = `/api/pricing?serviceType=data&networkOrBiller=${encodeURIComponent(network)}&grouped=1`
+  const {
+    data: plansData,
+    loading: plansLoading,
+    error: plansError,
+  } = useAuthCachedFetch<{ groups: PlanGroup[] }>(plansUrl, {
+    storageKey: `pricing:data:${network.toLowerCase()}`,
+    storageVersion: 2,
+    ttlMs: 60_000,
+    fallback: { groups: [] },
+    transform: (raw) => ({ groups: (raw as { groups?: PlanGroup[] }).groups ?? [] }),
+  })
+  const groups = useMemo(() => plansData.groups, [plansData])
+
+  // Auto-select the first sensible plan whenever the (possibly cached)
+  // group list changes — same behavior as before, but driven by the
+  // cached fetch result instead of inline fetch state.
   useEffect(() => {
-    let cancelled = false
-
-    async function loadPlans() {
-      setPlansLoading(true)
-      setPlansError(null)
-      setGroupKey("")
-      setPlanCode("")
-      setCategory("")
-      setConfirmState(null)
-
-      try {
-        const supabase = createClient()
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session) {
-          if (!cancelled) setPlansError("Not authenticated")
-          return
-        }
-
-        const res = await fetch(
-          `/api/pricing?serviceType=data&networkOrBiller=${encodeURIComponent(network)}&grouped=1`,
-          { headers: { Authorization: `Bearer ${session.access_token}` } },
-        )
-        const data = await res.json()
-        if (cancelled) return
-
-        if (!res.ok) {
-          setPlansError(data.error ?? "Could not load data plans")
-          setGroups([])
-          return
-        }
-
-        const loadedGroups: PlanGroup[] = data.groups ?? []
-        setGroups(loadedGroups)
-        if (loadedGroups.length) {
-          // Land on whichever bucket actually has plans for this
-          // network, preferring Daily when it does (matches habit -
-          // daily plans are the most frequently bought) rather than
-          // always defaulting to Daily and showing an empty tab.
-          const firstNonEmpty =
-            BUCKET_ORDER.find((b) =>
-              loadedGroups.some((g) => bucketFor(validityDaysFromPlanCode(g.groupKey.split(":").pop() ?? g.groupKey)) === b),
-            ) ?? "daily"
-          setBucket(firstNonEmpty)
-          const inFirstBucket = loadedGroups.filter(
-            (g) => bucketFor(validityDaysFromPlanCode(g.groupKey.split(":").pop() ?? g.groupKey)) === firstNonEmpty,
-          )
-          const firstCat = inFirstBucket.length
-            ? inFirstBucket[0].variants[0].category
-            : loadedGroups[0].variants[0].category
-          setCategory(firstCat)
-          const firstInBucket =
-            inFirstBucket.find((g) => g.variants.some((v) => v.category === firstCat)) ??
-            inFirstBucket[0] ??
-            loadedGroups[0]
-          setGroupKey(firstInBucket.groupKey)
-          setPlanCode(
-            (firstInBucket.variants.find((v) => v.category === firstCat) ?? firstInBucket.variants[0]).planCode,
-          )
-        }
-      } catch {
-        if (!cancelled) setPlansError("Could not load data plans")
-      } finally {
-        if (!cancelled) setPlansLoading(false)
-      }
+    setGroupKey("")
+    setPlanCode("")
+    setCategory("")
+    setConfirmState(null)
+    if (groups.length) {
+      // Land on whichever bucket actually has plans for this
+      // network, preferring Daily when it does (matches habit -
+      // daily plans are the most frequently bought) rather than
+      // always defaulting to Daily and showing an empty tab.
+      const firstNonEmpty =
+        BUCKET_ORDER.find((b) =>
+          groups.some((g) => bucketFor(validityDaysFromPlanCode(g.groupKey.split(":").pop() ?? g.groupKey)) === b),
+        ) ?? "daily"
+      setBucket(firstNonEmpty)
+      const inFirstBucket = groups.filter(
+        (g) => bucketFor(validityDaysFromPlanCode(g.groupKey.split(":").pop() ?? g.groupKey)) === firstNonEmpty,
+      )
+      const firstCat = inFirstBucket.length
+        ? inFirstBucket[0].variants[0].category
+        : groups[0].variants[0].category
+      setCategory(firstCat)
+      const firstInBucket =
+        inFirstBucket.find((g) => g.variants.some((v) => v.category === firstCat)) ??
+        inFirstBucket[0] ??
+        groups[0]
+      setGroupKey(firstInBucket.groupKey)
+      setPlanCode(
+        (firstInBucket.variants.find((v) => v.category === firstCat) ?? firstInBucket.variants[0]).planCode,
+      )
     }
-
-    loadPlans()
-    return () => { cancelled = true }
-  }, [network])
+  }, [groups])
 
   // groupKey is shaped "<network>:<base-plan-code>" (see
   // listPlanGroups/splitPlanCodeForGrouping in pricing.ts) - validity
@@ -287,6 +315,14 @@ export default function DataPage() {
 
   const selectedGroup = groups.find((g) => g.groupKey === groupKey)
   const selectedVariant = selectedGroup?.variants.find((v) => v.planCode === planCode)
+
+  // BALANCE AWARENESS (audit finding): show the wallet balance next to
+  // the price and warn BEFORE the PIN/review round-trip when the picked
+  // plan costs more than the balance. 30s client-side cache via the
+  // shared useWalletBalance hook; refreshed after a purchase resolves.
+  const { balanceKobo, loading: balanceLoading, refresh: refreshBalance } = useWalletBalance()
+  const priceKobo = selectedVariant?.priceKobo ?? null
+  const balanceTooLow = balanceKobo > 0 && priceKobo != null && priceKobo > balanceKobo
 
   const networkMismatch = phone.length > 0 && !matchesSelectedNetwork(phone, network)
   const detected = detectNetwork(phone)
@@ -401,8 +437,13 @@ export default function DataPage() {
     try {
       const data = await submitPurchase(selectedVariant?.priceKobo, planCode, false)
       if (handleGateResponse(data, planCode)) return
-      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
-      if (data.success) { pushRecentPhone(phone.trim()); setPhone(""); setPin("") }
+      setResult({
+        success: Boolean(data.success),
+        message: data.message ?? data.error ?? "The purchase could not be completed.",
+        orderId: data.orderId,
+        isPending: Boolean(data.isPending),
+      })
+      if (data.success) { pushRecentPhone(phone.trim()); setPhone(""); setPin(""); void refreshBalance() }
     } catch (err) {
       setResult({ success: false, message: err instanceof Error ? err.message : "Data purchase failed. Please try again." })
     } finally {
@@ -423,8 +464,13 @@ export default function DataPage() {
       )
       if (handleGateResponse(data, pendingConfirmation.planCode)) return
       setConfirmState(null)
-      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
-      if (data.success) { pushRecentPhone(phone.trim()); setPhone(""); setPin("") }
+      setResult({
+        success: Boolean(data.success),
+        message: data.message ?? data.error ?? "The purchase could not be completed.",
+        orderId: data.orderId,
+        isPending: Boolean(data.isPending),
+      })
+      if (data.success) { pushRecentPhone(phone.trim()); setPhone(""); setPin(""); void refreshBalance() }
     } catch (err) {
       setResult({ success: false, message: err instanceof Error ? err.message : "Data purchase failed. Please try again." })
     } finally {
@@ -439,11 +485,34 @@ export default function DataPage() {
       {result && (
         <ResultBanner
           className="mb-4"
-          variant={result.success ? "success" : "error"}
-          title={result.success ? "Success" : "Purchase failed"}
-          message={result.message}
+          variant={result.isPending ? "warning" : result.success ? "success" : "error"}
+          title={
+            result.isPending
+              ? statusPolling
+                ? "Processing your purchase…"
+                : "Almost there"
+              : result.success
+                ? "Success"
+                : "Purchase failed"
+          }
+          message={
+            result.isPending
+              ? statusTimedOut
+                ? "This is taking longer than usual. Your order is safe — we'll keep resolving it in the background and it will appear in your history. No need to stay on this page."
+                : "Your order was accepted and is being delivered. This page updates automatically — you don't need to refresh."
+              : result.message
+          }
           onDismiss={() => setResult(null)}
         />
+      )}
+      {result?.success && (
+        <DataBalanceCheck network={network} />
+      )}
+      {result?.isPending && polledOrder?.status === "pending" && (
+        <p className="mb-4 flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-border border-t-primary" aria-hidden="true" />
+          Checking delivery status…
+        </p>
       )}
 
       {confirmState && confirmState.kind === "network" && (
@@ -607,8 +676,27 @@ export default function DataPage() {
 
           {selectedVariant && (
             <p className="mt-1 text-sm font-medium text-secondary">
-              You'll pay {formatNaira(selectedVariant.priceKobo)}
+              You&apos;ll pay {formatNaira(selectedVariant.priceKobo)}
+              {!balanceLoading && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  · Balance {formatNaira(balanceKobo)}
+                </span>
+              )}
             </p>
+          )}
+          {balanceTooLow && (
+            <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+              <p>
+                Your balance ({formatNaira(balanceKobo)}) isn&apos;t enough for this plan (
+                {formatNaira(priceKobo!)}). You&apos;re short {formatNaira(priceKobo! - balanceKobo)}.
+              </p>
+              <Link
+                href="/wallet"
+                className="mt-1 inline-block font-semibold text-primary underline underline-offset-2"
+              >
+                Fund your wallet
+              </Link>
+            </div>
           )}
         </div>
 

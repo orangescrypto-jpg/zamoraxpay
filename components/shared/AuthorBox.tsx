@@ -1,5 +1,6 @@
 // components/shared/AuthorBox.tsx
 import Link from "next/link"
+import Image from "next/image"
 
 interface Props {
   authorName: string | null
@@ -20,7 +21,7 @@ export function AuthorBox({ authorName, authorSlug, authorPhotoUrl, authorBio }:
   const content = (
     <div className="flex items-start gap-3 rounded-lg border border-border p-4">
       {authorPhotoUrl ? (
-        <img src={authorPhotoUrl} alt={authorName} className="h-12 w-12 shrink-0 rounded-full object-cover" />
+        <Image src={authorPhotoUrl} alt={authorName} width={48} height={48} className="h-12 w-12 shrink-0 rounded-full object-cover" />
       ) : (
         <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-secondary text-base font-semibold text-secondary-foreground">
           {authorName.charAt(0)}

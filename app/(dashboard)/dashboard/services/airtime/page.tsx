@@ -1,7 +1,10 @@
 // app/(dashboard)/services/airtime/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
+import { useOrderStatusPolling } from "@/hooks/useOrderStatusPolling"
+import { useWalletBalance } from "@/hooks/useWalletBalance"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
@@ -58,7 +61,13 @@ export default function AirtimePage() {
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [result, setResult] = useState<{
+    success: boolean
+    message: string
+    /** Set when the order is pending — drives the live status poller. */
+    orderId?: string
+    isPending?: boolean
+  } | null>(null)
   // Set when the server rejects the purchase because the number and
   // selected network don't match. This is a hard gate, not a dismissible
   // dialog - the user must explicitly tick a checkbox acknowledging the
@@ -69,6 +78,14 @@ export default function AirtimePage() {
   const [networkConfirmNeeded, setNetworkConfirmNeeded] = useState<{ detected: string | null } | null>(null)
   const [ackMismatch, setAckMismatch] = useState(false)
 
+  // BALANCE AWARENESS (audit finding): show the wallet balance on the
+  // sticky bar and warn before the PIN round-trip when the typed amount
+  // exceeds it. 30s client-side cache; refreshed after a purchase.
+  const { balanceKobo, loading: balanceLoading, refresh: refreshBalance } = useWalletBalance()
+  const amountKobo = amount ? Math.round(parseFloat(amount) * 100) : null
+  const balanceTooLow =
+    balanceKobo > 0 && amountKobo != null && amountKobo >= 5000 && amountKobo > balanceKobo
+
   const networkMismatch = phone.length > 0 && !matchesSelectedNetwork(phone, network)
   const detected = detectNetwork(phone)
 
@@ -76,6 +93,35 @@ export default function AirtimePage() {
     setNetworkConfirmNeeded(null)
     setAckMismatch(false)
   }, [network, phone])
+
+  // LIVE STATUS (audit finding: no live purchase status): poll until a
+  // pending order resolves, updating the banner in place.
+  const authHeader = useCallback(async () => {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    return { Authorization: `Bearer ${session?.access_token ?? ""}` }
+  }, [])
+  const { order: polledOrder, polling: statusPolling, timedOut: statusTimedOut } = useOrderStatusPolling(
+    result?.isPending && result.orderId ? result.orderId : null,
+    authHeader,
+    (resolved) => {
+      setResult((current) =>
+        current && current.orderId === resolved.id
+          ? {
+              success: resolved.status === "success" || resolved.status === "refunded",
+              isPending: false,
+              orderId: resolved.id,
+              message:
+                resolved.status === "success"
+                  ? "Purchase confirmed — your airtime has been delivered."
+                  : resolved.status === "refunded"
+                    ? "This purchase could not be completed and your wallet has been refunded."
+                    : (resolved.failureReason ?? "The purchase failed."),
+            }
+          : current,
+      )
+    },
+  )
 
   async function submitPurchase(confirmNetworkMismatch: boolean) {
     if (loading) return
@@ -107,7 +153,12 @@ export default function AirtimePage() {
         return
       }
 
-      setResult({ success: Boolean(data.success), message: data.message ?? data.error ?? "The purchase could not be completed." })
+      setResult({
+        success: Boolean(data.success),
+        message: data.message ?? data.error ?? "The purchase could not be completed.",
+        orderId: data.orderId,
+        isPending: Boolean(data.isPending),
+      })
       if (data.success) {
         pushRecentPhone(phone.trim())
         setPhone("")
@@ -115,6 +166,7 @@ export default function AirtimePage() {
         setPin("")
         setNetworkConfirmNeeded(null)
         setAckMismatch(false)
+        void refreshBalance()
       }
     } catch (err) {
       setResult({ success: false, message: err instanceof Error ? err.message : "Airtime purchase failed. Please try again." })
@@ -150,11 +202,31 @@ export default function AirtimePage() {
       {result && (
         <ResultBanner
           className="mb-4"
-          variant={result.success ? "success" : "error"}
-          title={result.success ? "Success" : "Purchase failed"}
-          message={result.message}
+          variant={result.isPending ? "warning" : result.success ? "success" : "error"}
+          title={
+            result.isPending
+              ? statusPolling
+                ? "Processing your purchase…"
+                : "Almost there"
+              : result.success
+                ? "Success"
+                : "Purchase failed"
+          }
+          message={
+            result.isPending
+              ? statusTimedOut
+                ? "This is taking longer than usual. Your order is safe — we'll keep resolving it in the background and it will appear in your history. No need to stay on this page."
+                : "Your order was accepted and is being delivered. This page updates automatically — you don't need to refresh."
+              : result.message
+          }
           onDismiss={() => setResult(null)}
         />
+      )}
+      {result?.isPending && polledOrder?.status === "pending" && (
+        <p className="mb-4 flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-border border-t-primary" aria-hidden="true" />
+          Checking delivery status…
+        </p>
       )}
 
       <form onSubmit={handleSubmit} className={`space-y-4 ${result && !result.success ? "zpx-shake" : ""}`}>
@@ -261,7 +333,16 @@ export default function AirtimePage() {
         <div className="zpx-sticky-pay pt-2">
         <p className="mb-2 text-center text-xs text-muted-foreground">
           You pay <span className="font-semibold text-secondary dark:text-foreground">{amount && parseFloat(amount) >= 50 ? `₦${parseFloat(amount).toLocaleString("en-NG")}` : "N/A"}</span>
+          {!balanceLoading && (
+            <span className="ml-1">· Balance <span className={balanceTooLow ? "font-semibold text-destructive" : "font-semibold"}>{formatNaira(balanceKobo)}</span></span>
+          )}
         </p>
+        {balanceTooLow && (
+          <p className="mb-2 text-center text-xs text-amber-800 dark:text-amber-200">
+            Short by {formatNaira((amountKobo ?? 0) - balanceKobo)} —{" "}
+            <Link href="/wallet" className="font-semibold text-primary underline underline-offset-2">fund your wallet</Link>
+          </p>
+        )}
         <button
           type="submit"
           disabled={loading || (!!networkConfirmNeeded && !ackMismatch) || phone.length < 11 || !amount || parseFloat(amount) < 50 || pin.length !== 4}

@@ -1,10 +1,13 @@
 // app/(dashboard)/refund/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira, formatDate } from "@/lib/utils"
 import { NIGERIAN_BANKS } from "@/constants/nigerianBanks"
+import { PinKeypad } from "@/components/ui/pin-keypad"
+import { ResultBanner } from "@/components/ui/result-banner"
+import { PurchaseReviewDialog } from "@/components/dashboard/PurchaseReviewDialog"
 
 interface FundingSource {
   id: string
@@ -34,6 +37,9 @@ export default function RefundPage() {
   const [amount, setAmount] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
   const [withdrawalEnabled, setWithdrawalEnabled] = useState(true)
 
@@ -43,29 +49,37 @@ export default function RefundPage() {
     return { Authorization: `Bearer ${session?.access_token}` }
   }
 
-  async function load() {
-    const headers = await getAuthHeader()
-    const [withdrawRes, sourcesRes, statusRes] = await Promise.all([
-      fetch("/api/wallet/withdraw", { headers }),
-      fetch("/api/wallet/funding-sources", { headers }),
-      fetch("/api/withdrawal-status"),
-    ])
-    const withdrawData = await withdrawRes.json()
-    const sourcesData = await sourcesRes.json()
-    const statusData = await statusRes.json()
+  const load = useCallback(async () => {
+    setPageLoading(true)
+    setLoadError(null)
+    try {
+      const headers = await getAuthHeader()
+      const [withdrawRes, sourcesRes, statusRes] = await Promise.all([
+        fetch("/api/wallet/withdraw", { headers }),
+        fetch("/api/wallet/funding-sources", { headers }),
+        fetch("/api/withdrawal-status"),
+      ])
+      const withdrawData = await withdrawRes.json()
+      const sourcesData = await sourcesRes.json()
+      const statusData = await statusRes.json()
 
-    setWithdrawableKobo(withdrawData.withdrawableBalanceKobo ?? 0)
-    setHistory(withdrawData.withdrawals ?? [])
-    setSources(sourcesData.sources ?? [])
-    setWithdrawalEnabled(statusData.enabled ?? true)
-    if (sourcesData.sources?.length === 1) setSelectedAccount(sourcesData.sources[0].id)
-  }
+      setWithdrawableKobo(withdrawData.withdrawableBalanceKobo ?? 0)
+      setHistory(withdrawData.withdrawals ?? [])
+      setSources(sourcesData.sources ?? [])
+      setWithdrawalEnabled(statusData.enabled ?? true)
+      if (sourcesData.sources?.length === 1) setSelectedAccount(sourcesData.sources[0].id)
+    } catch {
+      setLoadError("Could not load your refund details. Check your connection and try again.")
+    } finally {
+      setPageLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     load()
-  }, [])
+  }, [load])
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setResult(null)
 
@@ -75,7 +89,14 @@ export default function RefundPage() {
       return
     }
 
+    setReviewOpen(true)
+  }
+
+  async function confirmRefundReview() {
+    const source = sources.find((s) => s.id === selectedAccount)
+    if (!source) return
     setLoading(true)
+    setReviewOpen(false)
     const headers = await getAuthHeader()
     const res = await fetch("/api/wallet/withdraw", {
       method: "POST",
@@ -106,15 +127,28 @@ export default function RefundPage() {
 
       <div className="mb-6 rounded-lg bg-secondary p-6 text-white">
         <p className="text-sm text-white/70">Refundable balance</p>
-        <p className="mt-1 text-3xl font-heading font-bold">
-          {withdrawableKobo === null ? "..." : formatNaira(withdrawableKobo)}
+        <p className="mt-1 text-3xl font-heading font-bold" aria-busy={pageLoading}>
+          {pageLoading && withdrawableKobo === null ? (
+            <span className="inline-block h-9 w-36 animate-pulse rounded bg-white/20" aria-label="Loading balance" />
+          ) : (
+            formatNaira(withdrawableKobo ?? 0)
+          )}
         </p>
         <p className="mt-2 text-xs text-white/50">
           Deposited funds only. Cashback and referral bonus can&apos;t be refunded, they can only be used for purchases.
         </p>
       </div>
 
-      <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      {loadError && (
+        <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive" role="alert">
+          <p>{loadError}</p>
+          <button type="button" onClick={load} className="mt-2 font-semibold underline underline-offset-2">
+            Try again
+          </button>
+        </div>
+      )}
+
+      <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
         <p className="font-medium">Wallet funding errors</p>
         <p className="mt-1">
           Deposits made to this platform are intended solely for airtime, data, and bill payments. If you fund your
@@ -124,7 +158,7 @@ export default function RefundPage() {
       </div>
 
       {!withdrawalEnabled ? (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
           Refunds are temporarily unavailable. Please check back later.
         </div>
       ) : sources.length === 0 ? (
@@ -135,9 +169,12 @@ export default function RefundPage() {
       ) : (
         <form onSubmit={handleSubmit} className="mb-8 space-y-4">
           {result && (
-            <p className={`rounded-md p-3 text-sm ${result.success ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive"}`}>
-              {result.message}
-            </p>
+            <ResultBanner
+              variant={result.success ? "success" : "error"}
+              title={result.success ? "Request submitted" : "Refund request failed"}
+              message={result.message ?? ""}
+              onDismiss={() => setResult(null)}
+            />
           )}
 
           <div>
@@ -193,14 +230,7 @@ export default function RefundPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-secondary">Transaction PIN</label>
-            <input
-              required
-              type="password"
-              maxLength={4}
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest"
-            />
+            <PinKeypad value={pin} onChange={setPin} />
           </div>
 
           <button
@@ -212,6 +242,24 @@ export default function RefundPage() {
           </button>
         </form>
       )}
+
+      <PurchaseReviewDialog
+        open={reviewOpen}
+        onCancel={() => setReviewOpen(false)}
+        onConfirm={confirmRefundReview}
+        title="Confirm refund request"
+        description="Refunds can only go to an account you've funded from and may take up to 48 hours to clear."
+        rows={[
+          { label: "Refund to", value: (() => {
+            const s = sources.find((x) => x.id === selectedAccount)
+            return s ? `${s.bank_name ?? "Bank"} · ${s.account_number}` : "—"
+          })() },
+          { label: "Amount", value: amount ? formatNaira(Math.round(parseFloat(amount) * 100)) : "—" },
+          { label: "Arrival", value: "Up to 48 hours (bank processing)" },
+        ]}
+        confirmLabel="Request refund"
+        loading={loading}
+      />
 
       <h2 className="mb-3 font-heading font-semibold text-secondary">History</h2>
       {history.length === 0 ? (

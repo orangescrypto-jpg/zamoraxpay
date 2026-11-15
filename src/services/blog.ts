@@ -1,6 +1,7 @@
 // src/services/blog.ts
 // Service abstraction layer — blog posts.
 
+import { cache } from "react"
 import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import { broadcastPush } from "@/src/services/pushNotifications"
@@ -185,7 +186,7 @@ export async function listLatestPostsByCategories(
   return byCategory
 }
 
-export async function getPostBySlug(slug: string, nativeDB?: any): Promise<BlogPost | null> {
+async function getPostBySlugUncached(slug: string, nativeDB?: any): Promise<BlogPost | null> {
   const result = await d1Query(
     `SELECT p.*, a.slug as author_slug, a.photo_url as author_photo_url, a.bio as author_bio
      FROM blog_posts p
@@ -197,6 +198,16 @@ export async function getPostBySlug(slug: string, nativeDB?: any): Promise<BlogP
   const row = result.results?.[0]
   return row ? mapRowWithAuthor(row) : null
 }
+
+// PERF FIX (audit finding: no request-level memoization): the blog
+// [slug] page calls getPostBySlug twice per render (generateMetadata +
+// page body), issuing the same D1 query twice. React's cache() dedupes
+// calls with identical arguments within a single server request —
+// one query now, same result object for both callers. Admin routes
+// pass a nativeDB handle; those keep the uncached path so a write
+// followed by a read in the same request can never see a memoized
+// stale row.
+export const getPostBySlug = cache((slug: string) => getPostBySlugUncached(slug))
 
 export async function getRelatedPosts(post: BlogPost, limit: number, nativeDB?: any): Promise<BlogPost[]> {
   // Prefer same-category posts first, then fill any remaining slots
@@ -231,6 +242,17 @@ export async function getRelatedPosts(post: BlogPost, limit: number, nativeDB?: 
   )
 
   return [...sameCategoryPosts, ...(others.results ?? []).map(mapRow)]
+}
+
+// Minimal id-based lookup used by the admin [id] routes to learn a
+// post's slug BEFORE an update/delete, so they can revalidatePath the
+// exact /blog/<slug> ISR entry that is about to go stale. Returns only
+// the fields needed for purging — deliberately not the full mapped
+// post (no need to join authors here).
+export async function getPostById(id: string, nativeDB?: any): Promise<{ id: string; slug: string; status: string } | null> {
+  const result = await d1Query("SELECT id, slug, status FROM blog_posts WHERE id = ? LIMIT 1", [id], nativeDB)
+  const row = result.results?.[0]
+  return row ? { id: row.id as string, slug: row.slug as string, status: row.status as string } : null
 }
 
 export async function listAllPostsAdmin(nativeDB?: any): Promise<BlogPost[]> {

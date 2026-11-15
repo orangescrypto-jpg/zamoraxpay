@@ -27,7 +27,11 @@ export const PROTECTED_PREFIXES = [
 
 export const ADMIN_PREFIX = "/admin"
 
-export const AUTH_PREFIXES = ["/login", "/signup"]
+// /reset-password is deliberately NOT in this list: password-recovery
+// visitors arrive with a Supabase recovery session, so the
+// "redirect logged-in users to /dashboard" rule in middleware.ts must
+// not fire there — they need to reach the set-new-password form.
+export const AUTH_PREFIXES = ["/login", "/signup", "/forgot-password"]
 
 /**
  * True for any authenticated app route (dashboard/wallet/etc.), the

@@ -84,5 +84,7 @@ export const config = {
     "/admin/:path*",
     "/login",
     "/signup",
+    "/forgot-password",
+    "/reset-password/:path*",
   ],
 }

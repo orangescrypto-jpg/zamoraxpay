@@ -31,9 +31,21 @@
 // inlomax.com/app/developer.
 
 import { NextRequest, NextResponse } from "next/server"
+import { timingSafeEqual } from "node:crypto"
 import { d1Query } from "@/lib/d1"
 import { getOrderById, attachDeliveredData } from "@/src/services/vtuOrders"
 import type { VtuDeliveredData } from "@/src/services/providers/vtu/types"
+
+// Constant-time comparison for the path secret — a plain `!==` on the
+// URL segment leaks timing information about how many leading bytes
+// matched, which is exactly what an attacker probing the secret wants.
+// Shared shape across all three VTU webhook routes.
+function secretsMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, "utf8")
+  const b = Buffer.from(expected, "utf8")
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
 
 function extractOrderId(reference: unknown): string | null {
   if (typeof reference !== "string") return null
@@ -70,7 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
     console.error("[inlomax webhook] INLOMAX_WEBHOOK_SECRET is not set — rejecting all callbacks")
     return NextResponse.json({ error: "Not configured" }, { status: 503 })
   }
-  if (secret !== expectedSecret) {
+  if (!secretsMatch(secret, expectedSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

@@ -7,6 +7,7 @@
 // app/api/admin/pages/route.ts for site_pages.
 
 import { NextRequest, NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import { requireAdmin } from "@/lib/auth-server"
 import { d1Query } from "@/lib/db"
 
@@ -57,6 +58,12 @@ export async function PATCH(req: NextRequest) {
     values.push(auth.uid, slug)
 
     await d1Query(`UPDATE service_pages SET ${sets.join(", ")} WHERE slug = ?`, values)
+    // ISR purge (audit finding: admin edits did not revalidate): the
+    // public /services/<slug> page is ISR-cached (revalidate=60, but on
+    // Cloudflare Workers the R2-backed cache can serve longer); purge it
+    // and the services list so edits appear immediately.
+    revalidatePath(`/services/${slug}`)
+    revalidatePath("/services")
     return NextResponse.json({ success: true })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Update failed" }, { status: 500 })

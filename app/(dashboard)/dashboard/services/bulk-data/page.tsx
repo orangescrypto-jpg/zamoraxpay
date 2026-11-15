@@ -1,7 +1,8 @@
 // app/(dashboard)/services/bulk-data/page.tsx
 "use client"
 
-import { useEffect, useState, Suspense } from "react"
+import { useEffect, useMemo, useState, Suspense } from "react"
+import { useAuthCachedFetch } from "@/hooks/useCachedFetch"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/src/services/providers/supabase/client"
@@ -108,9 +109,24 @@ function BulkDataForm() {
   const [batchesLoading, setBatchesLoading] = useState(true)
   const [batchId, setBatchId] = useState(preselectedBatchId ?? "")
   const [network, setNetwork] = useState(NETWORKS[0])
-  const [groups, setGroups] = useState<PlanGroup[]>([])
-  const [plansLoading, setPlansLoading] = useState(true)
-  const [plansError, setPlansError] = useState<string | null>(null)
+  // PERF FIX: plan loading now goes through useAuthCachedFetch (shares
+  // the same per-network cache key family as the single-purchase data
+  // page, so switching between the two pages renders instantly) — 60s
+  // TTL matching the API's private max-age, instead of a fresh fetch
+  // on every mount/network change.
+  const plansUrl = `/api/pricing?serviceType=data&networkOrBiller=${encodeURIComponent(network)}&grouped=1`
+  const {
+    data: plansData,
+    loading: plansLoading,
+    error: plansError,
+  } = useAuthCachedFetch<{ groups: PlanGroup[] }>(plansUrl, {
+    storageKey: `pricing:data:${network.toLowerCase()}`,
+    storageVersion: 2,
+    ttlMs: 60_000,
+    fallback: { groups: [] },
+    transform: (raw) => ({ groups: (raw as { groups?: PlanGroup[] }).groups ?? [] }),
+  })
+  const groups = useMemo(() => plansData.groups, [plansData])
   const [groupKey, setGroupKey] = useState("")
   const [planCode, setPlanCode] = useState("")
   const [pin, setPin] = useState("")
@@ -136,45 +152,17 @@ function BulkDataForm() {
     loadBatches()
   }, [preselectedBatchId])
 
+
+  // Auto-select the first plan when the (possibly cached) group list
+  // changes — same behavior the old loader had inline.
   useEffect(() => {
-    let cancelled = false
-
-    async function loadPlans() {
-      setPlansLoading(true)
-      setPlansError(null)
-      setGroupKey("")
-      setPlanCode("")
-
-      try {
-        const headers = await getAuthHeader()
-        const res = await fetch(
-          `/api/pricing?serviceType=data&networkOrBiller=${encodeURIComponent(network)}&grouped=1`,
-          { headers },
-        )
-        const data = await res.json()
-        if (cancelled) return
-
-        if (!res.ok) {
-          setPlansError(data.error ?? "Could not load data plans")
-          setGroups([])
-          return
-        }
-        const loadedGroups: PlanGroup[] = data.groups ?? []
-        setGroups(loadedGroups)
-        if (loadedGroups.length) {
-          setGroupKey(loadedGroups[0].groupKey)
-          setPlanCode(loadedGroups[0].variants[0].planCode)
-        }
-      } catch {
-        if (!cancelled) setPlansError("Could not load data plans")
-      } finally {
-        if (!cancelled) setPlansLoading(false)
-      }
+    setGroupKey("")
+    setPlanCode("")
+    if (groups.length) {
+      setGroupKey(groups[0].groupKey)
+      setPlanCode(groups[0].variants[0].planCode)
     }
-
-    loadPlans()
-    return () => { cancelled = true }
-  }, [network])
+  }, [groups])
 
   const selectedBatch = batches.find((b) => b.id === batchId)
   const selectedGroup = groups.find((g) => g.groupKey === groupKey)

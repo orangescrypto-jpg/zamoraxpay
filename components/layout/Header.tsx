@@ -140,8 +140,13 @@ export function Header() {
   useEffect(() => {
     if (!showHeaderBanner) return
 
+    // CPU FIX: flip state only when the threshold is crossed instead of
+    // scheduling a re-render on every scroll event.
     const handleScroll = () => {
-      setBannerVisible(window.scrollY <= 0)
+      setBannerVisible((prev) => {
+        const next = window.scrollY <= 0
+        return prev === next ? prev : next
+      })
     }
 
     handleScroll()

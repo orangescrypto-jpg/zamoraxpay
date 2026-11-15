@@ -9,6 +9,7 @@ import { formatNaira } from "@/lib/utils"
 import { getJSON, setJSON } from "@/lib/storage"
 import { Eye, EyeOff, ShieldCheck } from "lucide-react"
 import { AmountChips } from "@/components/ui/amount-chips"
+import { FundConfirmDialog } from "@/components/dashboard/FundConfirmDialog"
 import { PullToRefresh } from "@/components/shared/PullToRefresh"
 
 const QUICK_AMOUNTS = [50000, 100000, 200000, 500000] // kobo
@@ -234,17 +235,17 @@ function WalletPageInner() {
       </div>
 
       {verifyStatus === "checking" && (
-        <p className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-700">
+        <p className="mb-4 rounded-md bg-blue-50 dark:bg-blue-950/40 p-3 text-sm text-blue-700 dark:text-blue-300">
           Confirming your payment...
         </p>
       )}
       {verifyStatus === "success" && (
-        <p className="mb-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">
+        <p className="mb-4 rounded-md bg-emerald-50 dark:bg-emerald-950/40 p-3 text-sm text-emerald-700 dark:text-emerald-300">
           Payment confirmed, your wallet has been credited.
         </p>
       )}
       {verifyStatus === "failed" && (
-        <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+        <p className="mb-4 rounded-md bg-amber-50 dark:bg-amber-950/40 p-3 text-sm text-amber-800 dark:text-amber-200">
           We couldn&apos;t confirm this payment yet. If you were charged, it should reflect shortly,
           contact support if your balance doesn&apos;t update within a few minutes.
         </p>
@@ -263,7 +264,7 @@ function WalletPageInner() {
         <div className="mt-4 flex items-center gap-1.5 text-xs text-white/55"><ShieldCheck className="h-3.5 w-3.5" /> Balance protected by your account security.</div>
       </div>
 
-      {balanceError && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><span>{balanceError}</span><button type="button" onClick={() => void loadBalance()} className="font-semibold underline underline-offset-2">Retry balance</button></div>}
+      {balanceError && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/40 p-3 text-sm text-amber-900 dark:text-amber-100"><span>{balanceError}</span><button type="button" onClick={() => void loadBalance()} className="font-semibold underline underline-offset-2">Retry balance</button></div>}
 
       <h2 className="mb-3 font-heading font-semibold text-secondary">Fund your wallet</h2>
 
@@ -302,17 +303,12 @@ function WalletPageInner() {
       </button>
 
       {confirmFund && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-secondary/40 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-label="Confirm wallet funding">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Review funding</p>
-            <h2 className="mt-1 text-xl font-heading font-bold text-secondary">Fund your wallet?</h2>
-            <p className="mt-2 text-sm text-muted-foreground">You are about to fund your wallet with <strong className="text-secondary">{formatNaira(Math.round(parseFloat(amount || "0") * 100))}</strong>.</p>
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setConfirmFund(false)} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-secondary hover:bg-muted">Cancel</button>
-              <button type="button" onClick={() => { setConfirmFund(false); void handleFund() }} disabled={loading} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60">{loading ? "Starting..." : "Confirm"}</button>
-            </div>
-          </div>
-        </div>
+        <FundConfirmDialog
+          amountKobo={Math.round(parseFloat(amount || "0") * 100)}
+          loading={loading}
+          onCancel={() => setConfirmFund(false)}
+          onConfirm={() => { setConfirmFund(false); void handleFund() }}
+        />
       )}
     </div>
     </PullToRefresh>

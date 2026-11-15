@@ -5,6 +5,7 @@
 // /dashboard/services/[slug]. Content is fully admin-editable. See
 // app/(admin)/admin/service-pages/page.tsx.
 
+import { cache } from "react"
 import { notFound, redirect } from "next/navigation"
 import type { Metadata } from "next"
 import Link from "next/link"
@@ -24,10 +25,13 @@ function safeJsonArray(raw: unknown): any[] {
   }
 }
 
-async function getServicePage(slug: string) {
+// PERF FIX (audit finding: no request-level memoization): generateMetadata
+// and the page body each ran this query for the same slug; React
+// cache() dedupes them into one D1 read per request.
+const getServicePage = cache(async (slug: string) => {
   const result = await d1Query("SELECT * FROM service_pages WHERE slug = ?", [slug])
   return result.results?.[0] ?? null
-}
+})
 
 const BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://zamoraxpay.com.ng"
 

@@ -43,6 +43,16 @@ import type { VtuDeliveredData } from "@/src/services/providers/vtu/types"
 
 const MAX_TIMESTAMP_SKEW_SECONDS = 300 // 5 minutes, per Pairgate's docs
 
+// Constant-time comparison for the path secret — a plain `!==` on the
+// URL segment leaks timing information about how many leading bytes
+// matched. Same shape as the Inlomax/VTU.ng webhook routes.
+function secretsMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, "utf8")
+  const b = Buffer.from(expected, "utf8")
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
+
 function verifyPairgateSignature(rawBody: string, timestampHeader: string | null, signatureHeader: string | null, signingSecret: string): { ok: true } | { ok: false; reason: string } {
   if (!timestampHeader || !signatureHeader) {
     return { ok: false, reason: "Missing signature headers" }
@@ -102,7 +112,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
     console.error("[pairgate webhook] PAIRGATE_WEBHOOK_SECRET is not set — rejecting all callbacks")
     return NextResponse.json({ error: "Not configured" }, { status: 503 })
   }
-  if (secret !== expectedSecret) {
+  if (!secretsMatch(secret, expectedSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

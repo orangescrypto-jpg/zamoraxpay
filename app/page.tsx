@@ -1,5 +1,6 @@
 // app/page.tsx
 import Link from "next/link"
+import Image from "next/image"
 import {
   ArrowRight,
   Award,
@@ -461,12 +462,13 @@ export default async function HomePage() {
                       <div className="space-y-6">
                         {/* Featured post — big magazine card */}
                         <Link href={`/blog/${posts[0].slug}`} className="group block">
-                          <div className="mb-5 aspect-[16/9] overflow-hidden rounded-xl border border-border bg-secondary sm:aspect-[21/9]">
-                            <img
+                          <div className="relative mb-5 aspect-[16/9] overflow-hidden rounded-xl border border-border bg-secondary sm:aspect-[21/9]">
+                            <Image
                               src={posts[0].coverImageUrl || "/blog-fallback-cover.svg"}
                               alt={posts[0].title}
-                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                              loading="lazy"
+                              fill
+                              sizes="(max-width: 768px) 100vw, 920px"
+                              className="object-cover transition-transform duration-500 group-hover:scale-105"
                             />
                           </div>
                           <h4 className="mb-2 text-xl font-heading font-semibold text-secondary group-hover:text-primary sm:text-2xl">
@@ -489,12 +491,13 @@ export default async function HomePage() {
                                 href={`/blog/${post.slug}`}
                                 className="group block overflow-hidden rounded-xl border border-border bg-white shadow-soft transition hover:border-primary/30 hover:shadow-card"
                               >
-                                <div className="aspect-[1200/630] overflow-hidden bg-secondary">
-                                  <img
+                                <div className="relative aspect-[1200/630] overflow-hidden bg-secondary">
+                                  <Image
                                     src={post.coverImageUrl || "/blog-fallback-cover.svg"}
                                     alt={post.title}
-                                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                    loading="lazy"
+                                    fill
+                                    sizes="(max-width: 640px) 50vw, 460px"
+                                    className="object-cover transition-transform duration-500 group-hover:scale-105"
                                   />
                                 </div>
                                 <div className="p-3 sm:p-4">

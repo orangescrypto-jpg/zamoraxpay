@@ -45,13 +45,19 @@ export function SpinCard({ spin }: { spin: SpinApi }) {
 
   useEffect(() => {
     if (winners.length < 2) return
-    const t = setInterval(() => setWinnerIdx((i) => (i + 1) % winners.length), 4000)
+    // CPU FIX: skip the winner-carousel re-render while the tab is hidden.
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") setWinnerIdx((i) => (i + 1) % winners.length)
+    }, 4000)
     return () => clearInterval(t)
   }, [winners.length])
 
   useEffect(() => {
     if (!hasTickets) return
-    const t = setInterval(() => setNow(Date.now()), 30_000)
+    // CPU FIX: skip the "expires in" re-render while the tab is hidden.
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") setNow(Date.now())
+    }, 30_000)
     return () => clearInterval(t)
   }, [hasTickets])
 

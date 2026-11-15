@@ -47,14 +47,27 @@ export function useServiceWorkerUpdate(): {
     // Also poll for updates every 5 minutes - the SW itself calls
     // reg.update() on page load, but a long-lived tab won't pick up
     // a new SW without polling.
-    const pollInterval = setInterval(() => {
+    // CPU FIX: only poll for SW updates while the tab is visible — a
+    // backgrounded tab kept hitting serviceWorker.getRegistration every
+    // 5 minutes for nothing, and reg.update() is a network call.
+    const pollForUpdate = () => {
       navigator.serviceWorker?.getRegistration?.("/sw.js")?.then?.((reg) => {
         reg?.update?.().catch(() => {})
       }).catch(() => {})
+    }
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === "visible") pollForUpdate()
     }, 5 * 60 * 1000)
+    const onVisible = () => {
+      // Catch up immediately on return: the tab may have been hidden
+      // across several scheduled polls.
+      if (document.visibilityState === "visible") pollForUpdate()
+    }
+    document.addEventListener("visibilitychange", onVisible)
 
     return () => {
       navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange)
+      document.removeEventListener("visibilitychange", onVisible)
       clearInterval(pollInterval)
     }
   }, [])

@@ -48,6 +48,16 @@ import type { VtuDeliveredData } from "@/src/services/providers/vtu/types"
 
 const MAX_TIMESTAMP_SKEW_SECONDS = 300 // 5 minutes — same window as the Pairgate webhook
 
+// Constant-time comparison for the path secret — a plain `!==` on the
+// URL segment leaks timing information about how many leading bytes
+// matched. Same shape as the Pairgate/Inlomax webhook routes.
+function secretsMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, "utf8")
+  const b = Buffer.from(expected, "utf8")
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
+
 function verifyVtungSignature(
   rawBody: string,
   timestampHeader: string | null,
@@ -111,7 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
     console.error("[vtung webhook] VTUNG_WEBHOOK_SECRET is not set — rejecting all callbacks")
     return NextResponse.json({ error: "Not configured" }, { status: 503 })
   }
-  if (secret !== expectedSecret) {
+  if (!secretsMatch(secret, expectedSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

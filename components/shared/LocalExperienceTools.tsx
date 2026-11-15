@@ -83,15 +83,27 @@ export function LocalExperienceTools() {
   }, [preferences, ready])
 
   useEffect(() => {
+    // CPU FIX: this handler runs two setStates on EVERY scroll event;
+    // coalesce them to one update per animation frame so long pages
+    // don't re-render at scroll-event frequency (can be 100+/second).
+    let raf = 0
     const update = () => {
-      const scrollable = document.documentElement.scrollHeight - window.innerHeight
-      setProgress(scrollable > 0 ? Math.min(100, Math.max(0, (window.scrollY / scrollable) * 100)) : 0)
-      setShowTop(window.scrollY > 500)
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        const scrollable = document.documentElement.scrollHeight - window.innerHeight
+        setProgress(scrollable > 0 ? Math.min(100, Math.max(0, (window.scrollY / scrollable) * 100)) : 0)
+        setShowTop(window.scrollY > 500)
+      })
     }
     update()
     window.addEventListener("scroll", update, { passive: true })
     window.addEventListener("resize", update)
-    return () => { window.removeEventListener("scroll", update); window.removeEventListener("resize", update) }
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      window.removeEventListener("scroll", update)
+      window.removeEventListener("resize", update)
+    }
   }, [pathname])
 
   useEffect(() => {

@@ -13,14 +13,19 @@
 // - Google Fonts + AdSense (already loaded by Next.js font system and the
 //   AdSenseLoader component)
 // - 'unsafe-inline' on style is required by Next.js styled-jsx / Tailwind
-//   CSS-in-JS runtime; 'unsafe-eval' is NOT required and stays disabled.
+//   CSS-in-JS runtime.
+// SECURITY FIX (audit finding: CSP contradiction): the comment said
+// 'unsafe-eval' stays disabled but the policy included it. It is now
+// actually removed — no shipped code needs eval (dev-mode React
+// refresh is served with a relaxed policy in development only).
 const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
   : "*.supabase.co"
 const r2Host = process.env.NEXT_PUBLIC_R2_HOSTNAME || "*.r2.dev"
+const isDev = process.env.NODE_ENV === "development"
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://pagead2.googlesyndication.com https://www.googletagmanager.com https://www.google-analytics.com`,
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://pagead2.googlesyndication.com https://www.googletagmanager.com https://www.google-analytics.com`,
   `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
   `img-src 'self' data: blob: https: ${supabaseHost.startsWith("*.") ? supabaseHost : "https://" + supabaseHost} https://${r2Host} https://lh3.googleusercontent.com`,
   `font-src 'self' data: https://fonts.gstatic.com`,
@@ -46,6 +51,13 @@ const nextConfig = {
     ],
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 86400,
+    // Allow the local /blog-fallback-cover.svg (and any other first-party
+    // svg) to pass through next/image. Remote uploads are still gated by
+    // remotePatterns above; dangerouslyAllowSVG only affects the
+    // optimizer's willingness to touch svg sources, which are always our
+    // own static assets here.
+    dangerouslyAllowSVG: true,
+    contentDispositionType: "inline",
   },
 
   async headers() {

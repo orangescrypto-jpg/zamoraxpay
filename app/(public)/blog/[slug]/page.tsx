@@ -1,5 +1,6 @@
 // app/(public)/blog/[slug]/page.tsx
 import Link from "next/link"
+import Image from "next/image"
 import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import { getPostBySlug, getRelatedPosts } from "@/src/services/blog"
@@ -154,7 +155,18 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
           {post.coverImageUrl && (
             <div className="mb-8 aspect-[1200/630] overflow-hidden rounded-2xl border border-border bg-muted shadow-soft">
-              <img src={post.coverImageUrl} alt={post.title} className="h-full w-full object-cover" fetchPriority="high" />
+              {/* PERF FIX (audit finding: zero next/image usage): the
+                  cover is the LCP element — next/image serves sized
+                  AVIF/WebP via the already-configured optimizer instead
+                  of the raw upload. fill + sizes keeps the aspect box. */}
+              <Image
+                src={post.coverImageUrl}
+                alt={post.title}
+                fill
+                sizes="(max-width: 768px) 100vw, 1200px"
+                className="object-cover"
+                priority
+              />
             </div>
           )}
         </div>
@@ -195,11 +207,13 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                 const relReading = estimateReadingTime(related.excerpt ?? "")
                 return (
                   <Link key={related.id} href={`/blog/${related.slug}`} className="group block overflow-hidden rounded-xl border border-border bg-card p-3 shadow-soft transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card">
-                    <div className="mb-3 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
-                      <img
+                    <div className="relative mb-3 aspect-[1200/630] overflow-hidden rounded-lg bg-secondary">
+                      <Image
                         src={related.coverImageUrl || "/blog-fallback-cover.svg"}
                         alt={related.title}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy"
+                        fill
+                        sizes="(max-width: 640px) 100vw, 576px"
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
                       />
                     </div>
                     <h3 className="px-1 pb-1 font-heading font-semibold text-foreground group-hover:text-primary">

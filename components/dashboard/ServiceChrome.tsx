@@ -130,19 +130,26 @@ const SERVICES: ServiceMeta[] = [
   },
 ]
 
-const QUICK_LINKS = [
-  { href: "/dashboard/services/airtime", label: "Airtime", icon: Phone },
-  { href: "/dashboard/services/data", label: "Data", icon: Smartphone },
-  { href: "/dashboard/services/electricity", label: "Electricity", icon: Lightbulb },
-  { href: "/dashboard/services/cable", label: "Cable", icon: Cable },
-  { href: "/dashboard/services/exam-pin", label: "Exam PIN", icon: BadgePercent },
-  { href: "/dashboard/services/epin", label: "ePIN", icon: CreditCard },
-  { href: "/dashboard/services/betting", label: "Betting", icon: Banknote },
-  { href: "/dashboard/services/bulk-data", label: "Bulk Data", icon: Users },
-  { href: "/dashboard/services/bulk-airtime", label: "Bulk Airtime", icon: Users },
-  { href: "/dashboard/services/international-topup", label: "International Top-up", icon: Globe2 },
-  { href: "/dashboard/services/airtime-to-cash", label: "Airtime to Cash", icon: CircleDollarSign },
+// Exported so the /dashboard/services index page (the mobile "Services"
+// tab destination) renders the same list — one source of truth for what
+// a "service" is and where it lives.
+export const SERVICE_LINKS = [
+  { href: "/dashboard/services/airtime", label: "Airtime", icon: Phone, blurb: "Top up any Nigerian number instantly" },
+  { href: "/dashboard/services/data", label: "Data", icon: Smartphone, blurb: "Browse plans across all networks" },
+  { href: "/dashboard/services/electricity", label: "Electricity", icon: Lightbulb, blurb: "Pay your meter and get your token" },
+  { href: "/dashboard/services/cable", label: "Cable TV", icon: Cable, blurb: "Renew DStv, GOtv and more" },
+  { href: "/dashboard/services/betting", label: "Betting", icon: Banknote, blurb: "Fund your betting wallet" },
+  { href: "/dashboard/services/exam-pin", label: "Exam PIN", icon: BadgePercent, blurb: "WAEC / NECO result checker PINs" },
+  { href: "/dashboard/services/epin", label: "ePIN", icon: CreditCard, blurb: "Gift cards and digital vouchers" },
+  { href: "/dashboard/services/international-topup", label: "International Top-up", icon: Globe2, blurb: "Send airtime abroad" },
+  { href: "/dashboard/services/bulk-airtime", label: "Bulk Airtime", icon: Users, blurb: "One flow, many numbers" },
+  { href: "/dashboard/services/bulk-data", label: "Bulk Data", icon: Users, blurb: "Data for groups and teams" },
+  { href: "/dashboard/services/bulk-groups", label: "Contact Groups", icon: ClipboardList, blurb: "Save recipient lists for bulk buys" },
+  { href: "/dashboard/services/scheduled-bills", label: "Scheduled Bills", icon: ClipboardList, blurb: "Automate recurring payments" },
+  { href: "/dashboard/services/airtime-to-cash", label: "Airtime to Cash", icon: CircleDollarSign, blurb: "Convert airtime to wallet value" },
 ]
+
+const QUICK_LINKS = SERVICE_LINKS.filter((s) => s.href !== "/dashboard/services/bulk-groups")
 
 function getService(pathname: string): ServiceMeta | null {
   return SERVICES.find((service) => pathname.includes(service.match)) ?? null

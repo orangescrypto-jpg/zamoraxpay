@@ -45,8 +45,8 @@ import { SpinCard } from "@/components/dashboard/SpinCard"
 import { SpinPopup } from "@/components/dashboard/SpinPopup"
 import { useSpinStatus } from "@/components/dashboard/useSpinStatus"
 import { ReceiptButton } from "@/components/dashboard/ReceiptButton"
+import { ReferralPromoCard } from "@/components/dashboard/ReferralPromoCard"
 import { Skeleton } from "@/components/ui/skeleton"
-import { RelativeTime } from "@/components/ui/relative-time"
 import { PullToRefresh } from "@/components/shared/PullToRefresh"
 import { GuidedTour, type TourDef } from "@/components/shared/GuidedTour"
 
@@ -120,32 +120,32 @@ type ActivityItem =
 
 
 const QUICK_LINKS: { href: string; label: string; icon: LucideIcon; iconClass: string }[] = [
-  { href: "/dashboard/services/airtime", label: "Airtime", icon: Smartphone, iconClass: "bg-blue-50 text-blue-600" },
-  { href: "/dashboard/services/data", label: "Data", icon: Wifi, iconClass: "bg-violet-50 text-violet-600" },
-  { href: "/dashboard/services/cable", label: "Cable TV", icon: Tv, iconClass: "bg-orange-50 text-orange-600" },
-  { href: "/dashboard/services/electricity", label: "Electricity", icon: Zap, iconClass: "bg-amber-50 text-amber-600" },
-  { href: "/dashboard/services/exam-pin", label: "Exam PIN", icon: GraduationCap, iconClass: "bg-emerald-50 text-emerald-600" },
-  { href: "/dashboard/services/epin", label: "ePIN", icon: Ticket, iconClass: "bg-fuchsia-50 text-fuchsia-600" },
-  { href: "/dashboard/services/betting", label: "Betting", icon: Dices, iconClass: "bg-rose-50 text-rose-600" },
-  { href: "/dashboard/services/international-topup", label: "International Top-up", icon: Globe, iconClass: "bg-cyan-50 text-cyan-600" },
-  { href: "/dashboard/services/bulk-data", label: "Bulk Data", icon: Users, iconClass: "bg-indigo-50 text-indigo-600" },
-  { href: "/dashboard/services/bulk-airtime", label: "Bulk Airtime", icon: Users, iconClass: "bg-sky-50 text-sky-600" },
-  { href: "/dashboard/services/airtime-to-cash", label: "Airtime to Cash", icon: Banknote, iconClass: "bg-lime-50 text-lime-600" },
-  { href: "/rewards", label: "Rewards", icon: Gift, iconClass: "bg-teal-50 text-teal-600" },
-  { href: "/play", label: "Play & Earn", icon: PartyPopper, iconClass: "bg-purple-50 text-purple-600" },
+  { href: "/dashboard/services/airtime", label: "Airtime", icon: Smartphone, iconClass: "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300" },
+  { href: "/dashboard/services/data", label: "Data", icon: Wifi, iconClass: "bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-300" },
+  { href: "/dashboard/services/cable", label: "Cable TV", icon: Tv, iconClass: "bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-300" },
+  { href: "/dashboard/services/electricity", label: "Electricity", icon: Zap, iconClass: "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-300" },
+  { href: "/dashboard/services/exam-pin", label: "Exam PIN", icon: GraduationCap, iconClass: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300" },
+  { href: "/dashboard/services/epin", label: "ePIN", icon: Ticket, iconClass: "bg-fuchsia-50 dark:bg-fuchsia-950/40 text-fuchsia-600 dark:text-fuchsia-300" },
+  { href: "/dashboard/services/betting", label: "Betting", icon: Dices, iconClass: "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300" },
+  { href: "/dashboard/services/international-topup", label: "International Top-up", icon: Globe, iconClass: "bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-300" },
+  { href: "/dashboard/services/bulk-data", label: "Bulk Data", icon: Users, iconClass: "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300" },
+  { href: "/dashboard/services/bulk-airtime", label: "Bulk Airtime", icon: Users, iconClass: "bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-300" },
+  { href: "/dashboard/services/airtime-to-cash", label: "Airtime to Cash", icon: Banknote, iconClass: "bg-lime-50 dark:bg-lime-950/40 text-lime-600 dark:text-lime-300" },
+  { href: "/rewards", label: "Rewards", icon: Gift, iconClass: "bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-300" },
+  { href: "/play", label: "Play & Earn", icon: PartyPopper, iconClass: "bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300" },
 ]
 
 const STATUS_STYLES: Record<string, { badge: string; icon: LucideIcon; iconClass: string }> = {
-  success: { badge: "text-emerald-700 bg-emerald-50", icon: CheckCircle2, iconClass: "text-emerald-600 bg-emerald-50" },
-  failed: { badge: "text-red-700 bg-red-50", icon: XCircle, iconClass: "text-red-600 bg-red-50" },
+  success: { badge: "text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40", icon: CheckCircle2, iconClass: "text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40" },
+  failed: { badge: "text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40", icon: XCircle, iconClass: "text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-950/40" },
 }
 
 function statusStyle(status: string) {
   return (
     STATUS_STYLES[status] ?? {
-      badge: "text-amber-700 bg-amber-50",
+      badge: "text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40",
       icon: Clock,
-      iconClass: "text-amber-600 bg-amber-50",
+      iconClass: "text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40",
     }
   )
 }
@@ -403,7 +403,7 @@ export default function DashboardPage() {
         <div className="relative mt-6 flex items-center gap-2.5">
           <Link
             href="/wallet"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F1E4D] transition hover:bg-blue-50"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#0F1E4D] transition hover:bg-blue-50 dark:bg-white/10 dark:text-white dark:hover:bg-white/20 dark:bg-blue-950/40"
           >
             <Wallet className="h-4 w-4" />
             Fund wallet
@@ -421,21 +421,21 @@ export default function DashboardPage() {
       {streakLoaded && canCheckInToday && (
         <Link
           href="/daily-streak"
-          className="mt-4 flex items-center gap-3 rounded-2xl border border-teal-200/70 bg-teal-50 px-4 py-3.5 text-sm text-teal-900 transition hover:bg-teal-100"
+          className="mt-4 flex items-center gap-3 rounded-2xl border border-teal-200/70 dark:border-teal-900/60 bg-teal-50 dark:bg-teal-950/40 px-4 py-3.5 text-sm text-teal-900 dark:text-teal-100 transition hover:bg-teal-100 dark:hover:bg-teal-900/40"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700 dark:text-teal-300">
             <Gift className="h-4.5 w-4.5" />
           </span>
           <span className="flex-1">
             Check in today to earn{" "}
             <span className="font-semibold">{formatNaira(nextRewardKobo)}</span> and keep your streak going.
           </span>
-          <ArrowRight className="h-4 w-4 shrink-0 text-teal-600" />
+          <ArrowRight className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-300" />
         </Link>
       )}
 
       {user && !user.hasTransactionPin && (
-        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200/70 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
+        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200/70 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/40 px-4 py-3.5 text-sm text-amber-900 dark:text-amber-100">
           <AlertTriangle className="mt-0.5 h-4.5 w-4.5 shrink-0 text-amber-500" />
           <p>
             You haven't set a transaction PIN yet.{" "}
@@ -461,8 +461,8 @@ export default function DashboardPage() {
             <p className="mt-1 text-xs text-muted-foreground">Pin the services you use most. Your choices stay on this device.</p>
           </div>
           <div className="flex items-center gap-2">
-            {pinnedQuickLinks.length > 0 && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">{pinnedQuickLinks.length} pinned</span>}
-            <button type="button" onClick={() => setManageQuickActions((value) => !value)} aria-pressed={manageQuickActions} className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-secondary hover:border-primary hover:text-primary">{manageQuickActions ? "Done" : "Reorder"}</button>
+            {pinnedQuickLinks.length > 0 && <span className="rounded-full bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200">{pinnedQuickLinks.length} pinned</span>}
+            <button type="button" onClick={() => setManageQuickActions((value) => !value)} aria-pressed={manageQuickActions} className="rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-secondary hover:border-primary hover:text-primary dark:bg-secondary dark:text-secondary-foreground dark:hover:text-primary">{manageQuickActions ? "Done" : "Reorder"}</button>
           </div>
         </div>
         <label className="relative mt-3 block">
@@ -476,7 +476,7 @@ export default function DashboardPage() {
             const isPinned = pinnedQuickLinks.includes(link.href)
             return (
               <div key={link.href} className="relative min-w-0">
-                <Link href={link.href} className="group flex min-h-[118px] h-full flex-col items-center justify-center gap-2.5 rounded-2xl border border-border/70 bg-card px-3 py-4 text-center shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_8px_20px_-10px_rgba(15,30,77,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+                <Link href={link.href} className="group flex min-h-[118px] h-full flex-col items-center justify-center gap-2.5 rounded-2xl border border-border/70 bg-card px-3 py-4 text-center shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 dark:border-blue-900/60 hover:shadow-[0_8px_20px_-10px_rgba(15,30,77,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
                   {showBadge && <span className="absolute right-3 top-3 flex h-2.5 w-2.5 rounded-full bg-red-500" aria-label="New activity" />}
                   <span className={`flex h-11 w-11 items-center justify-center rounded-full transition group-hover:scale-105 ${link.iconClass}`}><Icon className="h-5 w-5" /></span>
                   <span className="text-sm font-medium leading-tight text-secondary group-hover:text-primary">{link.label}</span>
@@ -485,7 +485,7 @@ export default function DashboardPage() {
                   <button type="button" onClick={() => moveQuickLink(link.href, -1)} disabled={visibleQuickLinks[0]?.href === link.href} aria-label={`Move ${link.label} earlier`} className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-white text-secondary shadow-sm disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
                   <button type="button" onClick={() => moveQuickLink(link.href, 1)} disabled={visibleQuickLinks[visibleQuickLinks.length - 1]?.href === link.href} aria-label={`Move ${link.label} later`} className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-white text-secondary shadow-sm disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
                 </div>}
-                <button type="button" onClick={() => toggleQuickLink(link.href)} aria-label={`${isPinned ? "Unpin" : "Pin"} ${link.label}`} aria-pressed={isPinned} title={isPinned ? "Unpin shortcut" : "Pin shortcut"} className={`absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isPinned ? "border-amber-200 bg-amber-50 text-amber-700" : "border-border bg-card/95 text-muted-foreground hover:text-amber-600"}`}><Star className={`h-4 w-4 ${isPinned ? "fill-current" : ""}`} /></button>
+                <button type="button" onClick={() => toggleQuickLink(link.href)} aria-label={`${isPinned ? "Unpin" : "Pin"} ${link.label}`} aria-pressed={isPinned} title={isPinned ? "Unpin shortcut" : "Pin shortcut"} className={`absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isPinned ? "border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300" : "border-border bg-card/95 text-muted-foreground hover:text-amber-600 dark:text-amber-300"}`}><Star className={`h-4 w-4 ${isPinned ? "fill-current" : ""}`} /></button>
               </div>
             )
           })}
@@ -504,12 +504,19 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {/* Referral progress + active promo — both read existing APIs via
+          the cached-fetch hook, render nothing until data lands, and
+          never block the rest of the dashboard. */}
+      <div className="mt-5">
+        <ReferralPromoCard />
+      </div>
+
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
           href="/history"
-          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 dark:border-blue-900/60 hover:shadow-md"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300">
             <Clock className="h-5 w-5" />
           </span>
           <span className="min-w-0 flex-1">
@@ -520,9 +527,9 @@ export default function DashboardPage() {
         </Link>
         <Link
           href="/contact"
-          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+          className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 dark:border-blue-900/60 hover:shadow-md"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300">
             <CheckCircle2 className="h-5 w-5" />
           </span>
           <span className="min-w-0 flex-1">
@@ -534,7 +541,7 @@ export default function DashboardPage() {
       </div>
 
       {loadError && (
-        <div role="alert" className="mt-4 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 sm:flex-row sm:items-center sm:justify-between">
+        <div role="alert" className="mt-4 flex flex-col gap-3 rounded-2xl border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 p-4 text-sm text-red-800 dark:text-red-200 sm:flex-row sm:items-center sm:justify-between">
           <p>{loadError}</p>
           <button
             type="button"
@@ -552,7 +559,7 @@ export default function DashboardPage() {
           <h2 className="text-[15px] font-semibold text-primary">Recent transactions</h2>
           <Link
             href="/history"
-            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
+            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-300 hover:underline"
           >
             View all
             <ArrowRight className="h-3.5 w-3.5" />
@@ -629,7 +636,7 @@ export default function DashboardPage() {
                   <div key={item.id} className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-muted/50">
                     <span
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-                        isCredit ? "text-emerald-600 bg-emerald-50" : "text-red-600 bg-red-50"
+                        isCredit ? "text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40" : "text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-950/40"
                       }`}
                     >
                       {isCredit ? <ArrowDownToLine className="h-4.5 w-4.5" /> : <Wallet className="h-4.5 w-4.5" />}
@@ -643,7 +650,7 @@ export default function DashboardPage() {
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className={`text-[13.5px] font-medium tabular-nums ${isCredit ? "text-emerald-700" : "text-primary"}`}>
+                      <p className={`text-[13.5px] font-medium tabular-nums ${isCredit ? "text-emerald-700 dark:text-emerald-300" : "text-primary"}`}>
                         {isCredit ? "+" : "-"}
                         {formatNaira(tx.amount_kobo)}
                       </p>

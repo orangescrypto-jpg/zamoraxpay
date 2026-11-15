@@ -1,7 +1,8 @@
 // app/(dashboard)/services/cable/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useAuthCachedFetch } from "@/hooks/useCachedFetch"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 import { ResultBanner } from "@/components/ui/result-banner"
@@ -59,9 +60,22 @@ export default function CablePage() {
   // so every group here has exactly one variant. Grouped API is still
   // used so cable gets the same price-confirmation and plan-
   // unavailable safety net as data, without needing separate logic.
-  const [groups, setGroups] = useState<PlanGroup[]>([])
-  const [plansLoading, setPlansLoading] = useState(true)
-  const [plansError, setPlansError] = useState<string | null>(null)
+  // PERF FIX: package loading now goes through useAuthCachedFetch
+  // (cache-first from localStorage, 60s TTL matching the API's private
+  // max-age) instead of a fresh fetch on every mount/biller change.
+  const plansUrl = `/api/pricing?serviceType=cable&networkOrBiller=${encodeURIComponent(biller)}&grouped=1`
+  const {
+    data: plansData,
+    loading: plansLoading,
+    error: plansError,
+  } = useAuthCachedFetch<{ groups: PlanGroup[] }>(plansUrl, {
+    storageKey: `pricing:cable:${biller.toLowerCase()}`,
+    storageVersion: 2,
+    ttlMs: 60_000,
+    fallback: { groups: [] },
+    transform: (raw) => ({ groups: (raw as { groups?: PlanGroup[] }).groups ?? [] }),
+  })
+  const groups = useMemo(() => plansData.groups, [plansData])
   const [planCode, setPlanCode] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
@@ -73,49 +87,14 @@ export default function CablePage() {
     priceKobo: number
   } | null>(null)
 
+
+  // Auto-select the first package when the (possibly cached) group
+  // list changes — same behavior the old loader had inline.
   useEffect(() => {
-    let cancelled = false
-
-    async function loadPlans() {
-      setPlansLoading(true)
-      setPlansError(null)
-      setPlanCode("")
-      setConfirmState(null)
-
-      try {
-        const supabase = createClient()
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session) {
-          if (!cancelled) setPlansError("Not authenticated")
-          return
-        }
-
-        const res = await fetch(
-          `/api/pricing?serviceType=cable&networkOrBiller=${encodeURIComponent(biller)}&grouped=1`,
-          { headers: { Authorization: `Bearer ${session.access_token}` } },
-        )
-        const data = await res.json()
-        if (cancelled) return
-
-        if (!res.ok) {
-          setPlansError(data.error ?? "Could not load packages")
-          setGroups([])
-          return
-        }
-
-        const loadedGroups: PlanGroup[] = data.groups ?? []
-        setGroups(loadedGroups)
-        if (loadedGroups.length) setPlanCode(loadedGroups[0].variants[0].planCode)
-      } catch {
-        if (!cancelled) setPlansError("Could not load packages")
-      } finally {
-        if (!cancelled) setPlansLoading(false)
-      }
-    }
-
-    loadPlans()
-    return () => { cancelled = true }
-  }, [biller])
+    setPlanCode("")
+    setConfirmState(null)
+    if (groups.length) setPlanCode(groups[0].variants[0].planCode)
+  }, [groups])
 
   const allVariants = groups.flatMap((g) => g.variants)
   const selectedPlan = allVariants.find((p) => p.planCode === planCode)

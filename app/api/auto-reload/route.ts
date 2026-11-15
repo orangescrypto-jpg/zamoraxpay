@@ -1,17 +1,29 @@
-// app/api/cron/auto-reload/route.ts
-// Executes every auto-reload rule whose next_run_at has passed.
-// Call this from an external scheduler (Vercel Cron, Cloudflare
-// Cron Trigger, or any hosting-agnostic cron service) — protected by
-// a shared secret since it's not meant to be user-triggered.
+// app/api/auto-reload/route.ts
+// USER-FACING CRUD API for scheduled-bill rules (auto_reload_rules).
 //
-// Vercel: add to vercel.json  { "crons": [{ "path": "/api/cron/auto-reload", "schedule": "0 * * * *" }] }
-// Cloudflare: add a Cron Trigger in wrangler.toml that fetches this URL.
-// Any other host: point any scheduler (cron job, GitHub Actions, etc.) at this URL hourly.
+// SECURITY FIX (audit finding): this route previously exposed a GET that
+// EXECUTED all due rules (wallet debits + VTU purchases) and failed OPEN
+// when CRON_SECRET was unset — any visitor could trigger money movement.
+// Execution now lives ONLY in /api/cron/auto-reload, which is fail-closed
+// via verifyCronAuth(). This route is strictly a user-scoped CRUD surface:
+//
+//   GET    /api/auto-reload            -> list the caller's rules
+//   POST   /api/auto-reload            -> create a rule (from a purchase page)
+//   PATCH  /api/auto-reload            -> pause/resume a rule (is_active)
+//   DELETE /api/auto-reload?id=<uuid>  -> cancel a rule
+//
+// Every statement is scoped by requireAuth()'s uid — a user can only ever
+// see or mutate their own rules. The scheduled-bills UI previously called
+// PATCH/DELETE on this path and got 405s (the route only exported GET);
+// those methods now exist and the page works end to end.
 
 import { NextRequest, NextResponse } from "next/server"
-import { d1Query } from "@/lib/db"
-import { runPurchaseFlow } from "@/src/services/purchaseFlow"
-import { hashPin } from "@/src/services/pin"
+import { randomUUID } from "crypto"
+import { requireAuth } from "@/lib/auth-server"
+import { d1Query } from "@/lib/d1"
+
+const VALID_FREQUENCIES = new Set(["daily", "weekly", "monthly"])
+const VALID_SERVICE_TYPES = new Set(["airtime", "data", "electricity", "cable", "betting"])
 
 function computeNextRun(frequency: string, from: Date): string {
   const next = new Date(from)
@@ -22,155 +34,124 @@ function computeNextRun(frequency: string, from: Date): string {
 }
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization")
-  const expectedSecret = process.env.CRON_SECRET
+  const auth = await requireAuth(req)
+  if (!auth.ok) return auth.error
 
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
-  const now = new Date().toISOString()
-  const dueRules = await d1Query(
-    `SELECT r.*, b.recipient, b.network_or_biller FROM auto_reload_rules r
+  const result = await d1Query(
+    `SELECT r.id, r.service_type, r.plan_code, r.amount_kobo, r.frequency,
+            r.next_run_at, r.is_active, b.recipient, b.network_or_biller, b.nickname
+     FROM auto_reload_rules r
      JOIN beneficiaries b ON b.id = r.beneficiary_id
-     WHERE r.is_active = 1 AND r.next_run_at <= ?`,
-    [now],
+     WHERE r.user_id = ?
+     ORDER BY r.next_run_at ASC`,
+    [auth.uid],
   )
-
-  const results: Array<{ ruleId: string; success: boolean; message: string }> = []
-
-  for (const rule of dueRules.results ?? []) {
-    try {
-      // Auto-reload bypasses the transaction-PIN prompt (no user present
-      // to type it), so we verify against a system-known constant only
-      // in the sense that runPurchaseFlow's PIN check is skipped here by
-      // calling the wallet/router logic directly would duplicate too
-      // much — instead we reuse runPurchaseFlow but pass through the
-      // user's OWN pin hash comparison bypassed via a dedicated flag.
-      // Simpler and safer: auto-reload rules are opt-in and pre-authorized
-      // by the user at creation time, so we skip PIN re-entry by design.
-      const userResult = await d1Query("SELECT transaction_pin_hash FROM users WHERE id = ?", [rule.user_id])
-      const pinHash = userResult.results?.[0]?.transaction_pin_hash
-
-      if (!pinHash) {
-        results.push({ ruleId: rule.id, success: false, message: "No transaction PIN set; skipping" })
-        continue
-      }
-
-      // Auto-reload is pre-authorized at rule-creation time (the user set
-      // up the schedule deliberately), so we don't require live PIN entry
-      // for each scheduled run — this mirrors how most recurring-payment
-      // systems work (initial consent, no re-auth per cycle).
-      const result = await runPurchaseFlowForAutoReload(rule)
-      results.push({ ruleId: rule.id, success: result.success, message: result.message })
-
-      await d1Query(
-        "UPDATE auto_reload_rules SET next_run_at = ?, updated_at = datetime('now') WHERE id = ?",
-        [computeNextRun(rule.frequency, new Date()), rule.id],
-      )
-    } catch (err) {
-      results.push({
-        ruleId: rule.id,
-        success: false,
-        message: err instanceof Error ? err.message : "Unexpected error",
-      })
-    }
-  }
-
-  return NextResponse.json({ processed: results.length, results })
+  return NextResponse.json({ rules: result.results ?? [] })
 }
 
-// Internal helper: runs the purchase flow for an auto-reload rule
-// without requiring live PIN entry (see comment above). It still goes
-// through the same wallet debit / VTU router / refund-on-failure path
-// as a manual purchase — only the PIN gate is bypassed, since consent
-// was already given when the rule was created.
-async function runPurchaseFlowForAutoReload(rule: any) {
-  const userResult = await d1Query("SELECT transaction_pin_hash FROM users WHERE id = ?", [rule.user_id])
-  const pinHash = userResult.results?.[0]?.transaction_pin_hash
+export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (!auth.ok) return auth.error
 
-  // We don't have the plaintext PIN (correctly — it's never stored), so
-  // runPurchaseFlow's PIN check can't be reused verbatim for a
-  // non-interactive cron context. Rather than weaken that shared
-  // function's security contract for manual purchases, auto-reload logic
-  // is intentionally NOT routed through verifyPin here — the rule's
-  // existence IS the authorization for scheduled runs.
-  const { lookupPrice } = await import("@/src/services/pricing")
-  const { createPendingOrder, finalizeOrder } = await import("@/src/services/vtuOrders")
-  const { debitWallet, refundWallet } = await import("@/src/services/wallet")
-  const { executeVtuPurchase } = await import("@/src/services/vtuRouter")
+  try {
+    const body = await req.json()
+    const { beneficiaryId, serviceType, planCode, amountKobo, frequency } = body ?? {}
 
-  const tierResult = await d1Query("SELECT tier, phone FROM users WHERE id = ?", [rule.user_id])
-  const tier = tierResult.results?.[0]?.tier ?? "retail"
-  const userPhone = tierResult.results?.[0]?.phone as string | undefined
+    if (!beneficiaryId || !serviceType || !amountKobo || !frequency) {
+      return NextResponse.json(
+        { error: "beneficiaryId, serviceType, amountKobo, and frequency are required" },
+        { status: 400 },
+      )
+    }
+    if (!VALID_FREQUENCIES.has(frequency)) {
+      return NextResponse.json({ error: "frequency must be daily, weekly, or monthly" }, { status: 400 })
+    }
+    if (!VALID_SERVICE_TYPES.has(serviceType)) {
+      return NextResponse.json({ error: "Unsupported service type" }, { status: 400 })
+    }
+    const amount = Number(amountKobo)
+    if (!Number.isFinite(amount) || amount < 5000) {
+      // ₦50 floor — matches the smallest purchasable amount in the app
+      return NextResponse.json({ error: "amountKobo must be at least 5000 (₦50)" }, { status: 400 })
+    }
 
-  const pricing = await lookupPrice(rule.service_type, rule.network_or_biller, rule.plan_code, tier, rule.amount_kobo)
-  if (!pricing.found) return { success: false, message: "No pricing configured" }
+    // The beneficiary must belong to the caller (this doubles as the
+    // recipient/network source of truth, so the rule can't be pointed at
+    // another user's saved beneficiary).
+    const beneficiary = await d1Query(
+      "SELECT id FROM beneficiaries WHERE id = ? AND user_id = ? LIMIT 1",
+      [beneficiaryId, auth.uid],
+    )
+    if (!beneficiary.results?.length) {
+      return NextResponse.json({ error: "Beneficiary not found" }, { status: 404 })
+    }
 
-  const orderId = await createPendingOrder({
-    userId: rule.user_id,
-    serviceType: rule.service_type,
-    networkOrBiller: rule.network_or_biller,
-    recipient: rule.recipient,
-    planCode: rule.plan_code,
-    amountKobo: pricing.chargeAmountKobo,
-    baseAmountKobo: pricing.baseAmountKobo,
-    convenienceFeeKobo: pricing.convenienceFeeKobo,
-    pricingTier: pricing.tierUsed,
-    isAutoReload: true,
-    autoReloadRuleId: rule.id,
-  })
+    const id = randomUUID()
+    await d1Query(
+      `INSERT INTO auto_reload_rules
+         (id, user_id, beneficiary_id, service_type, plan_code, amount_kobo, frequency, next_run_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        auth.uid,
+        beneficiaryId,
+        serviceType,
+        planCode ?? null,
+        Math.round(amount),
+        frequency,
+        computeNextRun(frequency, new Date()),
+      ],
+    )
 
-  const debitReference = `ZPORD-${orderId}`
-  const debit = await debitWallet({
-    userId: rule.user_id,
-    amountKobo: pricing.chargeAmountKobo,
-    type: "purchase",
-    reference: debitReference,
-    relatedOrderId: orderId,
-  })
-
-  if (!debit.success) {
-    await finalizeOrder(orderId, { status: "failed", providerUsed: null, providerReference: null, attempts: [], failureReason: debit.message })
-    return { success: false, message: debit.message ?? "Insufficient balance" }
+    return NextResponse.json({ success: true, id })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to create scheduled payment" },
+      { status: 500 },
+    )
   }
+}
 
-  const routerResult = await executeVtuPurchase({
-    serviceType: rule.service_type,
-    networkOrBiller: rule.network_or_biller,
-    recipient: rule.recipient,
-    planCode: rule.plan_code ?? undefined,
-    amountKobo: pricing.baseAmountKobo,
-    internalReference: debitReference,
-    // Optional — see purchaseFlow.ts's contactPhone comment. Same
-    // convention here so a scheduled electricity auto-reload through
-    // VTUGate gets the account's real phone instead of a placeholder.
-    contactPhone: userPhone ?? undefined,
-  })
+export async function PATCH(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (!auth.ok) return auth.error
 
-  await finalizeOrder(orderId, {
-    status: routerResult.success ? "success" : "failed",
-    providerUsed: routerResult.providerUsed,
-    providerReference: routerResult.providerReference,
-    attempts: routerResult.attempts,
-    failureReason: routerResult.success ? undefined : routerResult.message,
-  })
+  try {
+    const { id, isActive } = await req.json()
+    if (!id || typeof isActive !== "boolean") {
+      return NextResponse.json({ error: "id and isActive (boolean) are required" }, { status: 400 })
+    }
 
-  if (!routerResult.success) {
-    await refundWallet({
-      userId: rule.user_id,
-      amountKobo: pricing.chargeAmountKobo,
-      reference: `ZPREF-${orderId}`,
-      relatedOrderId: orderId,
-    })
-  } else {
-    const { awardCashbackForOrder } = await import("@/src/services/cashback")
-    await awardCashbackForOrder({
-      userId: rule.user_id,
-      orderId,
-      purchaseAmountKobo: pricing.chargeAmountKobo,
-    })
+    const result = await d1Query(
+      "UPDATE auto_reload_rules SET is_active = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
+      [isActive ? 1 : 0, id, auth.uid],
+    )
+    const meta = (result as { meta?: { changes?: number; rows_written?: number } })?.meta
+    const changed = meta?.changes ?? meta?.rows_written
+    if (changed === 0) {
+      return NextResponse.json({ error: "Scheduled payment not found" }, { status: 404 })
+    }
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to update scheduled payment" },
+      { status: 500 },
+    )
   }
+}
 
-  return { success: routerResult.success, message: routerResult.message }
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (!auth.ok) return auth.error
+
+  const id = req.nextUrl.searchParams.get("id")
+  if (!id) return NextResponse.json({ error: "id query param is required" }, { status: 400 })
+
+  const result = await d1Query("DELETE FROM auto_reload_rules WHERE id = ? AND user_id = ?", [id, auth.uid])
+  const meta = (result as { meta?: { changes?: number; rows_written?: number } })?.meta
+  const changed = meta?.changes ?? meta?.rows_written
+  if (changed === 0) {
+    return NextResponse.json({ error: "Scheduled payment not found" }, { status: 404 })
+  }
+  return NextResponse.json({ success: true })
 }

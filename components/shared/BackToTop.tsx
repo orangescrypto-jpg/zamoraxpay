@@ -14,8 +14,14 @@ export function BackToTop() {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
+    // CPU FIX: setVisible with the SAME boolean on every scroll event
+    // still schedules a re-render tick each time; only flip state when
+    // the threshold is actually crossed.
     const handler = () => {
-      setVisible(window.scrollY > 600)
+      setVisible((prev) => {
+        const next = window.scrollY > 600
+        return prev === next ? prev : next
+      })
     }
     handler()
     window.addEventListener("scroll", handler, { passive: true })

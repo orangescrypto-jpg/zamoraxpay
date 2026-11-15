@@ -23,8 +23,21 @@ export function RelativeTime({
 }) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 60_000)
-    return () => window.clearInterval(id)
+    // CPU FIX: keep the 60s tick but skip the setState while the tab is
+    // hidden (a backgrounded dashboard used to re-render every minute
+    // for no visible change) and realign to the minute boundary so the
+    // label flips right after the actual minute rolls over.
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") setNow(Date.now())
+    }, 60_000)
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setNow(Date.now())
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
   }, [])
   const label = formatRelative(date, now)
   const full = new Date(date).toLocaleString("en-NG", {

@@ -1,5 +1,6 @@
 // app/(public)/blog/authors/[slug]/page.tsx
 import Link from "next/link"
+import Image from "next/image"
 import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import { getAuthorBySlug } from "@/src/services/blogAuthors"
@@ -51,7 +52,7 @@ export default async function AuthorProfilePage({ params }: { params: Promise<{ 
           </div>
           <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
             {author.photoUrl ? (
-              <img src={author.photoUrl} alt={author.name} className="h-24 w-24 shrink-0 rounded-full object-cover ring-2 ring-white/20" />
+              <Image src={author.photoUrl} alt={author.name} width={96} height={96} className="h-24 w-24 shrink-0 rounded-full object-cover ring-2 ring-white/20" />
             ) : (
               <div className="grid h-24 w-24 shrink-0 place-items-center rounded-full bg-white/10 text-3xl font-heading font-semibold text-white ring-2 ring-white/20">
                 {author.name.charAt(0)}

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Offline — ZamoraxPay</title>
+<meta name="theme-color" content="#0B1C2C">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  :root { color-scheme: light dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0B1C2C;
+    color: #E8ECEB;
+    padding: 24px;
+  }
+  .card {
+    max-width: 420px;
+    width: 100%;
+    text-align: center;
+  }
+  .mark {
+    width: 72px; height: 72px;
+    margin: 0 auto 24px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #529286, #3A6B62);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mark svg { width: 36px; height: 36px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 10px; color: #FFFFFF; }
+  p { font-size: 15px; line-height: 1.6; color: #B0B8C0; margin-bottom: 8px; }
+  .reassure {
+    background: rgba(82, 146, 134, 0.12);
+    border: 1px solid rgba(82, 146, 134, 0.35);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin: 20px 0 28px;
+    font-size: 13.5px;
+    color: #9FC5BC;
+  }
+  button {
+    width: 100%;
+    padding: 13px 20px;
+    border: none;
+    border-radius: 10px;
+    background: #529286;
+    color: #FFFFFF;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  button:hover { background: #5FA093; }
+  button:active { background: #468074; }
+  .hint { margin-top: 18px; font-size: 12.5px; color: #687078; }
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 1h6v6H1z"/><path d="M1 4h4v4"/>
+      </svg>
+    </div>
+    <h1>You&rsquo;re offline</h1>
+    <p>ZamoraxPay needs a connection to load this page. Your wallet and transactions are safe — nothing was lost.</p>
+    <div class="reassure">
+      Purchases you already completed are unaffected and will appear in your history once you&rsquo;re back online.
+    </div>
+    <button type="button" onclick="location.reload()">Try again</button>
+    <p class="hint">Check your network or Wi-Fi, then retry.</p>
+  </main>
+  <script>
+    // Auto-retry quietly when the connection returns, so a dropped network
+    // during navigation heals itself instead of stranding the user here.
+    window.addEventListener("online", function () { location.replace("/"); });
+  </script>
+</body>
+</html>

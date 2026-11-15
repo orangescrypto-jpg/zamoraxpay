@@ -1,5 +1,6 @@
 // app/api/admin/blog/posts/route.ts
 import { NextRequest, NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import { requireStaff } from "@/lib/auth-server"
 import { listAllPostsAdmin, createPost } from "@/src/services/blog"
 
@@ -39,6 +40,16 @@ export async function POST(req: NextRequest) {
       },
       auth.uid,
     )
+
+    // ISR purge (audit finding: admin edits did not revalidate): the
+    // blog list and homepage (featured posts) are ISR-cached up to an
+    // hour — a published post must appear immediately, not at the next
+    // revalidate window. The post's own /blog/<slug> route was never
+    // cached before this request, so only the list/home need purging.
+    if (status === "published") {
+      revalidatePath("/blog")
+      revalidatePath("/")
+    }
 
     return NextResponse.json({ success: true, id })
   } catch (err) {

@@ -154,7 +154,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           </div>
 
           {post.coverImageUrl && (
-            <div className="mb-8 aspect-[1200/630] overflow-hidden rounded-2xl border border-border bg-muted shadow-soft">
+            <div className="relative mb-8 aspect-[1200/630] overflow-hidden rounded-2xl border border-border bg-muted shadow-soft">
               {/* PERF FIX (audit finding: zero next/image usage): the
                   cover is the LCP element — next/image serves sized
                   AVIF/WebP via the already-configured optimizer instead

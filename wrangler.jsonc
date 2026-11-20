@@ -45,5 +45,19 @@
   },
   "observability": {
     "enabled": true
+  },
+  // Error 1102 ("Worker exceeded resource limits") was firing on
+  // ordinary routes (/, /admin/*, /api/db/*) at ~10-13ms CPU time each
+  // — that's the Cloudflare Workers FREE PLAN's default 10ms CPU
+  // limit, not a bug in any individual handler. OpenNext's Next.js
+  // adapter does enough synchronous route-resolution/render work per
+  // request that it routinely exceeds 10ms on its own.
+  //
+  // This raises the limit to 50s. IMPORTANT: this only takes effect
+  // on the Workers PAID plan ($5/mo) — on Free, Cloudflare silently
+  // caps cpu_ms at 10 regardless of what's configured here. Confirm
+  // your plan at dash.cloudflare.com -> Workers & Pages -> Plans.
+  "limits": {
+    "cpu_ms": 50000
   }
 }

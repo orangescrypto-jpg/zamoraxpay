@@ -173,6 +173,27 @@ async function sendOne(
   }
 }
 
+// Push sends are network I/O (one payload encrypt + one fetch each, with a
+// 10s timeout), not CPU work, so a bounded parallel fan-out shortens a
+// broadcast from N*RTT to ceil(N/PUSH_CONCURRENCY)*RTT. Sends stay
+// independent: each sendOne already handles its own errors and pruning.
+const PUSH_CONCURRENCY = 8
+
+async function sendAll(
+  subs: PushSubscriptionRecord[],
+  body: string,
+  vapid: VapidDetails,
+  nativeDB?: any,
+): Promise<number> {
+  let sent = 0
+  for (let i = 0; i < subs.length; i += PUSH_CONCURRENCY) {
+    const chunk = subs.slice(i, i + PUSH_CONCURRENCY)
+    const results = await Promise.all(chunk.map((sub) => sendOne(sub, body, vapid, nativeDB)))
+    sent += results.filter(Boolean).length
+  }
+  return sent
+}
+
 /** Sends a push to every subscription a user has. Returns successful sends. */
 export async function sendPushToUser(userId: string, payload: PushPayload, nativeDB?: any): Promise<number> {
   const vapid = await loadVapidDetails(nativeDB)
@@ -180,11 +201,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload, nativ
 
   const subscriptions = await getSubscriptionsForUser(userId, nativeDB)
   const body = JSON.stringify(payload)
-  let sent = 0
-  for (const sub of subscriptions) {
-    if (await sendOne(sub, body, vapid, nativeDB)) sent++
-  }
-  return sent
+  return sendAll(subscriptions, body, vapid, nativeDB)
 }
 
 /** Sends the same push to a batch of users. Returns total successful sends. */
@@ -196,15 +213,14 @@ export async function sendPushToUsers(
   const vapid = await loadVapidDetails(nativeDB)
   if (!vapid) return 0
 
+  // Subscription lookups are cheap D1 reads; fan the actual sends out
+  // through sendAll so the list size doesn't multiply the wall time.
   const body = JSON.stringify(payload)
-  let sent = 0
+  const all: PushSubscriptionRecord[] = []
   for (const userId of userIds) {
-    const subscriptions = await getSubscriptionsForUser(userId, nativeDB)
-    for (const sub of subscriptions) {
-      if (await sendOne(sub, body, vapid, nativeDB)) sent++
-    }
+    all.push(...(await getSubscriptionsForUser(userId, nativeDB)))
   }
-  return sent
+  return sendAll(all, body, vapid, nativeDB)
 }
 
 /** Sends the same push to every subscribed endpoint site-wide (broadcasts). */
@@ -214,9 +230,5 @@ export async function broadcastPush(payload: PushPayload, nativeDB?: any): Promi
 
   const subscriptions = await getAllSubscriptions(nativeDB)
   const body = JSON.stringify(payload)
-  let sent = 0
-  for (const sub of subscriptions) {
-    if (await sendOne(sub, body, vapid, nativeDB)) sent++
-  }
-  return sent
+  return sendAll(subscriptions, body, vapid, nativeDB)
 }

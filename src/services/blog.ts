@@ -6,6 +6,7 @@ import { d1Query } from "@/lib/d1"
 import { randomUUID } from "crypto"
 import { broadcastPush } from "@/src/services/pushNotifications"
 import { r2Delete, R2_PUBLIC_URL } from "@/lib/r2/client"
+import { runAfterResponse } from "@/lib/afterResponse"
 
 export interface BlogPost {
   id: string
@@ -305,8 +306,13 @@ export async function createPost(
   // already-published with the notify flag checked — createPost is the
   // only path for a brand-new post to go live, so there's no separate
   // "just published" transition to catch the way updatePost has to.
+  // Deferred off the response path (ctx.waitUntil on Workers): the admin's
+  // save no longer waits on a site-wide push fan-out. broadcastPostPublished
+  // marks push_sent_at itself, and is best-effort by contract.
   if (params.status === "published" && params.sendPush) {
-    await broadcastPostPublished(id, params.title, params.excerpt ?? null, params.slug, params.coverImageUrl ?? null, nativeDB)
+    await runAfterResponse(() =>
+      broadcastPostPublished(id, params.title, params.excerpt ?? null, params.slug, params.coverImageUrl ?? null, nativeDB),
+    )
   }
 
   return id
@@ -386,7 +392,12 @@ export async function updatePost(
     const row = await d1Query("SELECT title, excerpt, slug, cover_image_url FROM blog_posts WHERE id = ?", [id], nativeDB)
     const post = row.results?.[0] as any
     if (post) {
-      await broadcastPostPublished(id, post.title, post.excerpt, post.slug, post.cover_image_url, nativeDB)
+      // Deferred off the response path (ctx.waitUntil on Workers) — same
+      // reasoning as createPost. The save's D1 write above has already
+      // committed, so the broadcast failing or running later is safe.
+      await runAfterResponse(() =>
+        broadcastPostPublished(id, post.title, post.excerpt, post.slug, post.cover_image_url, nativeDB),
+      )
     }
   }
 }

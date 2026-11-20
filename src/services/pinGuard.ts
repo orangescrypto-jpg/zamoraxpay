@@ -29,7 +29,7 @@
 // refused. An outage in the limiter must not silently disable the limit.
 
 import { d1Query } from "@/lib/d1"
-import { verifyPin } from "@/src/services/pin"
+import { hashPin, isLegacyPinHash, verifyPin } from "@/src/services/pin"
 
 export const MAX_FAILED_ATTEMPTS = 5
 export const LOCKOUT_MINUTES = 30
@@ -145,6 +145,24 @@ export async function checkPinWithLimit(
   }
 
   if (verifyPin(pin, storedHash)) {
+    // Legacy hashes (the pre-tuning scrypt defaults) still verify correctly,
+    // but cost ~4x the CPU of the stored-params format (see
+    // src/services/pin.ts). Upgrade transparently on the next successful
+    // verify so users migrate without a forced PIN reset — best-effort: a
+    // failed write only means this user keeps paying the legacy cost until
+    // their next successful verify.
+    if (isLegacyPinHash(storedHash)) {
+      try {
+        await d1Query(
+          "UPDATE users SET transaction_pin_hash = ?, updated_at = datetime('now') WHERE id = ?",
+          [hashPin(pin), userId],
+          nativeDB,
+        )
+      } catch (err) {
+        console.error("[pinGuard] failed to upgrade legacy PIN hash:", err)
+      }
+    }
+
     // Correct: the reserved attempt was not a failure. Reset the counter.
     await clearAttempts(userId, nativeDB).catch((err) =>
       console.error("[pinGuard] failed to clear attempts after success:", err),

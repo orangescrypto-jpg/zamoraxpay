@@ -11,7 +11,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { d1Query } from "@/lib/db"
 import { runPurchaseFlow } from "@/src/services/purchaseFlow"
-import { hashPin } from "@/src/services/pin"
 import { verifyCronAuth } from "@/src/services/cronAuth"
 import { runInChunks } from "@/lib/concurrency"
 

@@ -35,7 +35,12 @@ export interface ContactBatchSummary {
 // a large charge from a single PIN entry. 40 is the agreed tradeoff —
 // confirm it stays under the deployment's actual request timeout
 // (roughly 40 numbers x 1-2s each = up to ~80s worst case).
-const MAX_NUMBERS_PER_BATCH = 40
+// Kept at 25: bulk purchases run sequentially (one debit at a time —
+// see bulkPurchaseFlow.ts), and on Cloudflare Workers free plan each
+// request has a 10ms CPU-time budget. Network waits don't count
+// against that, but 25 iterations of D1 queries + loop/JSON overhead
+// is safer to stay under it than a higher count.
+const MAX_NUMBERS_PER_BATCH = 25
 
 export interface ParsedNumbersResult {
   valid: string[]       // normalized, deduped, in original order

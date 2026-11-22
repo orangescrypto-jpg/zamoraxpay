@@ -29,10 +29,22 @@ const NETWORK_PREFIXES: Record<NetworkName, string[]> = {
   ],
 }
 
-/** Strips spaces/dashes and normalizes a leading +234/234 to a local 0-prefixed number. */
+/**
+ * Strips spaces/dashes/+ and normalizes to a local 0-prefixed number.
+ * Handles three shapes people actually paste:
+ *  - "+2348031234567" / "2348031234567" → "08031234567"
+ *  - "08031234567" → unchanged
+ *  - "8031234567" (10 digits, leading 0 dropped — common when a
+ *    number is copied from a contacts app or re-typed from the
+ *    international format without re-adding the 0) → "08031234567"
+ * Anything else is returned with non-digits stripped but otherwise
+ * untouched, and isValidNgPhone will reject it as not a recognized
+ * shape rather than silently guessing.
+ */
 export function normalizeNgPhone(raw: string): string {
   let digits = raw.replace(/[^\d]/g, "")
   if (digits.startsWith("234")) digits = "0" + digits.slice(3)
+  else if (digits.length === 10 && /^[789]/.test(digits)) digits = "0" + digits
   return digits
 }
 

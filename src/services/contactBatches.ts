@@ -133,6 +133,46 @@ export async function getContactBatch(userId: string, batchId: string): Promise<
   }
 }
 
+// Renames a saved group. Ownership check happens implicitly, same as
+// deleteContactBatch — the UPDATE only affects rows where user_id
+// matches, so a batchId belonging to another user is a silent no-op.
+export async function renameContactBatch(
+  userId: string,
+  batchId: string,
+  name: string,
+): Promise<{ success: boolean; message?: string }> {
+  if (!name.trim()) return { success: false, message: "Group name is required" }
+  await d1Query("UPDATE contact_batches SET name = ? WHERE id = ? AND user_id = ?", [name.trim(), batchId, userId])
+  return { success: true }
+}
+
+// Replaces a group's entire number list in one go (used by the edit
+// group page, which re-parses the full textarea of numbers rather than
+// doing incremental add/remove — simpler and avoids partial-state
+// bugs). Ownership is checked explicitly here since we delete first.
+export async function replaceContactBatchNumbers(
+  userId: string,
+  batchId: string,
+  numbers: string[],
+): Promise<{ success: boolean; message?: string }> {
+  if (numbers.length === 0) return { success: false, message: "At least one valid number is required" }
+  if (numbers.length > MAX_NUMBERS_PER_BATCH) {
+    return { success: false, message: `Max ${MAX_NUMBERS_PER_BATCH} numbers per group` }
+  }
+
+  const owned = await d1Query("SELECT id FROM contact_batches WHERE id = ? AND user_id = ?", [batchId, userId])
+  if (!owned.results?.[0]) return { success: false, message: "Group not found" }
+
+  await d1Query("DELETE FROM contact_batch_numbers WHERE batch_id = ?", [batchId])
+  for (let i = 0; i < numbers.length; i++) {
+    await d1Query(
+      "INSERT INTO contact_batch_numbers (id, batch_id, phone, sort_order) VALUES (?, ?, ?, ?)",
+      [randomUUID(), batchId, numbers[i], i],
+    )
+  }
+  return { success: true }
+}
+
 export async function deleteContactBatch(userId: string, batchId: string): Promise<void> {
   // Ownership check happens implicitly — the DELETE only affects rows
   // where user_id matches, so a batch ID belonging to another user is

@@ -206,51 +206,69 @@ function BulkDataForm() {
   )
 
 
-  // Keep groupKey/planCode valid whenever the (possibly cached) group
-  // list changes. useAuthCachedFetch renders a cached `groups` array
-  // immediately, then swaps in a freshly revalidated one — a new array
-  // reference even when nothing actually changed, and sometimes one
-  // where a previously-selected group or variant no longer exists (a
-  // plan was repriced, reordered, or disabled). Re-deriving selection
-  // from the CURRENT groups on every change, instead of only picking
-  // defaults when nothing was selected yet, prevents `groupKey`/
-  // `planCode` from pointing at a stale variant that happens to still
-  // resolve (via .find()) to a different plan in the new array — which
-  // is what caused the dropdown's label/price (always drawn fresh from
-  // `groups`) to show one group's "from" price while the actual
-  // selected plan underneath was a different, more expensive variant.
+  // Auto-select Type/Plan whenever the (possibly cached) group list
+  // changes — same cache-then-revalidate situation as the single-data
+  // page, handled the same way: always re-derive category/groupKey/
+  // planCode from the CURRENT groups, not just on first load.
   useEffect(() => {
     if (!groups.length) {
+      setCategory("")
       setGroupKey("")
       setPlanCode("")
       return
     }
-    const stillValidGroup = groups.find((g) => g.groupKey === groupKey)
-    if (!stillValidGroup) {
-      setGroupKey(groups[0].groupKey)
-      setPlanCode(groups[0].variants[0].planCode)
-      return
-    }
-    const stillValidPlan = stillValidGroup.variants.some((v) => v.planCode === planCode)
-    if (!stillValidPlan) {
-      setPlanCode(stillValidGroup.variants[0].planCode)
-    }
-    // groupKey/planCode intentionally excluded: they're read here to
-    // validate against the latest `groups`, not to re-trigger this
-    // effect on every manual selection (selectGroup/setPlanCode already
-    // set consistent state themselves).
+    const categories = Array.from(new Set(groups.flatMap((g) => g.variants.map((v) => v.category))))
+    const nextCategory = categories.includes(category) ? category : categories[0]
+    setCategory(nextCategory)
+    const groupsForCat = groups.filter((g) => g.variants.some((v) => v.category === nextCategory))
+    const stillValidGroup = groupsForCat.find((g) => g.groupKey === groupKey) ?? groupsForCat[0]
+    setGroupKey(stillValidGroup.groupKey)
+    const variant = stillValidGroup.variants.find((v) => v.category === nextCategory)!
+    const stillValidPlan = variant.planCode === planCode
+      ? variant
+      : stillValidGroup.variants.find((v) => v.planCode === planCode && v.category === nextCategory)
+    setPlanCode((stillValidPlan ?? variant).planCode)
+    // category/groupKey/planCode intentionally excluded: they're read
+    // here to validate against the latest `groups`, not to re-trigger
+    // this effect on every manual selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups])
 
   const selectedBatch = batches.find((b) => b.id === batchId)
+  // Every category present across all groups for this network - the
+  // Type dropdown's options.
+  const categoriesAvailable = Array.from(new Set(groups.flatMap((g) => g.variants.map((v) => v.category))))
+  // Groups that actually offer the selected category - the Plan
+  // dropdown is built only from these, one option per such group,
+  // each option's variant resolved and labeled fresh below.
+  const groupsForCategory = groups.filter((g) => g.variants.some((v) => v.category === category))
   const selectedGroup = groups.find((g) => g.groupKey === groupKey)
   const selectedPlan = selectedGroup?.variants.find((v) => v.planCode === planCode)
   const skippedCount = batchPhones.length - matchingCount
   const totalEstimateKobo = selectedPlan ? selectedPlan.priceKobo * matchingCount : 0
 
-  function selectGroup(g: PlanGroup) {
-    setGroupKey(g.groupKey)
-    setPlanCode(g.variants[0].planCode) // default to the cheapest variant in the group
+  // Changing Type: keep looking within groups that offer the new
+  // category, pick the first one's matching variant.
+  function selectCategory(c: string) {
+    setCategory(c)
+    const match = groups.find((g) => g.variants.some((v) => v.category === c))
+    if (match) {
+      setGroupKey(match.groupKey)
+      setPlanCode(match.variants.find((v) => v.category === c)!.planCode)
+    } else {
+      setGroupKey("")
+      setPlanCode("")
+    }
+  }
+
+  // Changing Plan: planCode is the variant's own code, which already
+  // uniquely identifies its group too.
+  function selectVariantByCode(code: string) {
+    const g = groupsForCategory.find((x) => x.variants.some((v) => v.planCode === code))
+    if (g) {
+      setGroupKey(g.groupKey)
+      setPlanCode(code)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -366,39 +384,48 @@ function BulkDataForm() {
                 No data plans are configured for {network} yet.
               </div>
             ) : (
-              <select value={groupKey} onChange={(e) => {
-                const g = groups.find((x) => x.groupKey === e.target.value)
-                if (g) selectGroup(g)
-              }}
-                className="w-full rounded-md border border-border px-3 py-2 text-sm">
-                {groups.map((g) => (
-                  <option key={g.groupKey} value={g.groupKey}>
-                    {labelFromPlanCode(g.variants[0].planCode)}
-                    {g.variants.length > 1
-                      ? ` - from ${formatNaira(g.cheapestPriceKobo)}`
-                      : ` - ${formatNaira(g.variants[0].priceKobo)}`}
-                  </option>
-                ))}
-              </select>
-            )}
+              <>
+                {/* Type dropdown: every category present for this
+                    network. Picking one filters which groups appear in
+                    the Plan dropdown below - same two-step flow as the
+                    single-purchase Data page. */}
+                <select
+                  value={category}
+                  onChange={(e) => selectCategory(e.target.value)}
+                  className="mb-2 w-full rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  {categoriesAvailable.map((c) => (
+                    <option key={c} value={c}>{categoryLabel(c)}</option>
+                  ))}
+                </select>
 
-            {/* Category sub-options — only shown when a group has more
-                than one variant. Selecting one changes the exact
-                planCode sent for the whole batch; never picked
-                automatically. */}
-            {selectedGroup && selectedGroup.variants.length > 1 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {selectedGroup.variants.map((v) => (
-                  <button
-                    type="button"
-                    key={v.planCode}
-                    onClick={() => setPlanCode(v.planCode)}
-                    className={`rounded-md border px-2.5 py-1 text-xs font-medium ${planCode === v.planCode ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"}`}
+                {groupsForCategory.length === 0 ? (
+                  <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
+                    No {categoryLabel(category).toLowerCase()} plans for {network}.
+                  </div>
+                ) : (
+                  // Plan dropdown: one option per group, each option's
+                  // label built from THAT option's own variant
+                  // (planCode + priceKobo) in the same expression that
+                  // resolves it — never a separate group-level
+                  // "cheapest" field, so the text shown can never drift
+                  // from the plan that's actually selected/charged.
+                  <select
+                    value={planCode}
+                    onChange={(e) => selectVariantByCode(e.target.value)}
+                    className="w-full rounded-md border border-border px-3 py-2 text-sm"
                   >
-                    {categoryLabel(v.category)} - {formatNaira(v.priceKobo)}
-                  </button>
-                ))}
-              </div>
+                    {groupsForCategory.map((g) => {
+                      const v = g.variants.find((x) => x.category === category)!
+                      return (
+                        <option key={v.planCode} value={v.planCode}>
+                          {labelFromPlanCode(v.planCode)} - {formatNaira(v.priceKobo)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                )}
+              </>
             )}
 
             {selectedPlan && selectedBatch && (

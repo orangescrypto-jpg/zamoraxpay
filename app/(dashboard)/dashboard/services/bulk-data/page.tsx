@@ -136,6 +136,19 @@ function BulkDataForm() {
   const groups = useMemo(() => plansData.groups, [plansData])
   const [groupKey, setGroupKey] = useState("")
   const [planCode, setPlanCode] = useState("")
+  // Type (category) is its own dropdown selected before the plan,
+  // mirroring the single-purchase Data page's Type -> Plan flow. This
+  // is what fixes the label/price mismatch bug: on the single page,
+  // every Plan dropdown option's text is built from THAT option's own
+  // variant (planCode + priceKobo) in the same expression, so the text
+  // can never drift from what's actually selected. The old bulk-data
+  // dropdown instead showed one static label per group (drawn from
+  // group.variants[0] / group.cheapestPriceKobo) while a separate set
+  // of category buttons silently changed the real selected planCode
+  // underneath — the group-level label never updated to match, so it
+  // could show a cheaper variant's price while a pricier one (or any
+  // one picked via the buttons) was what would actually be charged.
+  const [category, setCategory] = useState("")
   const [pin, setPin] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<BulkResult | null>(null)

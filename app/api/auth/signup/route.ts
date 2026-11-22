@@ -24,7 +24,20 @@ function generateReferralCode(): string {
   return "ZP" + Math.random().toString(36).slice(2, 8).toUpperCase()
 }
 
+// REGISTRATION DISABLED (server-side): new account creation is turned
+// off at this endpoint — no new users can register no matter what the
+// client sends. Existing users are unaffected; this only blocks the
+// signup route. To re-enable, remove this early return.
+const REGISTRATION_DISABLED = true
+
 export async function POST(req: NextRequest) {
+  if (REGISTRATION_DISABLED) {
+    return NextResponse.json(
+      { error: "New registrations are currently closed." },
+      { status: 403 },
+    )
+  }
+
   try {
     const { phone, email, password, fullName, referredByCode } = await req.json()
 

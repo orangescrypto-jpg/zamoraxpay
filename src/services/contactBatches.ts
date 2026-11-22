@@ -28,7 +28,14 @@ export interface ContactBatchSummary {
   createdAt: string
 }
 
-const MAX_NUMBERS_PER_BATCH = 100
+// Lowered from 100: bulk purchases run sequentially (one debit at a
+// time, to avoid racing wallet balance updates — see
+// bulkPurchaseFlow.ts), so a large batch both risks exceeding the
+// serverless function's request timeout mid-run and exposes a user to
+// a large charge from a single PIN entry. 40 is the agreed tradeoff —
+// confirm it stays under the deployment's actual request timeout
+// (roughly 40 numbers x 1-2s each = up to ~80s worst case).
+const MAX_NUMBERS_PER_BATCH = 40
 
 export interface ParsedNumbersResult {
   valid: string[]       // normalized, deduped, in original order

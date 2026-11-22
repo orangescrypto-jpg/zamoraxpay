@@ -30,6 +30,7 @@ import {
   type LucideIcon,
   Eye,
   EyeOff,
+  ClipboardList,
 } from "lucide-react"
 // Eye icons for balance privacy
 import { useAuth } from "@/hooks/useAuth"
@@ -130,6 +131,7 @@ const QUICK_LINKS: { href: string; label: string; icon: LucideIcon; iconClass: s
   { href: "/dashboard/services/international-topup", label: "International Top-up", icon: Globe, iconClass: "bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-300" },
   { href: "/dashboard/services/bulk-data", label: "Bulk Data", icon: Users, iconClass: "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300" },
   { href: "/dashboard/services/bulk-airtime", label: "Bulk Airtime", icon: Users, iconClass: "bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-300" },
+  { href: "/dashboard/services/bulk-groups", label: "Contact Groups", icon: ClipboardList, iconClass: "bg-slate-50 dark:bg-slate-950/40 text-slate-600 dark:text-slate-300" },
   { href: "/dashboard/services/airtime-to-cash", label: "Airtime to Cash", icon: Banknote, iconClass: "bg-lime-50 dark:bg-lime-950/40 text-lime-600 dark:text-lime-300" },
   { href: "/rewards", label: "Rewards", icon: Gift, iconClass: "bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-300" },
   { href: "/play", label: "Play & Earn", icon: PartyPopper, iconClass: "bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300" },

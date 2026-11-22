@@ -14,6 +14,7 @@ import { ServiceChrome } from "@/components/dashboard/ServiceChrome"
 import { ToastProvider, useToast } from "@/components/shared/ToastProvider"
 import { LocalExperienceTools } from "@/components/shared/LocalExperienceTools"
 import { BackToTop } from "@/components/shared/BackToTop"
+import { GuestSpinBadge } from "@/components/shared/GuestSpinBadge"
 import { DashboardWorkspace } from "@/components/dashboard/DashboardWorkspace"
 import { ThemeProvider } from "@/components/theme-provider"
 import { useServiceWorkerUpdate } from "@/hooks/useServiceWorkerUpdate"
@@ -113,6 +114,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
       <WhatsAppSupportButton />
       <BackToTop />
       <LocalExperienceTools />
+      <GuestSpinBadge />
       <ServiceWorkerUpdateToast />
     </ToastProvider>
     </ThemeProvider>

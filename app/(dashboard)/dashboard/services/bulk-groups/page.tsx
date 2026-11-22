@@ -91,6 +91,9 @@ export default function SavedGroupsPage() {
                   <Link href={`/dashboard/services/bulk-airtime?batchId=${b.id}`} className="text-primary hover:underline">
                     Buy Airtime
                   </Link>
+                  <Link href={`/dashboard/services/bulk-groups/${b.id}/edit`} className="text-secondary hover:underline">
+                    Edit
+                  </Link>
                   <button onClick={() => setDeletingId(b.id)} className="text-destructive hover:underline">
                     Delete
                   </button>

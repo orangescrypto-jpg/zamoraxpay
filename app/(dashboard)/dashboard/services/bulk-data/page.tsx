@@ -8,6 +8,7 @@ import Link from "next/link"
 import { createClient } from "@/src/services/providers/supabase/client"
 import { formatNaira } from "@/lib/utils"
 import { ResultBanner } from "@/components/ui/result-banner"
+import { detectNetwork } from "@/lib/networkDetect"
 
 const NETWORKS = ["MTN", "Airtel", "Glo", "9mobile"]
 
@@ -109,6 +110,12 @@ function BulkDataForm() {
   const [batchesLoading, setBatchesLoading] = useState(true)
   const [batchId, setBatchId] = useState(preselectedBatchId ?? "")
   const [network, setNetwork] = useState(NETWORKS[0])
+  // Per-number network detection for the selected group, so the price
+  // estimate reflects only numbers that will actually match the chosen
+  // network — the server skips mismatches, but previously the shown
+  // estimate assumed every number in the group would be charged.
+  const [batchPhones, setBatchPhones] = useState<string[]>([])
+  const [batchPhonesLoading, setBatchPhonesLoading] = useState(false)
   // PERF FIX: plan loading now goes through useAuthCachedFetch (shares
   // the same per-network cache key family as the single-purchase data
   // page, so switching between the two pages renders instantly) — 60s
@@ -152,6 +159,39 @@ function BulkDataForm() {
     loadBatches()
   }, [preselectedBatchId])
 
+  // Load the selected group's actual phone numbers whenever it changes,
+  // so we can detect each one's network client-side and know how many
+  // will really be charged under the currently selected network.
+  useEffect(() => {
+    if (!batchId) {
+      setBatchPhones([])
+      return
+    }
+    let cancelled = false
+    async function loadBatchNumbers() {
+      setBatchPhonesLoading(true)
+      const headers = await getAuthHeader()
+      const res = await fetch(`/api/contact-batches/${batchId}`, { headers })
+      const data = await res.json()
+      if (!cancelled) {
+        setBatchPhones((data.batch?.numbers ?? []).map((n: { phone: string }) => n.phone))
+        setBatchPhonesLoading(false)
+      }
+    }
+    loadBatchNumbers()
+    return () => {
+      cancelled = true
+    }
+  }, [batchId])
+
+  // How many of the group's saved numbers actually match the currently
+  // selected network — mismatches get skipped server-side, so this is
+  // the real count that will be charged, not the group's total size.
+  const matchingCount = useMemo(
+    () => batchPhones.filter((p) => detectNetwork(p) === network).length,
+    [batchPhones, network],
+  )
+
 
   // Auto-select the first plan when the (possibly cached) group list
   // changes — same behavior the old loader had inline.
@@ -167,7 +207,8 @@ function BulkDataForm() {
   const selectedBatch = batches.find((b) => b.id === batchId)
   const selectedGroup = groups.find((g) => g.groupKey === groupKey)
   const selectedPlan = selectedGroup?.variants.find((v) => v.planCode === planCode)
-  const totalEstimateKobo = selectedBatch && selectedPlan ? selectedPlan.priceKobo * selectedBatch.numberCount : 0
+  const skippedCount = batchPhones.length - matchingCount
+  const totalEstimateKobo = selectedPlan ? selectedPlan.priceKobo * matchingCount : 0
 
   function selectGroup(g: PlanGroup) {
     setGroupKey(g.groupKey)
@@ -320,9 +361,25 @@ function BulkDataForm() {
             )}
 
             {selectedPlan && selectedBatch && (
-              <p className="mt-1 text-sm font-medium text-secondary">
-                {formatNaira(selectedPlan.priceKobo)} × {selectedBatch.numberCount} = You'll pay up to {formatNaira(totalEstimateKobo)}
-              </p>
+              <>
+                {batchPhonesLoading ? (
+                  <p className="mt-1 text-sm text-secondary/60">Checking numbers against {network}...</p>
+                ) : (
+                  <p className="mt-1 text-sm font-medium text-secondary">
+                    {formatNaira(selectedPlan.priceKobo)} × {matchingCount} {network} number{matchingCount === 1 ? "" : "s"} = You'll pay up to {formatNaira(totalEstimateKobo)}
+                  </p>
+                )}
+                {!batchPhonesLoading && skippedCount > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {skippedCount} of {selectedBatch.numberCount} number{selectedBatch.numberCount === 1 ? "" : "s"} in this group {skippedCount === 1 ? "isn't" : "aren't"} on {network} and will be skipped.
+                  </p>
+                )}
+                {!batchPhonesLoading && matchingCount === 0 && (
+                  <p className="mt-1 text-xs text-destructive">
+                    None of the numbers in this group are on {network}. Choose a different network or group.
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -332,7 +389,7 @@ function BulkDataForm() {
               className="w-full rounded-md border border-border px-3 py-2 text-center tracking-widest" />
           </div>
 
-          <button type="submit" disabled={loading || !batchId || !planCode}
+          <button type="submit" disabled={loading || !batchId || !planCode || batchPhonesLoading || matchingCount === 0}
             className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
             {loading ? "Processing..." : "Send Bulk Data"}
           </button>

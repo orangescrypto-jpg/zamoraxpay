@@ -77,7 +77,7 @@ export default function CreateContactGroupPage() {
             className="w-full rounded-md border border-border px-3 py-2 text-sm"
           />
           <p className="mt-1 flex items-start gap-1 text-xs text-muted-foreground">
-            <span>Valid Nigerian numbers only (11 digits starting with 070, 080, or 090). Max 40 numbers.</span>
+            <span>Valid Nigerian numbers only (11 digits starting with 070, 080, or 090). Max 25 numbers.</span>
           </p>
         </div>
 

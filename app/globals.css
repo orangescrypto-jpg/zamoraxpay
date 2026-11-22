@@ -179,6 +179,14 @@ html.zpx-reduce-motion *, html.zpx-reduce-motion *::before, html.zpx-reduce-moti
 .zpx-back-to-top:hover { border-color: hsl(var(--primary)); color: hsl(var(--primary)); }
 @media (max-width: 640px) { .zpx-local-tools { right: .65rem; bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px)); } .zpx-back-to-top { right: .8rem; bottom: calc(8.7rem + env(safe-area-inset-bottom, 0px)); } }
 
+/* Floating guest "Spin & Win" badge. Own slot, stacked ABOVE back-to-top
+   (which sits at ~9.5rem) so the two never overlap, regardless of which
+   one happens to be visible at a given scroll position. */
+.zpx-guest-spin-fab { position: fixed; right: 1.15rem; bottom: calc(13.5rem + env(safe-area-inset-bottom, 0px)); z-index: 150; display: grid; width: 3.2rem; height: 3.2rem; place-items: center; border-radius: 999px; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); box-shadow: 0 6px 20px rgb(15 23 42 / .18); transition: transform .15s ease; }
+.zpx-guest-spin-fab:hover { transform: scale(1.05); }
+.zpx-guest-spin-fab:active { transform: scale(.95); }
+@media (max-width: 640px) { .zpx-guest-spin-fab { right: .8rem; bottom: calc(12.7rem + env(safe-area-inset-bottom, 0px)); width: 3rem; height: 3rem; } }
+
 /* Theme transition (subtle, respect reduced motion) */
 html:not(.zpx-reduce-motion) body {
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -189,7 +197,8 @@ html:not(.zpx-reduce-motion) body {
    so they never cover Settings / Sign out. */
 body[data-mobile-menu="open"] .zpx-local-tools,
 body[data-mobile-menu="open"] .zpx-back-to-top,
-body[data-mobile-menu="open"] [data-whatsapp-fab] {
+body[data-mobile-menu="open"] [data-whatsapp-fab],
+body[data-mobile-menu="open"] [data-guest-spin-fab] {
   opacity: 0;
   pointer-events: none;
   visibility: hidden;
@@ -312,6 +321,7 @@ img { color: transparent; }
   .zpx-back-to-top,
   .zpx-local-tools,
   [data-whatsapp-fab],
+  [data-guest-spin-fab],
   .adsbygoogle,
   ins.adsbygoogle,
   [data-adsense-slot],

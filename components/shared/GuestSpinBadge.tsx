@@ -17,35 +17,26 @@
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Disc3, X } from "lucide-react"
-import { createClient } from "@/src/services/providers/supabase/client"
+import { useAuth } from "@/hooks/useAuth"
 import { SpinWheel, type WheelSpinResult } from "@/components/dashboard/SpinWheel"
 import type { WheelSegment } from "@/components/dashboard/useSpinStatus"
 
 export function GuestSpinBadge() {
   const router = useRouter()
-  const [loggedIn, setLoggedIn] = useState<boolean | null>(null) // null = still checking
+  // Shared app-wide auth store (same one Header / MobileBottomNav read) instead of a
+  // bespoke Supabase listener — a second, disconnected session check was the bug that
+  // let this badge show up for a signed-in user (it could resolve out of step with the
+  // store the rest of the app already trusts). `loading` covers the brief window before
+  // the very first auth check resolves anywhere on the page.
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const [windowOpen, setWindowOpen] = useState(false)
   const [segments, setSegments] = useState<WheelSegment[]>([])
   const [wheelOpen, setWheelOpen] = useState(false)
   const [promptOpen, setPromptOpen] = useState(false)
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Is there a session at all? We don't need the dashboard's full spin status here —
-  // just enough to know this visitor is a guest, not a signed-in user.
-  useEffect(() => {
-    let cancelled = false
-    const supabase = createClient()
-    supabase.auth.getSession().then(({ data }) => {
-      if (!cancelled) setLoggedIn(!!data.session)
-    })
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!cancelled) setLoggedIn(!!session)
-    })
-    return () => {
-      cancelled = true
-      sub.subscription.unsubscribe()
-    }
-  }, [])
+  // null = still checking, true/false once the shared auth store has resolved.
+  const loggedIn: boolean | null = authLoading ? null : isAuthenticated
 
   // Poll the public window endpoint, re-checking exactly when the schedule itself
   // changes (so the badge appears/disappears on time without a page reload), and

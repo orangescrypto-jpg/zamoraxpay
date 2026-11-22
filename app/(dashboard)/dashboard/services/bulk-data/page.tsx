@@ -1,4 +1,4 @@
-// app/(dashboard)/services/bulk-data/page.tsx
+// app/(dashboard)/dashboard/services/bulk-data/page.tsx
 "use client"
 
 import { useEffect, useMemo, useState, Suspense } from "react"
@@ -193,15 +193,40 @@ function BulkDataForm() {
   )
 
 
-  // Auto-select the first plan when the (possibly cached) group list
-  // changes — same behavior the old loader had inline.
+  // Keep groupKey/planCode valid whenever the (possibly cached) group
+  // list changes. useAuthCachedFetch renders a cached `groups` array
+  // immediately, then swaps in a freshly revalidated one — a new array
+  // reference even when nothing actually changed, and sometimes one
+  // where a previously-selected group or variant no longer exists (a
+  // plan was repriced, reordered, or disabled). Re-deriving selection
+  // from the CURRENT groups on every change, instead of only picking
+  // defaults when nothing was selected yet, prevents `groupKey`/
+  // `planCode` from pointing at a stale variant that happens to still
+  // resolve (via .find()) to a different plan in the new array — which
+  // is what caused the dropdown's label/price (always drawn fresh from
+  // `groups`) to show one group's "from" price while the actual
+  // selected plan underneath was a different, more expensive variant.
   useEffect(() => {
-    setGroupKey("")
-    setPlanCode("")
-    if (groups.length) {
+    if (!groups.length) {
+      setGroupKey("")
+      setPlanCode("")
+      return
+    }
+    const stillValidGroup = groups.find((g) => g.groupKey === groupKey)
+    if (!stillValidGroup) {
       setGroupKey(groups[0].groupKey)
       setPlanCode(groups[0].variants[0].planCode)
+      return
     }
+    const stillValidPlan = stillValidGroup.variants.some((v) => v.planCode === planCode)
+    if (!stillValidPlan) {
+      setPlanCode(stillValidGroup.variants[0].planCode)
+    }
+    // groupKey/planCode intentionally excluded: they're read here to
+    // validate against the latest `groups`, not to re-trigger this
+    // effect on every manual selection (selectGroup/setPlanCode already
+    // set consistent state themselves).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups])
 
   const selectedBatch = batches.find((b) => b.id === batchId)
@@ -335,7 +360,10 @@ function BulkDataForm() {
                 className="w-full rounded-md border border-border px-3 py-2 text-sm">
                 {groups.map((g) => (
                   <option key={g.groupKey} value={g.groupKey}>
-                    {labelFromPlanCode(g.variants[0].planCode)} - from {formatNaira(g.cheapestPriceKobo)}
+                    {labelFromPlanCode(g.variants[0].planCode)}
+                    {g.variants.length > 1
+                      ? ` - from ${formatNaira(g.cheapestPriceKobo)}`
+                      : ` - ${formatNaira(g.variants[0].priceKobo)}`}
                   </option>
                 ))}
               </select>

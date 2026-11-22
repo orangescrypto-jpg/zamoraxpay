@@ -75,6 +75,32 @@ const CATEGORY_LABELS: Record<string, string> = {
 function categoryLabel(category: string): string {
   return CATEGORY_LABELS[category] ?? category.charAt(0).toUpperCase() + category.slice(1)
 }
+// Validity-bucket tabs — same idea and same boundaries as the
+// single-purchase Data page: buckets are derived purely from the
+// validity already encoded in each group's plan_code, no new data,
+// just a client-side re-bucketing of what listPlanGroups returns.
+type ValidityBucket = "daily" | "weekly" | "monthly" | "yearly"
+const BUCKET_LABELS: Record<ValidityBucket, string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+  yearly: "Yearly",
+}
+const BUCKET_ORDER: ValidityBucket[] = ["daily", "weekly", "monthly", "yearly"]
+function validityDaysFromPlanCode(code: string): number | null {
+  const match = code.match(/-(\d+)d(?:-[a-z0-9_+]+)*$/i) ?? code.match(/^(?:\d+mb|[a-z][a-z0-9]*)-(\d+)d/i)
+  if (!match) return null
+  return parseInt(match[1], 10)
+}
+// Boundaries mirror the single-purchase Data page: 1-6 days = Daily,
+// 7-27 = Weekly, 28-89 = Monthly, 90+ = Yearly.
+function bucketFor(days: number | null): ValidityBucket {
+  if (days === null) return "daily"
+  if (days < 7) return "daily"
+  if (days < 28) return "weekly"
+  if (days < 90) return "monthly"
+  return "yearly"
+}
 function labelFromPlanCode(code: string): string {
   const match = code.match(/^(\d+)mb-(\d+)d((?:-[a-z_+]+)*)$/i)
   if (!match) return code
@@ -134,6 +160,7 @@ function BulkDataForm() {
     transform: (raw) => ({ groups: (raw as { groups?: PlanGroup[] }).groups ?? [] }),
   })
   const groups = useMemo(() => plansData.groups, [plansData])
+  const [bucket, setBucket] = useState<ValidityBucket>("daily")
   const [groupKey, setGroupKey] = useState("")
   const [planCode, setPlanCode] = useState("")
   // Type (category) is its own dropdown selected before the plan,
@@ -206,21 +233,37 @@ function BulkDataForm() {
   )
 
 
-  // Auto-select Type/Plan whenever the (possibly cached) group list
-  // changes — same cache-then-revalidate situation as the single-data
-  // page, handled the same way: always re-derive category/groupKey/
-  // planCode from the CURRENT groups, not just on first load.
+  // groupKey is shaped "<network>:<base-plan-code>" (see
+  // listPlanGroups/splitPlanCodeForGrouping in pricing.ts) - validity
+  // lives in the part after the colon, same parsing as the
+  // single-purchase Data page.
+  function bucketOfGroup(g: PlanGroup): ValidityBucket {
+    const codePart = g.groupKey.includes(":") ? g.groupKey.split(":").slice(1).join(":") : g.groupKey
+    return bucketFor(validityDaysFromPlanCode(codePart))
+  }
+
+  // Auto-select Bucket/Type/Plan whenever the (possibly cached) group
+  // list changes — same cache-then-revalidate situation as the
+  // single-data page, handled the same way: always re-derive
+  // bucket/category/groupKey/planCode from the CURRENT groups, not
+  // just on first load.
   useEffect(() => {
     if (!groups.length) {
+      setBucket("daily")
       setCategory("")
       setGroupKey("")
       setPlanCode("")
       return
     }
-    const categories = Array.from(new Set(groups.flatMap((g) => g.variants.map((v) => v.category))))
+    const nextBucket = BUCKET_ORDER.includes(bucket) && groups.some((g) => bucketOfGroup(g) === bucket)
+      ? bucket
+      : BUCKET_ORDER.find((b) => groups.some((g) => bucketOfGroup(g) === b)) ?? "daily"
+    setBucket(nextBucket)
+    const inBucket = groups.filter((g) => bucketOfGroup(g) === nextBucket)
+    const categories = Array.from(new Set(inBucket.flatMap((g) => g.variants.map((v) => v.category))))
     const nextCategory = categories.includes(category) ? category : categories[0]
     setCategory(nextCategory)
-    const groupsForCat = groups.filter((g) => g.variants.some((v) => v.category === nextCategory))
+    const groupsForCat = inBucket.filter((g) => g.variants.some((v) => v.category === nextCategory))
     const stillValidGroup = groupsForCat.find((g) => g.groupKey === groupKey) ?? groupsForCat[0]
     setGroupKey(stillValidGroup.groupKey)
     const variant = stillValidGroup.variants.find((v) => v.category === nextCategory)!
@@ -228,30 +271,48 @@ function BulkDataForm() {
       ? variant
       : stillValidGroup.variants.find((v) => v.planCode === planCode && v.category === nextCategory)
     setPlanCode((stillValidPlan ?? variant).planCode)
-    // category/groupKey/planCode intentionally excluded: they're read
-    // here to validate against the latest `groups`, not to re-trigger
-    // this effect on every manual selection.
+    // bucket/category/groupKey/planCode intentionally excluded: they're
+    // read here to validate against the latest `groups`, not to
+    // re-trigger this effect on every manual selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups])
 
   const selectedBatch = batches.find((b) => b.id === batchId)
-  // Every category present across all groups for this network - the
-  // Type dropdown's options.
-  const categoriesAvailable = Array.from(new Set(groups.flatMap((g) => g.variants.map((v) => v.category))))
-  // Groups that actually offer the selected category - the Plan
-  // dropdown is built only from these, one option per such group,
-  // each option's variant resolved and labeled fresh below.
-  const groupsForCategory = groups.filter((g) => g.variants.some((v) => v.category === category))
+  const groupsInBucket = groups.filter((g) => bucketOfGroup(g) === bucket)
+  // Every category present among this bucket's groups - the Type
+  // dropdown's options.
+  const categoriesAvailable = Array.from(new Set(groupsInBucket.flatMap((g) => g.variants.map((v) => v.category))))
+  // Groups within the current bucket that offer the selected category -
+  // the Plan dropdown is built only from these, one option per such
+  // group, each option's variant resolved and labeled fresh below.
+  const groupsForCategory = groupsInBucket.filter((g) => g.variants.some((v) => v.category === category))
   const selectedGroup = groups.find((g) => g.groupKey === groupKey)
   const selectedPlan = selectedGroup?.variants.find((v) => v.planCode === planCode)
   const skippedCount = batchPhones.length - matchingCount
   const totalEstimateKobo = selectedPlan ? selectedPlan.priceKobo * matchingCount : 0
 
-  // Changing Type: keep looking within groups that offer the new
-  // category, pick the first one's matching variant.
+  // Switching tabs re-picks category/groupKey/planCode from whatever's
+  // now visible so the form never keeps a hidden-tab selection active.
+  function selectBucket(b: ValidityBucket) {
+    setBucket(b)
+    const inBucket = groups.filter((g) => bucketOfGroup(g) === b)
+    if (inBucket.length) {
+      const cats = Array.from(new Set(inBucket.flatMap((g) => g.variants.map((v) => v.category))))
+      const firstCat = cats.includes(category) ? category : cats[0]
+      setCategory(firstCat)
+      const firstGroup = inBucket.find((g) => g.variants.some((v) => v.category === firstCat)) ?? inBucket[0]
+      setGroupKey(firstGroup.groupKey)
+      setPlanCode(firstGroup.variants.find((v) => v.category === firstCat)!.planCode)
+    } else {
+      setCategory(""); setGroupKey(""); setPlanCode("")
+    }
+  }
+
+  // Changing Type: keep the bucket, switch to the first plan under the
+  // newly chosen category.
   function selectCategory(c: string) {
     setCategory(c)
-    const match = groups.find((g) => g.variants.some((v) => v.category === c))
+    const match = groupsInBucket.find((g) => g.variants.some((v) => v.category === c))
     if (match) {
       setGroupKey(match.groupKey)
       setPlanCode(match.variants.find((v) => v.category === c)!.planCode)
@@ -375,6 +436,21 @@ function BulkDataForm() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-secondary">Data plan</label>
+            {!plansLoading && !plansError && groups.length > 0 && (
+              <div className="mb-2 grid grid-cols-4 gap-1.5">
+                {BUCKET_ORDER.map((b) => (
+                  <button
+                    type="button"
+                    key={b}
+                    onClick={() => selectBucket(b)}
+                    className={`rounded-md border py-1.5 text-xs font-medium ${bucket === b ? "border-primary bg-primary/10 text-primary" : "border-border text-secondary"}`}
+                  >
+                    {BUCKET_LABELS[b]}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {plansLoading ? (
               <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">Loading plans…</div>
             ) : plansError ? (
@@ -383,10 +459,14 @@ function BulkDataForm() {
               <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
                 No data plans are configured for {network} yet.
               </div>
+            ) : groupsInBucket.length === 0 ? (
+              <div className="w-full rounded-md border border-border px-3 py-2 text-sm text-secondary/60">
+                No {BUCKET_LABELS[bucket].toLowerCase()} plans for {network} right now - try another tab.
+              </div>
             ) : (
               <>
-                {/* Type dropdown: every category present for this
-                    network. Picking one filters which groups appear in
+                {/* Type dropdown: every category present in this
+                    bucket. Picking one filters which groups appear in
                     the Plan dropdown below - same two-step flow as the
                     single-purchase Data page. */}
                 <select
